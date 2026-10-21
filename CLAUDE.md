@@ -1,23 +1,29 @@
-# Alien Wars Tower Defence
+# Osmanlı Kale Savunması
 
 Bu dosya, projeyi geliştiren Claude Code için ana rehberdir. Oyunun ne olduğunu, nasıl oynandığını, sayısal dengesini, teknik yapısını ve yol haritasını anlatır. Her yeni görevde önce bu dosyayı oku; bir karar burada yazanla çelişiyorsa önce bana sor.
 
-Projede `kale-savunmasi.html` adında çalışan bir ilk sürüm (prototip) var. Oyun mantığı, dalga sistemi ve kule/düşman dengesi orada hazır. Bu projede o prototipi **uzaylı temasına** taşıyıp, düzenli bir kod yapısına bölüp geliştireceğiz. Prototipteki ortaçağ teması (kale, okçu, şövalye) tamamen kaldırılacak.
+Oyun önceden "Alien Wars Tower Defence" adlı uzaylı temalı bir kule savunmasıydı. Konsept değişti: artık **Osmanlı Devleti'nin kalesini ve şehrini**, sırayla saldıran dünya devletlerinin ordularına karşı savunuyoruz. Kule savunma çekirdeği (yol, dalga, kule kurma/yükseltme, Three.js 3D çizgi film görünümü) korunur; üstüne **şehir kurma** katmanı eklenir. Uzaylı temasından ekranda hiçbir iz kalmamalı. `reference/kale-savunmasi.html` ilk prototiptir, sadece referanstır.
 
 ---
 
 ## 1. Oyunun özeti
 
-- **Ad:** Alien Wars Tower Defence
-- **Tür:** Klasik kule savunma (tower defense), tek oyunculu
-- **Platform:** Önce telefon tarayıcısı (dikey ekran), sonra Android ve iOS uygulaması (Capacitor ile paketlenecek)
-- **Kontrol:** Sadece dokunma. Klavye ve fare de çalışmalı ama tasarım parmak için yapılır.
-- **Oyun süresi:** Bir oyun 10–15 dakika
-- **Dil:** Arayüz metinleri Türkçe. Oyunun adı İngilizce kalır: "Alien Wars Tower Defence".
+- **Ad:** Osmanlı Kale Savunması (çalışma adı; değişebilir)
+- **Tür:** Kule savunma + şehir kurma, tek oyunculu, uzun soluklu
+- **Platform:** Önce telefon tarayıcısı (dikey ekran), sonra Android ve iOS (Capacitor)
+- **Kontrol:** Dokunma öncelikli; klavye ve fare de çalışır
+- **Dil:** Tüm arayüz Türkçe
 
 ### Hikâye
 
-Yıl 2189. İnsanlığın Mars'taki son kolonisi **Nova Üssü**, gezegenin altından çıkan uzaylı sürüsünün hedefinde. Uzaylılar bir solucan deliğinden (portal) çıkıp kanyon yolundan üssün enerji çekirdeğine doğru ilerliyor. Oyuncu, yolun kenarına savunma kuleleri kurarak her dalgayı durdurmaya çalışır. Çekirdeğe ulaşan her uzaylı üssün kalkanını azaltır. Kalkan sıfırlanırsa üs düşer.
+Devlet-i Aliyye'nin sınır kalesi. Surların içinde **Padişah** sarayında, halk evlerinde yaşar. Dünyanın dört bir yanından devletler sırayla sefere çıkar; her dalgada farklı bir devletin ordusu ordugâhından çıkıp yoldan kale kapısına yürür. Oyuncu yolun kenarına savunma kuleleri kurar, surların içinde şehri seviye seviye geliştirir (okul, kışla, okçu ocağı, hastane, sipahi ocağı, bilimhane, din işleri, mahkeme, cami), askerlerini devriyeye çıkarır. Kapıya ulaşan her düşman **Sur**'u yıpratır; Sur yıkılırsa kale düşer.
+
+### Ton ve saygı kuralları
+
+- Tüm devletler **saygılı, stilize ordular** olarak çizilir: renkli üniforma, sancak rengi ve tarihî adla. Aşağılayıcı tasvir, karikatür yüz, dinî ya da etnik hakaret yok.
+- Düşman ölünce kan yok; asker "dağılır" (renkli toz bulutu, düşen miğfer). Çocuklara uygun.
+- Gerçek bayraklar yerine devletin tarihî renklerinden yapılmış sade sancaklar kullanılır. Osmanlı tarafında hilal ve yıldızlı kırmızı sancak kullanılır.
+- Dinî öğeler (cami, tekbir) saygıyla kullanılır: cami bir yapı ve moral kaynağıdır; dövüş animasyonu ya da şaka konusu yapılmaz.
 
 ---
 
@@ -25,278 +31,248 @@ Yıl 2189. İnsanlığın Mars'taki son kolonisi **Nova Üssü**, gezegenin alt�
 
 ### Temel döngü
 
-1. **Hazırlık evresi:** Oyuncu boş (yol olmayan) bir kareye dokunur, açılan menüden kule seçip kurar. Kurulu kuleye dokunursa yükseltir ya da satar.
-2. **Dalga evresi:** "Dalgayı Başlat" düğmesine basınca uzaylılar portaldan çıkar ve yolu takip eder. Dalga sürerken de kule kurulabilir ve yükseltilebilir.
-3. **Dalga sonu:** Tüm uzaylılar yok edilince bonus kristal verilir ve hazırlık evresine dönülür.
-4. **Bitiş:** 10 dalga temizlenirse zafer, kalkan sıfırlanırsa yenilgi ekranı gösterilir.
+1. **Hazırlık evresi:** Yolun dışındaki boş kareye dokunup kule kurarsın. Surların içindeki arsalara dokunup şehir binası kurar ya da yükseltirsin.
+2. **Dalga evresi:** "Dalgayı Başlat" ile sıradaki devletin ordusu gelir. Ekranda "Bizans Ordusu geliyor!" gibi şerit çıkar, mehter vurur, askerler "Allah Allah!" diye karşılık verir. Dalga sürerken de kurma ve yükseltme yapılır.
+3. **Dalga sonu:** Bonus akçe, şehrin gelirleri (vergi, vakıf) ve hastanenin Sur onarımı verilir.
+4. **Ani baskın:** Hazırlık evresinde uzun beklersen (2. dalgadan sonra) sıradaki devletin akıncıları habersiz baskın yapar. Baskın dalga sayılmaz, kısa ve hızlıdır.
+5. **Bitiş:** Tüm seferler püskürtülürse zafer, Sur sıfırlanırsa yenilgi.
 
 ### Kaynaklar
 
-| Kaynak | Prototipteki adı | Başlangıç | Açıklama |
+| Kaynak | Başlangıç | Açıklama | Aşama |
 |---|---|---|---|
-| **Kristal** | Altın | 150 | Kule kurma ve yükseltme parası. Uzaylı öldürünce ve dalga bitince kazanılır. |
-| **Kalkan** | Can | 15 | Çekirdeğe ulaşan her uzaylı kendi "hasar" değeri kadar azaltır. |
-| **Dalga** | Dalga | 0/10 | Hangi dalgada olunduğunu gösterir. |
+| **Akçe** | 220 | Kule, bina ve yükseltme parası. Düşman ölünce, dalga bitince, vergi ve vakıftan gelir. | 1 |
+| **Sur** | 20 | Kalenin sağlamlığı. Kapıya ulaşan düşman kendi hasarı kadar azaltır. Hastane onarır. | 1 |
+| **Dalga** | 0/12 | Hangi seferde olunduğu. | 1 |
+| **Nüfus** | — | Evler ve saray seviyesiyle artar; bina kurmak için işçi gerekir. | 3 |
+| **Erzak** | — | Çiftlik/değirmenle üretilir; asker beslemek için. | 3 |
+| **İlim** | — | Mektep ve bilimhane üretir; araştırma ağacında harcanır. | 3 |
 
-- Dalga bitiş bonusu: `15 + dalgaNo × 5` kristal (son dalgada bonus yok)
-- Zorluk prototipe göre artırıldı (prototip: 200 kristal, 20 kalkan, bonus `20 + dalgaNo × 5`, can büyümesi 1.13).
-- Kule satış değeri: kuleye harcanan toplam kristalin **%70'i**
+- Dalga bonusu: `20 + dalgaNo × 5` akçe (son dalgada yok)
+- Kule satış değeri: harcananın **%70'i**. Binalar satılmaz.
 
 ### Hız ve kontrol
 
-- Oyun hızı düğmesi: 1× → 2× → 3× → 1× döngüsü
-- Bir kareye ikinci kez dokunmak seçimi kaldırır
-- Yola veya ızgara dışına dokunmak seçimi kaldırır
+- Hız düğmesi 1× → 2× → 3×. Ses düğmesi: müzik ve efektleri aç/kapa.
+- Seçili şeye ikinci kez dokunmak seçimi kaldırır.
 
 ---
 
 ## 3. Harita
 
-- Izgara: **9 sütun × 14 satır**, kareler her zaman kare
-- Kare boyutu ekrana göre hesaplanır: `min(alanGenişliği / 9, alanYüksekliği / 14)`
-- Yol, köşe noktalarıyla tanımlanır (sütun, satır). Prototipteki yol:
-
-```
-[1,-1] → [1,2] → [6,2] → [6,5] → [2,5] → [2,8] → [7,8] → [7,11] → [4,11] → [4,14]
-```
-
-- `[1,-1]` ekranın üstündeki **portal** (uzaylıların çıktığı yer), `[4,14]` ekranın altındaki **enerji çekirdeği**.
-- Düşmanlar kare merkezlerinden (`sütun + 0.5`, `satır + 0.5`) geçen çizgiyi takip eder.
-- Yol üstündeki karelere kule kurulamaz.
-
-İleride birden çok harita olacağı için yol verisi koddan ayrı bir dosyada (`src/data/maps.js`) tutulmalı.
+- Izgara: **9 sütun × 16 satır**. Satır 0–11 savaş alanı, **satır 12 surlar** (kapı 4. sütunda), **satır 13–15 surların içindeki şehir**.
+- Yol (sütun, satır): `[1,-1] → [1,2] → [6,2] → [6,5] → [2,5] → [2,8] → [7,8] → [7,10] → [4,10] → [4,12]`
+- `[1,-1]` ekranın üstündeki **düşman ordugâhı** (çadırlar ve o dalganın sancağı), `[4,12]` **kale kapısı**.
+- Yola, surlara ve şehre kule kurulamaz. Şehirdeki her binanın sabit bir arsası vardır (bkz. 6. bölüm).
+- Yol verisi `src/data/maps.js` içinde; ileride başka kaleler (Belgrad, Kandiye, Viyana önü...) eklenecek.
 
 ---
 
-## 4. Kuleler
+## 4. Savunma kuleleri
 
-Prototipteki dört kule uzaylı temasına şöyle çevrilecek. Sayılar prototipten birebir alınmıştır, değiştirmeden başla.
+Bazı kuleler başta kilitlidir; şehirde ilgili bina kurulunca açılır.
 
-| Kule | Prototipte | Maliyet | Menzil (kare) | Hasar | Atış aralığı (sn) | Mermi hızı | Özellik |
+| Kule | Maliyet | Menzil | Hasar | Atış (sn) | Mermi hızı | Özellik | Kilit |
 |---|---|---|---|---|---|---|---|
-| **Lazer Tareti** | Okçu | 50 | 2.6 | 11 | 0.55 | 10 | Hızlı, tek hedef |
-| **Plazma Topu** | Top | 90 | 2.2 | 26 | 1.5 | 6 | Alan hasarı, yarıçap 0.95 kare |
-| **Kriyo Kulesi** | Buz | 70 | 2.2 | 5 | 0.9 | 8 | %45 yavaşlatma, 1.6 sn |
-| **Tesla Bobini** | Büyücü | 120 | 3.2 | 46 | 1.7 | anında | Zırhı tamamen deler, şimşek efekti |
+| **Okçu Kulesi** | 50 | 2.6 | 11 | 0.55 | 10 | Hızlı, tek hedef | Açık |
+| **Zift Kazanı** | 70 | 2.2 | 5 | 0.9 | 8 | %45 yavaşlatma, 1.6 sn | Açık |
+| **Balyemez Topu** | 90 | 2.3 | 28 | 1.5 | 6 | Alan hasarı, yarıçap 0.95 | Bilimhane 1 |
+| **Tüfekçi Tabyası** | 120 | 3.2 | 46 | 1.7 | anında | Zırhı tamamen deler | Kışla 1 |
 
 ### Yükseltme
 
-- En fazla **3. seviye**
-- Yükseltme maliyeti: `round(kuleMaliyeti × 0.75 × mevcutSeviye)`
-- Her seviyede:
-  - Hasar × 1.6
-  - Menzil + 0.35 kare
-  - Atış aralığı × 0.9 (daha hızlı)
-  - Kriyo yavaşlatması +%10 (en fazla %70)
+- En fazla **3. seviye**; maliyet `round(kuleMaliyeti × 0.75 × mevcutSeviye)`, Mektep indirimi düşülür.
+- Her seviyede hasar × 1.6, menzil + 0.35, atış aralığı × 0.9, zift yavaşlatması +%10 (en fazla %70).
+- Şehir bonusları (Okçu Ocağı, Bilimhane) bunun üstüne çarpan olarak eklenir.
 
 ### Hedef seçimi
 
-Kule, menzilindeki uzaylılardan **yolda en çok ilerlemiş olanı** hedefler. (İleride oyuncunun seçebileceği hedef modları eklenecek: ilk, en güçlü, en yakın.)
+Menzildeki düşmanlardan yolda en çok ilerlemiş olanı. (Aşama 3: İlk / En güçlü / En yakın.)
 
 ### Görsel tarif
 
-- **Lazer Tareti:** Metal kaide üstünde dönen ince namlu. Kırmızı lazer ışını ya da kısa lazer mermisi.
-- **Plazma Topu:** Kalın, kısa namlu. Yeşil-mavi parlayan plazma topu atar, çarpınca halka şeklinde patlama.
-- **Kriyo Kulesi:** Buz mavisi kristal ya da antenli soğutma kulesi. Vurduğu uzaylının etrafında mavi halka çıkar.
-- **Tesla Bobini:** Bobin şeklinde kule, tepesinde nabız gibi atan mor-beyaz enerji küresi. Hedefe zikzaklı şimşek çakar.
-- Kulelerin seviyesi kaidenin altında küçük ışıklı noktalarla gösterilir (1, 2 veya 3 nokta).
+- **Okçu Kulesi:** Kesme taş, mazgallı kule; tepede kırmızı külahlı çatı altında ok atan okçu. Ok mermisi.
+- **Zift Kazanı:** Taş ocak üstünde bakır kazan, altında ateş, üstünde dumanlı kara zift. Vurduğu düşmanın altında kara leke.
+- **Balyemez Topu:** Ahşap kundak üstünde bronz top. Gülle atar, çarpınca toz halkası.
+- **Tüfekçi Tabyası:** Toprak-taş tabya üstünde beyaz börklü Yeniçeri tüfekçi. Atışta namlu alevi ve duman.
+- Seviye: kaidede 1–3 altın nokta; seviye arttıkça kule biraz büyür, 3. seviyede tepeye küçük sancak.
 
 ---
 
-## 5. Uzaylılar
+## 5. Düşman birlikleri
 
-| Uzaylı | Prototipte | Can | Hız (kare/sn) | Zırh | Ödül | Kalkan hasarı | Boyut (yarıçap) |
+Birlik türleri her devlette aynıdır; rengi, sancağı ve adı o dalganın devletinden gelir.
+
+| Birlik | Can | Hız | Zırh | Ödül | Sur hasarı | Yarıçap | Not |
 |---|---|---|---|---|---|---|---|
-| **Sürüngen** | Piyade | 42 | 1.1 | 0 | 5 | 1 | 0.22 |
-| **Akrep** (hızlı) | Akıncı | 28 | 2.0 | 0 | 6 | 1 | 0.18 |
-| **Kabuklu** (zırhlı) | Şövalye | 150 | 0.7 | 4 | 12 | 2 | 0.27 |
-| **Uçan Daire** (uzay aracı) | — | 36 | 1.8 | 1 | 7 | 1 | 0.20 |
-| **Savaş Gemisi** (uzay aracı) | — | 260 | 0.6 | 6 | 20 | 3 | 0.32 |
-| **Dev** (ara boss) | — | 1100 | 0.5 | 3 | 70 | 6 | 0.38 |
-| **Ana Beyin** (boss) | Dev | 2400 | 0.42 | 6 | 150 | 10 | 0.42 |
+| **Piyade** | 42 | 1.1 | 0 | 5 | 1 | 0.22 | Mızrak ve kalkan |
+| **Hafif Süvari** | 28 | 2.0 | 0 | 6 | 1 | 0.20 | Atlı, hızlı |
+| **Zırhlı Şövalye** | 150 | 0.7 | 4 | 12 | 2 | 0.27 | Ağır zırh, miğfer |
+| **Atlı Okçu** | 36 | 1.8 | 1 | 7 | 1 | 0.21 | Atlı |
+| **Koçbaşı** | 260 | 0.6 | 6 | 20 | 3 | 0.32 | Tekerlekli çatılı ahşap koç |
+| **Kuşatma Kulesi** | 1100 | 0.5 | 3 | 70 | 6 | 0.38 | Uyarı: "Kuşatma kulesi geliyor!" |
+| **Başkomutan** | 2400 | 0.42 | 6 | 150 | 10 | 0.42 | Atlı komutan; uyarı şeridi |
 
-- Canlar her dalgada büyür: `can = round(temelCan × 1.2^(dalgaNo − 1))` (prototipte 1.13)
-- **Zırh:** Her vuruştan zırh kadar hasar düşülür, en az 1 hasar geçer. Tesla Bobini zırhı yok sayar.
-- **Yavaşlama:** Hız `× (1 − yavaşlamaOranı)` olur. Birden çok yavaşlamada en güçlüsü geçerlidir.
-
-### Görsel tarif
-
-- **Sürüngen:** Yeşil, yuvarlak gövdeli, tek gözlü küçük uzaylı.
-- **Akrep:** Turuncu, küçük ve sivri, kuyruklu. Hızlı yürüdüğü belli olmalı.
-- **Kabuklu:** Gri-mor sert kabuklu, yavaş, iri.
-- **Uçan Daire:** Metal disk, cam kubbede küçük yeşil pilot, yanıp sönen kenar ışıkları, altında yeşil çekim ışını. Yolu takip eder.
-- **Savaş Gemisi:** Zırh plakalı, kanatlı uzun gövde, yeşil kokpit, arkasında mavi motor alevi. Gittiği yöne döner, yolu takip eder.
-- **Dev:** İri yapılı, geniş omuzlu koyu yeşil uzaylı, alnında yara izi. Ekrana girince "Dev geliyor!" uyarısı çıkar.
-- **Ana Beyin:** Büyük, kırmızı-pembe, dokunaçlı, damarları parlayan bir beyin. Ekrana girince kısa bir uyarı yazısı çıksın: "Ana Beyin yaklaşıyor!"
-- Hasar alan uzaylı bir an beyaz parlar. Canı azalmışsa üstünde can çubuğu görünür (%40'ın altında kırmızı).
-- Ölen uzaylı yeşil sıvı damlacıklarına dağılır, yerinde "+5" gibi kristal yazısı yükselir.
+- Can büyümesi: `round(temelCan × 1.18^(dalgaNo − 1))`
+- Zırh: her vuruştan zırh kadar düşülür, en az 1 geçer. Tüfekçi zırhı deler.
 
 ---
 
-## 6. Dalgalar
+## 6. Şehir (surların içi)
 
-Her dalga, sırayla çıkan gruplardan oluşur: `[uzaylı türü, adet, aralık (sn)]`.
+Şehir surların içindeki 3 satırdır. **Saray** ortadadır, Padişah orada yaşar. Diğer binaların her biri kendi arsasına kurulur; arsaya dokununca alt panelde bina kartı açılır. Kurulan bina 3D olarak arsada belirir, seviyesiyle büyür.
 
-| Dalga | İçerik |
-|---|---|
-| 1 | 10 Sürüngen (0.9 sn) |
-| 2 | 14 Sürüngen (0.75 sn) |
-| 3 | 8 Sürüngen (0.8) + 8 Akrep (0.5) |
-| 4 | 5 Kabuklu (1.2) + 10 Sürüngen (0.6) + 6 Uçan Daire (0.6) |
-| 5 | 20 Akrep (0.4) + 1 Dev (2.0) |
-| 6 | 10 Kabuklu (1.0) + 8 Uçan Daire (0.5) + 12 Sürüngen (0.5) |
-| 7 | 14 Akrep (0.4) + 10 Kabuklu (0.9) + 3 Savaş Gemisi (1.5) |
-| 8 | 18 Kabuklu (0.8) + 1 Dev (2.0) + 4 Savaş Gemisi (1.4) |
-| 9 | 22 Akrep (0.35) + 10 Uçan Daire (0.4) + 12 Kabuklu (0.7) |
-| 10 | 10 Kabuklu (0.9) + 2 Dev (2.5) + 1 Ana Beyin (2.0) + 16 Akrep (0.35) + 5 Savaş Gemisi (1.2) |
+**Saray seviyesi diğer binaların en yüksek seviyesini belirler** (Saray 1 → binalar en fazla 1. seviye). Böylece oyun uzun soluklu, adım adım ilerler.
 
-Hazırlık evresinde alt panelde sıradaki dalganın içeriği yazmalı: "Sıradaki dalga: 10 Sürüngen."
+| Bina | Arsa (sütun,satır) | Maliyet (1/2/3) | Ön koşul | Etkisi (seviye başına) | Aşama |
+|---|---|---|---|---|---|
+| **Saray** (Padişah) | (4,14) | başta 1 / 260 / 480 | — | Diğer binaların seviye sınırı = Saray seviyesi | 1 |
+| **Mektep** (okul) | (1,13) | 80 / 160 / 240 | — | Kule yükseltmeleri %10 ucuz | 1 |
+| **Kışla** (asker geliştirme) | (7,13) | 100 / 200 / 300 | — | 1: Tüfekçi Tabyası açılır. Her seviye 1 Yeniçeri devriyesi | 1 |
+| **Okçu Ocağı** (okçu geliştirme) | (0,14) | 70 / 150 / 240 | — | Okçu Kulesi hasarı +%20, menzil +0.15 | 1 |
+| **Darüşşifa** (hastane) | (2,15) | 90 / 180 / 270 | — | Dalga sonunda Sur +1 onarım | 1 |
+| **Sipahi Ocağı** (atlı birlik geliştirme) | (8,14) | 140 / 240 / 340 | Kışla 1 | Her seviye 1 Sipahi devriyesi (hızlı, uzun rota) | 1 |
+| **Bilimhane** (bilim) | (1,15) | 120 / 220 / 320 | Mektep 1 | 1: Balyemez Topu açılır. Top hasarı +%15, zift yavaşlatma +%5 | 1 |
+| **Meşihat** (din işleri) | (6,15) | 110 / 210 / 310 | Cami 1 | 1: "Allah Allah!" hücum düğmesi açılır; seviye süreyi ve gücü artırır | 1 |
+| **Kadı Mahkemesi** | (5,13) | 100 / 200 / 300 | — | Dalga sonu +12 akçe vergi; ani baskınlar %20 seyrek | 1 |
+| **Cami** | (7,15) | 120 / 240 / 360 | — | Dalga sonu +10 akçe vakıf geliri; minare sayısı 1 / 2 / 4 | 1 |
+| Evler, Çarşı, Değirmen, Tophane, Tersane | — | — | — | Nüfus, ticaret, erzak, ağır top, deniz | 3–4 |
 
----
+### "Allah Allah!" hücumu (Meşihat)
 
-## 7. Görsel kimlik
+- Düğmeye basınca askerler tekbir getirir (sentezlenmiş kalabalık sesi), ekranda altın şerit çıkar.
+- Süresince tüm kulelerin ve devriyelerin atış hızı artar: seviye 1/2/3 için +%30 / +%45 / +%60, süre 6 / 8 / 10 sn, bekleme 60 / 50 / 40 sn.
 
-- **Ortam (kullanıcı isteği, referans görsele göre):** Çizgi film tarzı mobil kule savunma görünümü. Zemin **yeşil çimen**, üstünde açık/koyu çim lekeleri ve tutamlar; geniş, yuvarlak köşeli, yumuşak kenarlı **kumlu yol**. Kenarlarda yuvarlak çalılar, gri kayalar, kalenin yanında tahta çitler. Kuleler tıknaz taş gövdeli, tepesi parlayan renkli taşlı, altında kendi renginde ışık halkası.
-- **Portal (giriş):** Ekranın üstünde dönen mor-yeşil bir solucan deliği.
-- **Nova Üssü kalesi (çıkış):** Ekranın altında surları, iki yan kulesi ve ortada mavi parlayan enerji kubbesi olan bilim kurgu kalesi. Kalkan azaldıkça ışığı zayıflasın. Kalenin oturduğu iki kareye (3,13 ve 5,13) kule kurulamaz.
-- **Renk paleti önerisi:**
-  - Arka plan / gece gökyüzü: `#0d0f1a`
-  - Çim zemini: `#6fb33a` (açık `#8fcf4a`, koyu `#4f8f2c`)
-  - Yol: `#efd9a6`, kenar `#c9a46e`
-  - 3D renk paleti `src/render/palette.js` içindedir.
-  - Arayüz paneli: `#161a2b`, kenar `#2c3352`
-  - Kristal (para): `#5ee6d0`
-  - Kalkan: `#4da3ff`
-  - Uyarı / tehlike: `#ff4d5e`
-  - Uzaylı yeşili: `#7cff6b`
-- **Yazı tipleri:** Başlık için bilim kurgu hissi veren bir font (ör. Google Fonts'tan "Orbitron" ya da "Audiowide"), arayüz metinleri için okunaklı dar bir font (ör. "Barlow Semi Condensed" ya da "Rajdhani").
-- **Efektler:** Ekran sarsıntısı (çekirdek hasar alınca), patlama halkaları, parçacıklar, Tesla şimşeği, Kriyo halkası. Abartmadan, telefonda akıcı çalışacak kadar.
-- **Görünüm 3D'dir** (kullanıcı isteği): harita, yol, uzaylılar, uzay araçları, kale ve kuleler Three.js ile 3D çizilir. Kamera tahtaya güneyden yüksek açıyla eğik (yaklaşık 64°) bakar, tam üstten görünüm yok. Çizgi film görünümü için `MeshToonMaterial` (3 basamaklı ışık) ve `OutlineEffect` ile koyu kenar çizgisi kullanılır; parçacık, saydam efekt ve zemin malzemelerinde kenar çizgisi `noOutline` ile kapatılır. Modeller koddaki basit 3D şekillerden kurulur (dışarıdan model dosyası yok); her varlığın modeli kendi fonksiyonunda olsun ki ileride gerçek modellerle değiştirilebilsin.
+### Devriye (Kışla ve Sipahi Ocağı)
+
+- Dalga başında askerler kale kapısından "Allah Allah!" diye çıkar, yolu geriye doğru yürüyerek devriye gezer, dönüp kapıya geri gelir, tekrar çıkar.
+- **Yeniçeri:** yürür (hız 0.9), devriye mesafesi kapıdan 7 kare, yakın dövüş hasarı 9 / 0.6 sn, menzil 0.55.
+- **Sipahi:** atlı (hız 1.8), devriye mesafesi 14 kare, hasar 14 / 0.7 sn, menzil 0.6.
+- Aşama 1'de devriyeler hasar almaz; Aşama 2'de canları ve Darüşşifa'da iyileşme eklenecek.
 
 ---
 
-## 8. Arayüz düzeni (dikey telefon ekranı)
+## 7. Seferler (dalgalar)
+
+Her dalga farklı bir devletin ordusudur. Gruplar `[birlik, adet, aralık (sn)]`.
+
+| Dalga | Devlet | Renk | İçerik |
+|---|---|---|---|
+| 1 | Bizans İmparatorluğu | mor / altın | 10 Piyade (0.9) |
+| 2 | Sırp Despotluğu | kırmızı / mavi | 14 Piyade (0.75) |
+| 3 | Macar Krallığı | kırmızı / beyaz | 8 Piyade (0.8) + 8 Hafif Süvari (0.5) |
+| 4 | Venedik Cumhuriyeti | koyu kırmızı / altın | 5 Şövalye (1.2) + 10 Piyade (0.6) + 6 Atlı Okçu (0.6) |
+| 5 | Memlük Sultanlığı | sarı / kahve | 20 Hafif Süvari (0.4) + 1 Kuşatma Kulesi (2.0) |
+| 6 | Safevî Devleti | yeşil / kırmızı | 10 Şövalye (1.0) + 8 Atlı Okçu (0.5) + 12 Piyade (0.5) |
+| 7 | Lehistan Krallığı | kırmızı / beyaz | 14 Hafif Süvari (0.4) + 10 Şövalye (0.9) + 3 Koçbaşı (1.5) |
+| 8 | Habsburg Monarşisi | siyah / altın | 18 Şövalye (0.8) + 1 Kuşatma Kulesi (2.0) + 4 Koçbaşı (1.4) |
+| 9 | İspanya Krallığı | kırmızı / sarı | 22 Hafif Süvari (0.35) + 10 Atlı Okçu (0.4) + 12 Şövalye (0.7) |
+| 10 | Rus Çarlığı | beyaz / mavi | 16 Şövalye (0.8) + 8 Atlı Okçu (0.4) + 5 Koçbaşı (1.2) + 1 Kuşatma Kulesi (2.0) |
+| 11 | Fransa Krallığı | mavi / altın | 24 Piyade (0.3) + 14 Şövalye (0.7) + 2 Kuşatma Kulesi (2.5) |
+| 12 | Kutsal İttifak | beyaz / kırmızı | 10 Şövalye (0.9) + 2 Kuşatma Kulesi (2.5) + 1 Başkomutan (2.0) + 16 Hafif Süvari (0.35) + 5 Koçbaşı (1.2) |
+
+- Hazırlık evresinde panelde "Sıradaki sefer: Macar Krallığı — 8 Piyade ve 8 Hafif Süvari."
+- **Ani baskın:** 3. dalgadan önce başlamaz. Hazırlık evresinde 45–70 sn beklenirse (Mahkeme seviyesi başına süre %20 uzar) sıradaki devletin 4 + dalgaNo/2 Hafif Süvarisi baskın yapar. Bitince küçük bonus (10 akçe). Baskın sırasında dalga başlatılamaz.
+- İleride (Aşama 3–4): Çin, Japonya, Hindistan, Britanya gibi uzak devletlerle "Cihan Seferleri" ikinci bölümü ve sonsuz mod.
+
+---
+
+## 8. Ses ve müzik
+
+Hiçbir hazır kayıt ya da telifli eser kullanılmaz; **tüm sesler Web Audio API ile kodda üretilir** (çevrimdışı çalışır).
+
+- **Mehter müziği:** Mehter tarzında özgün bir marş: kös/davul (alçak sinüs + gürültü vuruşu), nakkare (kısa, tiz davul), zil (filtrelenmiş beyaz gürültü), zurna (testere dişi dalga + bant geçiren filtre + vibrato, Hicaz dizisinde ezgi). Dalga sırasında tam, hazırlıkta sadece davul ve hafif zurna.
+- **"Allah Allah!" sesi:** Formant sentezi ile çok sesli kalabalık tekbiri ("Al-lah Al-lah"): her ses farklı perdede, hafif zaman kaymalı. Dalga başında, devriye çıkışında ve hücum düğmesinde.
+- **Efektler:** ok vınlaması, top gümlemesi, tüfek patlaması, zift fokurtusu, düşman dağılması, ani baskın borusu, bina kurma çekici.
+- Ses aç/kapa düğmesi; ayar `localStorage`'da saklanır. Tarayıcı kuralı gereği ses ilk dokunuşta başlar.
+- İleride oyuncu kendi kayıt dosyalarını `public/sounds/` içine koyarsa sentez yerine onlar çalınabilir (Aşama 2).
+
+---
+
+## 9. Görsel kimlik
+
+- **Ortam:** Çizgi film tarzı. Yeşil çimen, kumlu yol (önceki görünüm korunur). Surlar kesme taş, mazgallı; iki yanda yuvarlak burç kuleleri, kurşun kaplı sivri külah çatılar, kapının üstünde hilal ve yıldızlı kırmızı sancak.
+- **Şehir:** Arnavut kaldırımı zemin, beyaz badanalı kırmızı kiremit çatılı evler, ortada saray (köşkler, altın alem), Padişah sarayın önünde kırmızı kaftan ve beyaz kavuklu figür olarak durur.
+- **Cami:** Kurşun gri kubbe, altın alem, ince kalem minareler (seviyeye göre 1/2/4).
+- **Ordugâh:** Ekranın üstünde o devletin renginde çadırlar ve sancak; dalga değişince renk değişir.
+- **Renk paleti:**
+  - Arayüz paneli `#1f1712`, kenar `#4a3524`, metin `#f3e6c8`, soluk metin `#b9a383`
+  - Osmanlı kırmızısı `#b3202a`, altın `#e0b24a`, akçe `#f2c94c`, sur `#cfd6e0`, tehlike `#ff5b4d`
+  - 3D renkler `src/render/palette.js` içinde.
+- **Yazı tipleri:** Başlık "Cinzel" (klasik, oymalı), arayüz "Barlow Semi Condensed" (Türkçe karakterli). İkisi de pakete gömülü.
+- **Görünüm 3D:** Three.js, `MeshToonMaterial` + `OutlineEffect`, kamera güneyden ~62° eğik. Modeller koddaki basit şekillerden kurulur; her varlığın modeli kendi fonksiyonunda.
+
+---
+
+## 10. Arayüz düzeni (dikey telefon)
 
 ```
-┌─────────────────────────────┐
-│ ALIEN WARS   Kristal Kalkan Dalga │  ← üst şerit
-├─────────────────────────────┤
-│                             │
-│      9 × 14 oyun alanı      │  ← canvas, ortalanmış
-│                             │
-├─────────────────────────────┤
-│  bağlamsal panel            │  ← kule menüsü / kule bilgisi / ipucu
-│  [1×]  [ 3. Dalgayı Başlat ]│  ← hız düğmesi + ana düğme
-└─────────────────────────────┘
+┌──────────────────────────────────┐
+│ OSMANLI  KALE SAVUNMASI  Akçe Sur Dalga │ ← üst şerit
+├──────────────────────────────────┤
+│  ordugâh (üstte)                 │
+│  savaş alanı 9 × 12              │ ← 3D sahne
+│  ═══ surlar / kapı ═══           │
+│  şehir 9 × 3 (saray, binalar)    │
+├──────────────────────────────────┤
+│ bağlamsal panel                  │ ← ipucu / kule kartları / kule / bina
+│ [🔊] [1×] [Allah Allah!] [Dalgayı Başlat] │
+└──────────────────────────────────┘
 ```
 
-- **Bağlamsal panel üç durumda:**
-  1. Hiçbir şey seçili değilse: ipucu ve sıradaki dalganın içeriği
-  2. Boş kare seçiliyse: 4 kule kartı (renk, ad, maliyet, kısa açıklama). Kristal yetmiyorsa kart soluk ve tıklanamaz.
-  3. Kule seçiliyse: kule adı, seviye, hasar, menzil, özellik; "Yükselt · maliyet" ve "Sat +değer" düğmeleri. Seçili kulenin menzili haritada kesikli daire ile gösterilir.
-- Panelin yüksekliği sabit olmalı ki seçim değişince oyun alanı zıplamasın.
-- Yenilgi ve zafer ekranı oyun alanının üstünde yarı saydam kutu olarak çıkar, "Yeniden Oyna" düğmesi içerir.
-  - Yenilgi: "Üs Düştü" — "X. dalgada Nova Üssü'nün kalkanı çöktü."
-  - Zafer: "Mars Kurtarıldı!" — "10 dalgayı da püskürttün. Kalkanda X birim kaldı."
-- Telefonun çentik ve alt çubuğu için `env(safe-area-inset-*)` boşlukları kullanılmalı.
+- Panel durumları: ipucu + sıradaki sefer; kule kartları (kilitliyse "Bilimhane gerekli"); seçili kule; seçili bina (ad, seviye, etkisi, sonraki seviyenin etkisi, "Kur · 120" / "Yükselt · 240", kilit nedeni).
+- Panel yüksekliği sabit. Zafer: "Devlet-i Aliyye Muzaffer!", yenilgi: "Kale Düştü".
 
 ---
 
-## 9. Teknik yapı
+## 11. Teknik yapı
 
-### Teknoloji
-
-- Saf **HTML + CSS + JavaScript** (ES modülleri), **Three.js** (WebGL) ile 3D çizim; can çubukları ve yazılar için üstte şeffaf bir 2D canvas katmanı
-- Arayüz framework'ü yok. Paketleme ve yerel sunucu için **Vite** kullanılır; Three.js pakete gömülür (çevrimdışı çalışır).
-- Daha sonra **Capacitor** ile Android/iOS uygulamasına çevrilecek, o yüzden sunucuya bağımlı hiçbir şey olmasın; oyun tamamen çevrimdışı çalışsın.
-
-### Önerilen klasör yapısı
-
-```
-alien-wars-td/
-├── CLAUDE.md               ← bu dosya
-├── index.html
-├── package.json
-├── reference/
-│   └── kale-savunmasi.html ← ilk prototip (sadece referans, değiştirilmez)
-└── src/
-    ├── main.js             ← başlatma, oyun döngüsü (requestAnimationFrame)
-    ├── state.js            ← oyun durumu: kristal, kalkan, dalga, listeler
-    ├── data/
-    │   ├── towers.js       ← kule tanımları ve yükseltme formülleri
-    │   ├── enemies.js      ← uzaylı tanımları
-    │   ├── waves.js        ← dalga listesi
-    │   └── maps.js         ← yol ve harita verisi
-    ├── systems/
-    │   ├── spawner.js      ← dalga başlatma, düşman çıkarma
-    │   ├── movement.js     ← yol takibi, yavaşlama
-    │   ├── combat.js       ← hedef seçimi, ateş, mermi, hasar, zırh
-    │   └── effects.js      ← parçacık, halka, şimşek, yazı efektleri
-    ├── render/
-    │   ├── scene.js        ← Three.js sahnesi, kamera, ışık, mantık → 3D eşleme, dokunma ışını
-    │   ├── world.js        ← 3D zemin (çimen), süsler, portal, kale
-    │   ├── background.js   ← zemin ve yol dokusu (2D canvas'ta çizilip araziye kaplanır)
-    │   ├── towers.js       ← 3D kule ve mermi modelleri
-    │   ├── enemies.js      ← 3D uzaylı ve uzay aracı modelleri
-    │   └── fx.js           ← 3D efektler + 2D katman (can çubuğu, yazılar, uyarı şeridi)
-    ├── ui/
-    │   ├── hud.js          ← üst şerit
-    │   ├── panel.js        ← alt bağlamsal panel
-    │   └── overlay.js      ← zafer / yenilgi ekranı
-    ├── input.js            ← dokunma → ızgara karesi
-    └── styles.css
-```
-
-### Kurallar
-
-- **Veri ve mantık ayrı:** Tüm denge sayıları `src/data/` içinde. Mantık kodunda sabit sayı olmasın.
-- **Sabit zaman adımı:** Güncelleme, en fazla 0.03 sn'lik adımlarla yapılsın (prototipteki gibi). Hız 2× ve 3× olunca adım sayısı artar, adım boyu artmaz.
-- **Birimler:** Oyun mantığında tüm konumlar ve mesafeler **kare** biriminde ve 2D'dir. 3D dünyaya çeviri (`x - sütun/2`, yükseklik, `y - satır/2`) sadece çizim katmanında yapılır.
-- **Ekran boyutu:** 3D canvas oyun alanını doldurur; WebGL çözünürlüğü `devicePixelRatio` en fazla 1.5, 2D katman en fazla 2 ile çizilir. Pencere boyutu değişince kamera tahtanın tamamı sığacak şekilde yeniden konumlanır.
-- **Performans:** Arazi bir kez kurulur; geometri ve malzemeler paylaşılır, parçacıklar tek bir InstancedMesh ile çizilir, tek gölge ışığı (1024 gölge haritası). Ölü düşman, biten mermi ve efektlerin 3D nesneleri her karede sahneden kaldırılır. Hedef: orta seviye bir Android telefonda 60 FPS.
-- **Kayıt:** En yüksek dalga ve ayarlar `localStorage`'da tutulur; her okuma ve yazma `try/catch` içinde olsun.
-- **Kod dili:** Değişken ve fonksiyon adları İngilizce, oyuncuya görünen tüm metinler Türkçe. Metinler ileride çeviri eklenebilsin diye tek bir dosyada (`src/i18n/tr.js`) toplanırsa iyi olur.
+- Saf HTML + CSS + JS (ES modülleri), Three.js, Vite. Arayüz framework'ü yok; tamamen çevrimdışı.
+- Klasörler: `src/data` (denge: towers, enemies, waves, nations, buildings, maps, rules), `src/systems` (spawner, movement, combat, effects, city, patrol, raid), `src/render` (scene, world, city, towers, enemies, units, fx, background, palette), `src/audio` (sfx, mehter, chant), `src/ui`, `src/i18n/tr.js`.
+- **Kurallar:** Denge sayıları sadece `src/data/` içinde. Sabit adım ≤ 0.03 sn. Mantık kare biriminde 2D; 3D çeviri sadece çizimde. WebGL dpr ≤ 1.5. Tek gölge ışığı. Kayıt `localStorage` + try/catch. Kod İngilizce, oyuncu metinleri Türkçe ve `tr.js`'de.
+- Geliştirme sırasında `window.__game` ile durum incelenebilir.
 
 ---
 
-## 10. Yol haritası
+## 12. Yol haritası
 
-Her aşamanın sonunda oyun çalışır durumda olmalı. Bir aşama bitmeden diğerine geçme; her aşama bittiğinde bana kısaca ne yaptığını söyle.
+Her aşamanın sonunda oyun oynanabilir olmalı.
 
-**Aşama 1 — Taşıma ve tema (ilk görev)**
-- Projeyi kur (Vite + yukarıdaki klasör yapısı)
-- Prototipteki mantığı modüllere böl, davranışı birebir koru
-- Tüm ortaçağ temasını uzaylı temasına çevir (adlar, renkler, çizimler, metinler)
-- Başlık "Alien Wars Tower Defence" olsun
+**Aşama 1 — Osmanlı teması ve şehir çekirdeği (ilk görev)**
+- Tüm uzaylı temasını Osmanlı temasına çevir: kuleler, düşman birlikleri, ordugâh, surlar, kapı, renkler, yazılar
+- Haritayı 9 × 16 yap; surlar ve şehir alanı
+- 12 devletlik sefer listesi, her dalgada devlet adı ve rengi
+- Şehir: Saray ve 9 bina, seviye sınırı, arsaya dokunarak kurma/yükseltme, 3D bina modelleri, Padişah figürü
+- Kilitli kuleler (Balyemez ← Bilimhane, Tüfekçi ← Kışla)
+- Yeniçeri ve Sipahi devriyeleri
+- Ani baskın
+- "Allah Allah!" hücumu
+- Sentezlenmiş mehter müziği, tekbir sesi ve efektler; ses düğmesi
 
-**Aşama 2 — His ve cila**
-- Basit ses efektleri (Web Audio ile kodla üretilmiş: lazer, patlama, şimşek, uzaylı ölümü, dalga başlangıcı) ve ses aç/kapa düğmesi
-- Başlangıç ekranı: oyun adı, "Oyna" düğmesi, en yüksek dalga
-- Duraklat düğmesi
-- Ana Beyin için özel giriş uyarısı
+**Aşama 2 — Derinlik ve cila**
+- Başlangıç ekranı, duraklatma, kayıtlı oyuna devam (uzun oyun için otomatik kayıt)
+- Devriyelerin canı; düşmanlarla çarpışma ve durdurma; Darüşşifa iyileştirmesi
+- Düşman okçuları kulelere ateş eder, kuleler onarılır
+- İsteğe bağlı gerçek ses dosyası desteği
 
-**Aşama 3 — İçerik**
-- 2 yeni harita (farklı yollar, biri iki girişli olabilir) ve harita seçme ekranı
-- Zorluk seçimi: Kolay / Normal / Zor (can çarpanı ve başlangıç kristali değişir)
-- 2 yeni uzaylı: **Uçan Göz** (yolu takip etmez, düz uçar; sadece Lazer ve Tesla vurabilir) ve **Bölünen** (ölünce 2 küçük Sürüngen'e ayrılır)
-- Kule hedef modları: İlk / En güçlü / En yakın
+**Aşama 3 — Büyük şehir**
+- Nüfus, Erzak, İlim kaynakları; Evler, Çarşı, Değirmen
+- Araştırma ağacı (Bilimhane), Saray 4–5
+- Yeni kaleler ve "Cihan Seferleri" (uzak devletler), zorluk seçimi, hedef modları
 
 **Aşama 4 — Uygulama**
-- Capacitor ile Android ve iOS projesi oluştur
-- Uygulama ikonu ve açılış ekranı (uzaylı temalı)
-- Ekranın dikey kilitlenmesi, ekran uyku modunun oyun sırasında engellenmesi
+- Capacitor ile Android/iOS, ikon ve açılış ekranı (Osmanlı temalı), dikey kilit, uyku engelleme
 
 ---
 
-## 11. Kabul kriterleri (Aşama 1 için)
+## 13. Kabul kriterleri (Aşama 1)
 
-- [ ] Telefon genişliğinde (360–430 px) yatay kaydırma olmadan tam ekran oynanıyor
-- [ ] 4 kule kurulabiliyor, 3. seviyeye kadar yükseltilebiliyor ve satılabiliyor
-- [ ] Kristal yetmediğinde kule kartları ve yükseltme düğmesi pasif
-- [ ] 10 dalga yukarıdaki tabloya göre geliyor, canlar her dalgada büyüyor
-- [ ] Zırh, alan hasarı, yavaşlatma ve zırh delme doğru çalışıyor
-- [ ] Çekirdeğe ulaşan uzaylı kalkanı azaltıyor, ekran sarsılıyor
-- [ ] Zafer ve yenilgi ekranları çalışıyor, "Yeniden Oyna" her şeyi sıfırlıyor
-- [ ] 1×, 2×, 3× hız çalışıyor
-- [ ] Ekranda ortaçağ temasından hiçbir iz kalmadı
-- [ ] Konsolda hata yok
+- [ ] 360–430 px genişlikte yatay kaydırma olmadan oynanıyor
+- [ ] 4 kule kurulup 3. seviyeye yükseltilebiliyor ve satılabiliyor; kilitli kuleler bina kurulunca açılıyor
+- [ ] 12 dalga tabloya göre, her biri kendi devletinin adı ve rengiyle geliyor
+- [ ] Saray ve 9 bina kurulup yükseltilebiliyor; Saray seviye sınırı ve ön koşullar çalışıyor; etkiler oyuna yansıyor
+- [ ] Devriyeler dalga sırasında yolda gezip düşmanlara vuruyor
+- [ ] Ani baskın geliyor; "Allah Allah!" hücumu atış hızını artırıyor
+- [ ] Mehter müziği ve tekbir sesi çalıyor, ses düğmesiyle kapanıyor
+- [ ] Zafer/yenilgi ekranları ve "Yeniden Oyna" çalışıyor
+- [ ] Ekranda uzaylı temasından iz yok, konsolda hata yok
