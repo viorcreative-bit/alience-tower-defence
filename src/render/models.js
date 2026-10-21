@@ -13,14 +13,22 @@ const lib = { props: new Map(), chars: {}, clips: new Map() };
 export async function loadModels(onProgress) {
   const loader = new GLTFLoader();
   let done = 0;
+  // Yalnız metin dosyası sunabilen barındırmalarda (ör. önizleme sayfası) modeller base64 metin olarak gelir
+  const base64 = document.documentElement.dataset.models === 'base64';
+  const fetchModel = async (f) => {
+    const url = new URL(`models/${f}.glb${base64 ? '.txt' : ''}`, document.baseURI).href;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`model indirilemedi: ${f}`);
+    if (!base64) return res.arrayBuffer();
+    return Uint8Array.from(atob(await res.text()), (c) => c.charCodeAt(0)).buffer;
+  };
   const results = await Promise.all(
-    FILES.map((f) =>
-      loader.loadAsync(new URL(`models/${f}.glb`, document.baseURI).href).then((g) => {
-        done += 1;
-        if (onProgress) onProgress(done / FILES.length);
-        return g;
-      }),
-    ),
+    FILES.map(async (f) => {
+      const g = await loader.parseAsync(await fetchModel(f), '');
+      done += 1;
+      if (onProgress) onProgress(done / FILES.length);
+      return g;
+    }),
   );
   const [medieval, ...chars] = results;
   for (const node of medieval.scene.children) {
