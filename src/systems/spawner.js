@@ -39,7 +39,7 @@ export function spawnEnemy(state, type) {
     dead: false,
     seed: Math.random() * 10,
   });
-  if (def.boss) addBanner(state, TR.bossWarning, '#ff4d5e');
+  if (def.warning) addBanner(state, TR.warnings[type], '#ff4d5e');
 }
 
 export function updateSpawner(state, dt) {

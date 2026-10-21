@@ -23,7 +23,7 @@ export function damageEnemy(state, enemy, amount, piercesArmor) {
   if (enemy.hp <= 0) {
     enemy.dead = true;
     state.crystal += enemy.def.reward;
-    addParticles(state, enemy.x, enemy.y, '#7cff6b', enemy.def.boss ? 40 : 12, 2.4, enemy.radius * 0.3, 0.6);
+    addParticles(state, enemy.x, enemy.y, enemy.def.mech ? '#ffb347' : '#7cff6b', enemy.def.warning ? 40 : 12, 2.4, enemy.radius * 0.3, 0.6);
     addText(state, enemy.x, enemy.y - enemy.radius, `+${enemy.def.reward}`, '#5ee6d0');
   }
 }

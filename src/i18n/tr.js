@@ -28,6 +28,9 @@ export const TR = {
     reptile: 'Sürüngen',
     scorpion: 'Akrep',
     shell: 'Kabuklu',
+    saucer: 'Uçan Daire',
+    cruiser: 'Savaş Gemisi',
+    giant: 'Dev',
     brain: 'Ana Beyin',
   },
 
@@ -52,7 +55,10 @@ export const TR = {
   waveRunning: (n) => `${n}. dalga sürüyor`,
   speed: (s) => `${s}×`,
 
-  bossWarning: 'Ana Beyin yaklaşıyor!',
+  warnings: {
+    giant: 'Dev geliyor!',
+    brain: 'Ana Beyin yaklaşıyor!',
+  },
   waveCleared: (n, bonus) => `${n}. dalga temizlendi  +${bonus}`,
 
   lostTitle: 'Üs Düştü',

@@ -110,6 +110,9 @@ Kule, menzilindeki uzaylılardan **yolda en çok ilerlemiş olanı** hedefler. (
 | **Sürüngen** | Piyade | 42 | 1.1 | 0 | 5 | 1 | 0.22 |
 | **Akrep** (hızlı) | Akıncı | 28 | 2.0 | 0 | 6 | 1 | 0.18 |
 | **Kabuklu** (zırhlı) | Şövalye | 150 | 0.7 | 4 | 12 | 2 | 0.27 |
+| **Uçan Daire** (uzay aracı) | — | 36 | 1.8 | 1 | 7 | 1 | 0.20 |
+| **Savaş Gemisi** (uzay aracı) | — | 260 | 0.6 | 6 | 20 | 3 | 0.32 |
+| **Dev** (ara boss) | — | 1100 | 0.5 | 3 | 70 | 6 | 0.38 |
 | **Ana Beyin** (boss) | Dev | 2400 | 0.42 | 6 | 150 | 10 | 0.42 |
 
 - Canlar her dalgada büyür: `can = round(temelCan × 1.2^(dalgaNo − 1))` (prototipte 1.13)
@@ -121,6 +124,9 @@ Kule, menzilindeki uzaylılardan **yolda en çok ilerlemiş olanı** hedefler. (
 - **Sürüngen:** Yeşil, yuvarlak gövdeli, tek gözlü küçük uzaylı.
 - **Akrep:** Turuncu, küçük ve sivri, kuyruklu. Hızlı yürüdüğü belli olmalı.
 - **Kabuklu:** Gri-mor sert kabuklu, yavaş, iri.
+- **Uçan Daire:** Metal disk, cam kubbede küçük yeşil pilot, yanıp sönen kenar ışıkları, altında yeşil çekim ışını. Yolu takip eder.
+- **Savaş Gemisi:** Zırh plakalı, kanatlı uzun gövde, yeşil kokpit, arkasında mavi motor alevi. Gittiği yöne döner, yolu takip eder.
+- **Dev:** İri yapılı, geniş omuzlu koyu yeşil uzaylı, alnında yara izi. Ekrana girince "Dev geliyor!" uyarısı çıkar.
 - **Ana Beyin:** Büyük, kırmızı-pembe, dokunaçlı, damarları parlayan bir beyin. Ekrana girince kısa bir uyarı yazısı çıksın: "Ana Beyin yaklaşıyor!"
 - Hasar alan uzaylı bir an beyaz parlar. Canı azalmışsa üstünde can çubuğu görünür (%40'ın altında kırmızı).
 - Ölen uzaylı yeşil sıvı damlacıklarına dağılır, yerinde "+5" gibi kristal yazısı yükselir.
@@ -136,13 +142,13 @@ Her dalga, sırayla çıkan gruplardan oluşur: `[uzaylı türü, adet, aralık 
 | 1 | 10 Sürüngen (0.9 sn) |
 | 2 | 14 Sürüngen (0.75 sn) |
 | 3 | 8 Sürüngen (0.8) + 8 Akrep (0.5) |
-| 4 | 5 Kabuklu (1.2) + 10 Sürüngen (0.6) |
-| 5 | 20 Akrep (0.4) |
-| 6 | 10 Kabuklu (1.0) + 12 Sürüngen (0.5) |
-| 7 | 14 Akrep (0.4) + 10 Kabuklu (0.9) |
-| 8 | 18 Kabuklu (0.8) |
-| 9 | 22 Akrep (0.35) + 12 Kabuklu (0.7) |
-| 10 | 10 Kabuklu (0.9) + 1 Ana Beyin (2.0) + 16 Akrep (0.35) |
+| 4 | 5 Kabuklu (1.2) + 10 Sürüngen (0.6) + 6 Uçan Daire (0.6) |
+| 5 | 20 Akrep (0.4) + 1 Dev (2.0) |
+| 6 | 10 Kabuklu (1.0) + 8 Uçan Daire (0.5) + 12 Sürüngen (0.5) |
+| 7 | 14 Akrep (0.4) + 10 Kabuklu (0.9) + 3 Savaş Gemisi (1.5) |
+| 8 | 18 Kabuklu (0.8) + 1 Dev (2.0) + 4 Savaş Gemisi (1.4) |
+| 9 | 22 Akrep (0.35) + 10 Uçan Daire (0.4) + 12 Kabuklu (0.7) |
+| 10 | 10 Kabuklu (0.9) + 2 Dev (2.5) + 1 Ana Beyin (2.0) + 16 Akrep (0.35) + 5 Savaş Gemisi (1.2) |
 
 Hazırlık evresinde alt panelde sıradaki dalganın içeriği yazmalı: "Sıradaki dalga: 10 Sürüngen."
 
