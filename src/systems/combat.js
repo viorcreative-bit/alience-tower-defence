@@ -32,7 +32,7 @@ function fire(state, tower, target, stats) {
   const def = TOWERS[tower.type];
   if (!stats.projectileSpeed) {
     damageEnemy(state, target, stats.damage, stats.piercesArmor);
-    addLightning(state, tower.x, tower.y - 0.3, target.x, target.y, def.color);
+    addLightning(state, tower.x, tower.y, target.x, target.y, def.color);
     addParticles(state, target.x, target.y, '#e9d8ff', 5, 1.5, 0.04, 0.25);
     return;
   }

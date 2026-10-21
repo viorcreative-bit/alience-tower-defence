@@ -1,278 +1,180 @@
+import * as THREE from 'three';
 import { TOWERS } from '../data/towers.js';
 
-// Her kulenin çizimi kendi fonksiyonunda; ileride sprite ile değiştirilebilir.
+// 3D kule modelleri. Her kule türünün modeli kendi fonksiyonunda; geometri ve
+// malzemeler paylaşılır. Model kökü kare merkezinde, kaide tabanı y=0'da.
 
-function drawBase(ctx, T, color) {
-  const R = T * 0.36;
-  const oct = (r) => {
-    ctx.beginPath();
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
-      ctx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r);
-    }
-    ctx.closePath();
-  };
-  // sağ alta düşen gölge
-  ctx.fillStyle = 'rgba(10,3,2,0.45)';
-  ctx.save();
-  ctx.translate(R * 0.22, R * 0.28);
-  oct(R * 1.02);
-  ctx.fill();
-  ctx.restore();
-  // metal kaide: sol üstten ışık
-  const g = ctx.createLinearGradient(-R, -R, R, R);
-  g.addColorStop(0, '#9aa3bd');
-  g.addColorStop(0.45, '#4f5772');
-  g.addColorStop(1, '#22263a');
-  ctx.fillStyle = g;
-  oct(R);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineWidth = Math.max(1, T * 0.02);
-  ctx.stroke();
-  // iç plaka
-  const g2 = ctx.createLinearGradient(-R, -R, R, R);
-  g2.addColorStop(0, '#3a4058');
-  g2.addColorStop(1, '#2a2f44');
-  ctx.fillStyle = g2;
-  oct(R * 0.78);
-  ctx.fill();
-  // perçinler
-  ctx.fillStyle = 'rgba(220,228,255,0.55)';
-  for (let k = 0; k < 4; k++) {
-    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-    ctx.beginPath();
-    ctx.arc(Math.cos(a) * R * 0.88, Math.sin(a) * R * 0.88, Math.max(0.8, T * 0.018), 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // renkli ışık halkası
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = Math.max(1, T * 0.025);
-  ctx.beginPath();
-  ctx.arc(0, 0, R * 0.66, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.globalAlpha = 1;
+const G = {
+  base: new THREE.CylinderGeometry(0.36, 0.4, 0.16, 8),
+  plate: new THREE.CylinderGeometry(0.29, 0.29, 0.03, 8),
+  ring: new THREE.TorusGeometry(0.24, 0.018, 6, 24),
+  dot: new THREE.SphereGeometry(0.035, 8, 6),
+  ball: new THREE.SphereGeometry(1, 16, 12),
+  cyl: new THREE.CylinderGeometry(1, 1, 1, 12),
+  box: new THREE.BoxGeometry(1, 1, 1),
+  crystal: new THREE.OctahedronGeometry(1, 0),
+  coil: new THREE.TorusGeometry(0.13, 0.035, 8, 20),
+};
+
+const M = {
+  metal: new THREE.MeshStandardMaterial({ color: 0x737c99, metalness: 0.75, roughness: 0.35 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x2b3047, metalness: 0.6, roughness: 0.5 }),
+  light: new THREE.MeshStandardMaterial({ color: 0xc5cce0, metalness: 0.8, roughness: 0.25 }),
+  copper: new THREE.MeshStandardMaterial({ color: 0xc27a40, metalness: 0.85, roughness: 0.3 }),
+};
+const glow = {};
+for (const [id, def] of Object.entries(TOWERS)) {
+  glow[id] = new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 1.4 });
+}
+const iceMat = new THREE.MeshStandardMaterial({
+  color: 0xbfefff, emissive: 0x3fa9e0, emissiveIntensity: 0.6, metalness: 0.1, roughness: 0.05,
+  transparent: true, opacity: 0.9,
+});
+
+function part(geo, mat, x, y, z, sx, sy, sz) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  if (sx !== undefined) m.scale.set(sx, sy ?? sx, sz ?? sx);
+  m.castShadow = true;
+  return m;
 }
 
-function drawLevelDots(ctx, T, level, color) {
-  const gap = T * 0.13;
-  const y = T * 0.4;
-  ctx.fillStyle = color;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = T * 0.15;
-  for (let i = 0; i < level; i++) {
-    ctx.beginPath();
-    ctx.arc((i - (level - 1) / 2) * gap, y, T * 0.04, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.shadowBlur = 0;
+function buildBase(type) {
+  const g = new THREE.Group();
+  const base = part(G.base, M.metal, 0, 0.08, 0);
+  base.receiveShadow = true;
+  g.add(base);
+  g.add(part(G.plate, M.dark, 0, 0.175, 0));
+  const ring = part(G.ring, glow[type], 0, 0.19, 0);
+  ring.rotation.x = Math.PI / 2;
+  ring.castShadow = false;
+  g.add(ring);
+  return g;
 }
 
-function drawLaser(ctx, t, T) {
-  const c = TOWERS.laser.color;
-  drawBase(ctx, T, c);
-  ctx.save();
-  ctx.rotate(t.angle);
-  const back = t.recoil * T * 0.05;
-  const bar = ctx.createLinearGradient(0, -T * 0.035, 0, T * 0.035);
-  bar.addColorStop(0, '#c5cce0');
-  bar.addColorStop(1, '#4f5772');
-  ctx.fillStyle = bar;
-  ctx.fillRect(-back, -T * 0.035, T * 0.42, T * 0.07);
-  ctx.fillStyle = c;
-  ctx.fillRect(T * 0.38 - back, -T * 0.045, T * 0.06, T * 0.09);
-  ctx.fillStyle = '#6b7491';
-  ctx.beginPath();
-  ctx.arc(0, 0, T * 0.15, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = c;
-  ctx.beginPath();
-  ctx.arc(0, 0, T * 0.05, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+function buildLaser(g) {
+  const head = new THREE.Group();
+  head.position.y = 0.3;
+  head.add(part(G.ball, M.metal, 0, 0, 0, 0.14));
+  const barrel = new THREE.Group();
+  barrel.add(part(G.cyl, M.light, 0.22, 0, 0, 0.03, 0.4, 0.03));
+  barrel.children[0].rotation.z = Math.PI / 2;
+  barrel.add(part(G.box, glow.laser, 0.42, 0, 0, 0.05, 0.07, 0.07));
+  head.add(barrel);
+  head.add(part(G.cyl, M.dark, 0, -0.08, 0, 0.08, 0.12, 0.08));
+  g.add(head);
+  return { head, barrel };
 }
 
-function drawPlasma(ctx, t, T, time) {
-  const c = TOWERS.plasma.color;
-  drawBase(ctx, T, c);
-  ctx.save();
-  ctx.rotate(t.angle);
-  const back = t.recoil * T * 0.08;
-  const bar = ctx.createLinearGradient(0, -T * 0.1, 0, T * 0.1);
-  bar.addColorStop(0, '#9aa3bd');
-  bar.addColorStop(1, '#2f3448');
-  ctx.fillStyle = bar;
-  ctx.fillRect(-back, -T * 0.1, T * 0.34, T * 0.2);
-  ctx.fillStyle = '#2b3147';
-  ctx.fillRect(T * 0.28 - back, -T * 0.12, T * 0.07, T * 0.24);
-  ctx.fillStyle = '#4b5470';
-  ctx.beginPath();
-  ctx.arc(0, 0, T * 0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = c;
-  ctx.globalAlpha = 0.7 + 0.3 * Math.sin(time * 4 + t.id);
-  ctx.shadowColor = c;
-  ctx.shadowBlur = T * 0.25;
-  ctx.beginPath();
-  ctx.arc(0, 0, T * 0.09, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+function buildPlasma(g) {
+  const head = new THREE.Group();
+  head.position.y = 0.32;
+  head.add(part(G.ball, M.metal, 0, 0, 0, 0.19));
+  const barrel = new THREE.Group();
+  const b = part(G.cyl, M.light, 0.2, 0, 0, 0.09, 0.3, 0.09);
+  b.rotation.z = Math.PI / 2;
+  barrel.add(b);
+  const muzzle = part(G.cyl, M.dark, 0.36, 0, 0, 0.11, 0.06, 0.11);
+  muzzle.rotation.z = Math.PI / 2;
+  barrel.add(muzzle);
+  head.add(barrel);
+  const core = part(G.ball, glow.plasma, 0, 0.12, 0, 0.08);
+  core.castShadow = false;
+  head.add(core);
+  g.add(head);
+  return { head, barrel, core };
 }
 
-function drawCryo(ctx, t, T, time) {
-  const c = TOWERS.cryo.color;
-  drawBase(ctx, T, c);
-  ctx.save();
-  // antenler
-  ctx.strokeStyle = '#a9b6d6';
-  ctx.lineWidth = Math.max(1, T * 0.025);
+function buildCryo(g) {
+  const head = new THREE.Group();
+  head.position.y = 0.2;
+  const crystal = part(G.crystal, iceMat, 0, 0.25, 0, 0.13, 0.26, 0.13);
+  head.add(crystal);
   for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(s * T * 0.12, -T * 0.05);
-    ctx.lineTo(s * T * 0.2, -T * 0.32);
-    ctx.stroke();
-    ctx.fillStyle = c;
-    ctx.beginPath();
-    ctx.arc(s * T * 0.2, -T * 0.32, T * 0.03, 0, Math.PI * 2);
-    ctx.fill();
+    const ant = part(G.cyl, M.light, s * 0.15, 0.17, 0, 0.012, 0.32, 0.012);
+    ant.rotation.z = -s * 0.35;
+    head.add(ant);
+    head.add(part(G.ball, glow.cryo, s * 0.21, 0.33, 0, 0.03));
   }
-  // kristal
-  const h = T * (0.28 + 0.02 * Math.sin(time * 2 + t.id));
-  const grad = ctx.createLinearGradient(0, -h, 0, h * 0.5);
-  grad.addColorStop(0, '#e8fbff');
-  grad.addColorStop(1, '#3fa9e0');
-  ctx.fillStyle = grad;
-  ctx.shadowColor = c;
-  ctx.shadowBlur = T * 0.2;
-  ctx.beginPath();
-  ctx.moveTo(0, -h);
-  ctx.lineTo(T * 0.13, -h * 0.2);
-  ctx.lineTo(T * 0.08, h * 0.45);
-  ctx.lineTo(-T * 0.08, h * 0.45);
-  ctx.lineTo(-T * 0.13, -h * 0.2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-  ctx.lineWidth = Math.max(1, T * 0.015);
-  ctx.beginPath();
-  ctx.moveTo(0, -h);
-  ctx.lineTo(0, h * 0.45);
-  ctx.stroke();
-  ctx.restore();
+  g.add(head);
+  return { head, crystal };
 }
 
-function drawTesla(ctx, t, T, time) {
-  const c = TOWERS.tesla.color;
-  drawBase(ctx, T, c);
-  ctx.save();
-  // bobin
-  ctx.fillStyle = '#2b3147';
-  ctx.fillRect(-T * 0.07, -T * 0.3, T * 0.14, T * 0.42);
+function buildTesla(g) {
+  const head = new THREE.Group();
+  head.position.y = 0.19;
+  head.add(part(G.cyl, M.dark, 0, 0.2, 0, 0.06, 0.42, 0.06));
   for (let i = 0; i < 4; i++) {
-    const y = T * 0.08 - i * T * 0.1;
-    ctx.fillStyle = i % 2 ? '#b8743c' : '#d48a4a';
-    ctx.beginPath();
-    ctx.ellipse(0, y, T * (0.17 - i * 0.02), T * 0.04, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const c = part(G.coil, M.copper, 0, 0.06 + i * 0.09, 0, 1 - i * 0.12);
+    c.rotation.x = Math.PI / 2;
+    head.add(c);
   }
-  // enerji küresi
-  const pulse = 0.5 + 0.5 * Math.sin(time * 6 + t.id);
-  const r = T * (0.1 + 0.025 * pulse + 0.03 * t.recoil);
-  const g = ctx.createRadialGradient(0, -T * 0.34, 0, 0, -T * 0.34, r * 2.2);
-  g.addColorStop(0, '#ffffff');
-  g.addColorStop(0.35, c);
-  g.addColorStop(1, 'rgba(197,139,255,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(0, -T * 0.34, r * 2.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  const orb = part(G.ball, glow.tesla, 0, 0.48, 0, 0.09);
+  orb.castShadow = false;
+  head.add(orb);
+  g.add(head);
+  return { head, orb };
 }
 
-const DRAW = { laser: drawLaser, plasma: drawPlasma, cryo: drawCryo, tesla: drawTesla };
+const BUILD = { laser: buildLaser, plasma: buildPlasma, cryo: buildCryo, tesla: buildTesla };
 
-export function drawTower(ctx, t, T, time) {
-  ctx.save();
-  ctx.translate(t.x * T, t.y * T);
-  DRAW[t.type](ctx, t, T, time);
-  drawLevelDots(ctx, T, t.level, TOWERS[t.type].color);
-  ctx.restore();
+export function createTowerModel(tower) {
+  const g = buildBase(tower.type);
+  const parts = BUILD[tower.type](g);
+  const dots = [];
+  for (let i = 0; i < 3; i++) {
+    const d = part(G.dot, glow[tower.type], (i - 1) * 0.11, 0.06, 0.39);
+    d.castShadow = false;
+    g.add(d);
+    dots.push(d);
+  }
+  g.userData = { ...parts, dots };
+  return g;
+}
+
+export function updateTowerModel(model, tower, time) {
+  const u = model.userData;
+  for (let i = 0; i < 3; i++) u.dots[i].visible = i < tower.level;
+  // seviye arttıkça kule biraz büyür
+  const s = 1.15 * (1 + (tower.level - 1) * 0.08);
+  model.scale.set(s, s, s);
+  const yaw = -tower.angle;
+  if (tower.type === 'laser' || tower.type === 'plasma') {
+    u.head.rotation.y = yaw;
+    u.barrel.position.x = -tower.recoil * (tower.type === 'plasma' ? 0.08 : 0.05);
+    if (u.core) u.core.scale.setScalar(0.08 * (0.85 + 0.15 * Math.sin(time * 4 + tower.id)));
+  } else if (tower.type === 'cryo') {
+    u.crystal.rotation.y = time * 0.8 + tower.id;
+    u.crystal.position.y = 0.25 + Math.sin(time * 2 + tower.id) * 0.02;
+  } else {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 6 + tower.id);
+    u.orb.scale.setScalar(0.08 + 0.025 * pulse + 0.04 * tower.recoil);
+  }
 }
 
 // Mermiler
-function drawLaserBolt(ctx, p, T) {
-  ctx.rotate(p.angle);
-  ctx.strokeStyle = TOWERS.laser.color;
-  ctx.shadowColor = TOWERS.laser.color;
-  ctx.shadowBlur = T * 0.2;
-  ctx.lineWidth = Math.max(1.5, T * 0.05);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(-T * 0.18, 0);
-  ctx.lineTo(T * 0.05, 0);
-  ctx.stroke();
-  ctx.strokeStyle = '#ffd6da';
-  ctx.lineWidth = Math.max(1, T * 0.02);
-  ctx.stroke();
+const projGeo = {
+  laser: new THREE.CapsuleGeometry(0.025, 0.2, 4, 6),
+  plasma: new THREE.SphereGeometry(0.09, 12, 8),
+  cryo: new THREE.OctahedronGeometry(0.07, 0),
+};
+const projMat = {
+  laser: new THREE.MeshBasicMaterial({ color: 0xff6b78 }),
+  plasma: new THREE.MeshBasicMaterial({ color: 0x9dffe0 }),
+  cryo: new THREE.MeshBasicMaterial({ color: 0xd9f6ff }),
+};
+
+export function createProjectileModel(p) {
+  const m = new THREE.Mesh(projGeo[p.type], projMat[p.type]);
+  if (p.type === 'laser') m.rotation.order = 'YXZ';
+  return m;
 }
 
-function drawPlasmaBall(ctx, p, T) {
-  const c = TOWERS.plasma.color;
-  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, T * 0.16);
-  g.addColorStop(0, '#eafff8');
-  g.addColorStop(0.4, c);
-  g.addColorStop(1, 'rgba(61,255,192,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(0, 0, T * 0.16, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawCryoShard(ctx, p, T) {
-  ctx.rotate(p.angle);
-  ctx.fillStyle = '#d9f6ff';
-  ctx.shadowColor = TOWERS.cryo.color;
-  ctx.shadowBlur = T * 0.15;
-  ctx.beginPath();
-  ctx.moveTo(T * 0.09, 0);
-  ctx.lineTo(0, T * 0.045);
-  ctx.lineTo(-T * 0.09, 0);
-  ctx.lineTo(0, -T * 0.045);
-  ctx.closePath();
-  ctx.fill();
-}
-
-const DRAW_PROJECTILE = { laser: drawLaserBolt, plasma: drawPlasmaBall, cryo: drawCryoShard };
-
-export function drawProjectile(ctx, p, T) {
-  ctx.save();
-  ctx.translate(p.x * T, p.y * T);
-  DRAW_PROJECTILE[p.type](ctx, p, T);
-  ctx.restore();
-}
-
-export function drawRange(ctx, x, y, range, T, color) {
-  ctx.save();
-  ctx.fillStyle = color + '1a';
-  ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.85;
-  ctx.lineWidth = Math.max(1, T * 0.03);
-  ctx.setLineDash([T * 0.15, T * 0.1]);
-  ctx.beginPath();
-  ctx.arc(x * T, y * T, range * T, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
-
-export function drawSelection(ctx, c, r, T, time) {
-  ctx.save();
-  ctx.strokeStyle = '#5ee6d0';
-  ctx.globalAlpha = 0.6 + 0.4 * Math.sin(time * 6);
-  ctx.lineWidth = Math.max(1.5, T * 0.05);
-  const m = T * 0.06;
-  ctx.strokeRect(c * T + m, r * T + m, T - 2 * m, T - 2 * m);
-  ctx.restore();
+export function updateProjectileModel(m, p) {
+  if (p.type === 'laser') {
+    m.rotation.y = -p.angle;
+    m.rotation.z = Math.PI / 2;
+  } else if (p.type === 'cryo') {
+    m.rotation.y += 0.3;
+  }
 }

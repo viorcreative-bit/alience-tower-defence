@@ -1,395 +1,250 @@
+import * as THREE from 'three';
 import { RULES } from '../data/rules.js';
-import { slowFactor } from '../systems/movement.js';
 
-// Her uzaylının çizimi kendi fonksiyonunda. Hepsi aynı "klasik uzaylı" gövdesini
-// (iri kel kafa, parlak siyah badem gözler, ince gövde) kendi rengi ve ekleriyle çizer.
-// Koordinatlar: merkez (0,0), ekrana dik duruş; r = uzaylının yarıçapı (piksel).
+// 3D uzaylı ve uzay aracı modelleri. Modeller 1 birim yarıçapa göre kurulur,
+// sonra uzaylının yarıçapı kadar ölçeklenir. Her türün modeli kendi fonksiyonunda.
 
-function headPath(ctx, r, w, h, cy) {
-  // geniş kubbe, sivri çene
-  ctx.beginPath();
-  ctx.moveTo(0, cy + h * 0.55);
-  ctx.bezierCurveTo(-w * 0.35, cy + h * 0.5, -w * 0.62, cy + h * 0.12, -w * 0.6, cy - h * 0.12);
-  ctx.bezierCurveTo(-w * 0.58, cy - h * 0.6, -w * 0.25, cy - h * 0.72, 0, cy - h * 0.72);
-  ctx.bezierCurveTo(w * 0.25, cy - h * 0.72, w * 0.58, cy - h * 0.6, w * 0.6, cy - h * 0.12);
-  ctx.bezierCurveTo(w * 0.62, cy + h * 0.12, w * 0.35, cy + h * 0.5, 0, cy + h * 0.55);
-  ctx.closePath();
+const G = {
+  ball: new THREE.SphereGeometry(1, 20, 14),
+  cap: new THREE.CapsuleGeometry(1, 1, 4, 10),
+  cyl: new THREE.CylinderGeometry(1, 1, 1, 16),
+  box: new THREE.BoxGeometry(1, 1, 1),
+  torus: new THREE.TorusGeometry(1, 0.08, 6, 24),
+  half: new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+  cone: new THREE.ConeGeometry(1, 1, 16, 1, true),
+};
+const eyeMat = new THREE.MeshStandardMaterial({ color: 0x050608, metalness: 0.4, roughness: 0.05 });
+const mouthMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.8 });
+const metal = new THREE.MeshStandardMaterial({ color: 0x9aa3bd, metalness: 0.8, roughness: 0.3 });
+const darkMetal = new THREE.MeshStandardMaterial({ color: 0x3e3550, metalness: 0.7, roughness: 0.4 });
+const saucerLightMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+const pilotMat = new THREE.MeshStandardMaterial({ color: 0x7ccf4a, roughness: 0.55 });
+const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.45, roughness: 0.05, metalness: 0.2 });
+const beamMat = new THREE.MeshBasicMaterial({ color: 0x7cff6b, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide });
+const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x7cff6b, emissive: 0x3dbf2f, emissiveIntensity: 1.2 });
+const flameMat = new THREE.MeshBasicMaterial({ color: 0x78dcff, transparent: true, opacity: 0.85 });
+const noseGeo = new THREE.ConeGeometry(1, 1, 4);
+const flameGeo = new THREE.ConeGeometry(0.15, 0.6, 10);
+const veinMat = new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xffd040, emissiveIntensity: 1 });
+
+// Modeller mantıktaki yarıçaptan biraz büyük çizilir ki eğik kamerada seçilsin.
+const VISUAL_SCALE = 1.45;
+// İnsansılar yürüdükleri yöne dönerken yüzlerini kameraya doğru çevirir (0 = hiç, 1 = tam).
+const FACE_CAMERA = 0.9;
+
+function mesh(geo, mat, x, y, z, sx, sy, sz) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.scale.set(sx, sy ?? sx, sz ?? sx);
+  m.castShadow = true;
+  return m;
 }
 
-function drawEyes(ctx, r, w, h, cy, look) {
-  for (const s of [-1, 1]) {
-    ctx.save();
-    ctx.translate(s * w * 0.24 + look * w * 0.04, cy + h * 0.02);
-    ctx.rotate(s * 0.45);
-    ctx.fillStyle = '#07080c';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, w * 0.2, h * 0.13, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.beginPath();
-    ctx.ellipse(-w * 0.06, -h * 0.04, w * 0.06, h * 0.035, -0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
+function skin(color) {
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, emissive: 0xffffff, emissiveIntensity: 0 });
 }
 
-// Ortak gövde. p: { skin, light, shade, head, body, walk, lean, look }
-function drawAlienBody(ctx, e, r, time, p) {
-  const swing = Math.sin(time * p.walk + e.seed);
-  const w = r * 2 * p.head;
-  const h = r * 2.1 * p.head;
-  const headCy = -r * 0.55;
-  const bodyTop = headCy + h * 0.5;
-  const bodyLen = r * 1.1 * p.body;
+// Klasik uzaylı gövdesi: iri kel kafa, parlak siyah badem gözler, ince gövde.
+// p: { color, head, body, bulk }
+function buildHumanoid(p) {
+  const root = new THREE.Group();
+  const mat = skin(p.color);
   const bulk = p.bulk || 1;
-  const lw = Math.max(1.2, r * 0.16 * bulk);
+  const legLen = 0.55 * p.body;
+  const hip = legLen + 0.15;
+  const torsoLen = 0.6 * p.body;
+  const shoulder = hip + torsoLen + 0.05;
+  const headR = 0.95 * p.head;
+  const headY = shoulder + 0.2 + headR * 0.95;
 
-  ctx.save();
-  ctx.rotate(p.lean);
-  ctx.lineCap = 'round';
-
-  // bacaklar
-  ctx.strokeStyle = p.shade;
-  ctx.lineWidth = lw;
+  const legs = [];
   for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(s * r * 0.12, bodyTop + bodyLen * 0.8);
-    ctx.lineTo(s * r * 0.2 + swing * s * r * 0.25, bodyTop + bodyLen * 1.35);
-    ctx.stroke();
+    const pivot = new THREE.Group();
+    pivot.position.set(s * 0.13 * bulk, hip, 0);
+    pivot.add(mesh(G.cap, mat, 0, -legLen / 2, 0, 0.1 * bulk, legLen / 2, 0.1 * bulk));
+    root.add(pivot);
+    legs.push(pivot);
   }
-  // gövde
-  ctx.fillStyle = p.skin;
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.12 * bulk, bodyTop);
-  ctx.quadraticCurveTo(-r * 0.36 * bulk, bodyTop + bodyLen * 0.25, -r * 0.2 * bulk, bodyTop + bodyLen * 0.9);
-  ctx.lineTo(r * 0.2 * bulk, bodyTop + bodyLen * 0.9);
-  ctx.quadraticCurveTo(r * 0.36 * bulk, bodyTop + bodyLen * 0.25, r * 0.12 * bulk, bodyTop);
-  ctx.closePath();
-  ctx.fill();
-  // kollar
-  ctx.strokeStyle = p.skin;
+  root.add(mesh(G.cap, mat, 0, hip + torsoLen / 2, 0, 0.27 * bulk, torsoLen / 2, 0.2 * bulk));
+  const arms = [];
   for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(s * r * 0.26 * bulk, bodyTop + bodyLen * 0.2);
-    ctx.lineTo(s * r * 0.42 * bulk - swing * s * r * 0.15, bodyTop + bodyLen * 0.85);
-    ctx.stroke();
+    const pivot = new THREE.Group();
+    pivot.position.set(s * 0.33 * bulk, shoulder, 0);
+    pivot.rotation.z = s * 0.15;
+    pivot.add(mesh(G.cap, mat, 0, -0.32, 0, 0.075 * bulk, 0.3, 0.075 * bulk));
+    root.add(pivot);
+    arms.push(pivot);
   }
+  root.add(mesh(G.cyl, mat, 0, shoulder + 0.1, 0, 0.08, 0.25, 0.08));
 
-  // kafa
-  const g = ctx.createRadialGradient(-w * 0.15, headCy - h * 0.35, r * 0.05, 0, headCy, w * 0.7);
-  g.addColorStop(0, p.light);
-  g.addColorStop(0.6, p.skin);
-  g.addColorStop(1, p.shade);
-  ctx.fillStyle = g;
-  headPath(ctx, r, w, h, headCy);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = Math.max(1, r * 0.05);
-  ctx.stroke();
-
-  if (p.dome) p.dome(ctx, w, h, headCy);
-  drawEyes(ctx, r, w, h, headCy, p.look);
-
-  // burun ve gülümseme
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  const head = new THREE.Group();
+  head.position.y = headY;
+  // geniş kubbe, sivri çene
+  head.add(mesh(G.ball, mat, 0, 0, 0, headR, headR * 1.08, headR * 0.92));
+  head.add(mesh(G.ball, mat, 0, -headR * 0.55, headR * 0.12, headR * 0.5, headR * 0.5, headR * 0.55));
   for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.arc(s * w * 0.03, headCy + h * 0.22, Math.max(0.6, r * 0.025), 0, Math.PI * 2);
-    ctx.fill();
+    const eye = mesh(G.ball, eyeMat, s * headR * 0.38, -headR * 0.05, headR * 0.72, headR * 0.3, headR * 0.17, headR * 0.16);
+    eye.rotation.z = s * 0.45;
+    eye.rotation.y = s * 0.35;
+    eye.castShadow = false;
+    head.add(eye);
   }
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-  ctx.lineWidth = Math.max(0.8, r * 0.04);
-  ctx.beginPath();
-  ctx.arc(0, headCy + h * 0.24, w * 0.09, 0.25 * Math.PI, 0.75 * Math.PI);
-  ctx.stroke();
-  ctx.restore();
+  const mouth = mesh(G.torus, mouthMat, 0, -headR * 0.6, headR * 0.6, headR * 0.12);
+  mouth.rotation.z = Math.PI;
+  mouth.scale.z = headR * 0.05;
+  mouth.castShadow = false;
+  head.add(mouth);
+  root.add(head);
+
+  return { root, mat, legs, arms, head, height: headY + headR * 1.08 };
 }
 
-// Sürüngen: klasik yeşil uzaylı.
-function drawReptile(ctx, e, T, time, look) {
-  drawAlienBody(ctx, e, e.radius * T, time, {
-    skin: '#7ccf4a', light: '#c9f59a', shade: '#3f7f25',
-    head: 1, body: 1, walk: 10, lean: 0, look,
-  });
+function animateWalk(u, e, time, speed, amount = 0.6) {
+  const swing = Math.sin(time * speed + e.seed);
+  u.legs[0].rotation.x = swing * amount;
+  u.legs[1].rotation.x = -swing * amount;
+  u.arms[0].rotation.x = -swing * amount * 0.8;
+  u.arms[1].rotation.x = swing * amount * 0.8;
+  u.body.position.y = Math.abs(swing) * 0.05;
 }
 
-// Akrep: turuncu, ince ve öne eğik koşan hızlı uzaylı, arkasında hız izleri.
-function drawScorpion(ctx, e, T, time, look) {
-  const r = e.radius * T;
-  ctx.strokeStyle = 'rgba(255,170,80,0.45)';
-  ctx.lineWidth = Math.max(1, r * 0.12);
-  ctx.lineCap = 'round';
-  for (let i = -1; i <= 1; i++) {
-    ctx.beginPath();
-    ctx.moveTo(-look * r * 0.9, i * r * 0.45 - r * 0.2);
-    ctx.lineTo(-look * r * 1.6, i * r * 0.45 - r * 0.2);
-    ctx.stroke();
-  }
-  drawAlienBody(ctx, e, r, time, {
-    skin: '#ff9b3d', light: '#ffd9a0', shade: '#b4561a',
-    head: 0.95, body: 1.1, walk: 24, lean: look * 0.3, look,
-  });
+function humanoidModel(p, extra) {
+  const h = buildHumanoid(p);
+  const body = new THREE.Group();
+  body.add(h.root);
+  if (extra) extra(h);
+  return { body, mat: h.mat, legs: h.legs, arms: h.arms, head: h.head, height: h.height, walk: p.walk, lean: p.lean || 0 };
 }
 
-// Kabuklu: gri-mor zırhlı uzaylı; omuz plakaları ve kafada zırh bandı.
-function drawShell(ctx, e, T, time, look) {
-  const r = e.radius * T;
-  drawAlienBody(ctx, e, r, time, {
-    skin: '#8e82a8', light: '#cfc6e0', shade: '#4e4566',
-    head: 1, body: 1.05, walk: 5, lean: 0, look,
-    dome(ctx, w, h, cy) {
-      ctx.fillStyle = '#4a4060';
-      ctx.beginPath();
-      ctx.ellipse(0, cy - h * 0.42, w * 0.5, h * 0.2, 0, Math.PI, 0);
-      ctx.fill();
-      ctx.fillStyle = '#ffcf5a';
-      ctx.beginPath();
-      ctx.arc(0, cy - h * 0.5, Math.max(1, w * 0.04), 0, Math.PI * 2);
-      ctx.fill();
-    },
-  });
-  // göğüs ve omuz zırhı
-  const top = -r * 0.55 + r * 2.1 * 0.5;
-  ctx.fillStyle = '#5d5276';
-  ctx.strokeStyle = '#2f2742';
-  ctx.lineWidth = Math.max(1, r * 0.06);
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.55, top + r * 0.05);
-  ctx.lineTo(r * 0.55, top + r * 0.05);
-  ctx.lineTo(r * 0.3, top + r * 0.75);
-  ctx.lineTo(-r * 0.3, top + r * 0.75);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-}
-
-// Uçan Daire: metal disk, cam kubbede küçük bir uzaylı, yanıp sönen kenar ışıkları.
-function drawSaucer(ctx, e, T, time) {
-  const r = e.radius * T * 1.5;
-  const bob = Math.sin(time * 5 + e.seed) * r * 0.12;
-  ctx.save();
-  ctx.translate(0, -r * 0.5 + bob);
-  // çekim ışını
-  const beam = ctx.createLinearGradient(0, 0, 0, r * 1.5);
-  beam.addColorStop(0, 'rgba(124,255,107,0.35)');
-  beam.addColorStop(1, 'rgba(124,255,107,0)');
-  ctx.fillStyle = beam;
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.35, r * 0.1);
-  ctx.lineTo(r * 0.35, r * 0.1);
-  ctx.lineTo(r * 0.7, r * 1.5);
-  ctx.lineTo(-r * 0.7, r * 1.5);
-  ctx.closePath();
-  ctx.fill();
-  // kubbe ve pilot
-  const dome = ctx.createRadialGradient(-r * 0.2, -r * 0.55, r * 0.05, 0, -r * 0.3, r * 0.6);
-  dome.addColorStop(0, 'rgba(230,250,255,0.9)');
-  dome.addColorStop(1, 'rgba(90,160,200,0.55)');
-  ctx.fillStyle = '#7ccf4a';
-  ctx.beginPath();
-  ctx.ellipse(0, -r * 0.32, r * 0.2, r * 0.24, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#07080c';
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(s * r * 0.08, -r * 0.33, r * 0.065, r * 0.04, s * 0.45, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = dome;
-  ctx.beginPath();
-  ctx.arc(0, -r * 0.15, r * 0.48, Math.PI, 0);
-  ctx.closePath();
-  ctx.fill();
-  // disk
-  const disk = ctx.createLinearGradient(0, -r * 0.3, 0, r * 0.3);
-  disk.addColorStop(0, '#e2e7f2');
-  disk.addColorStop(0.45, '#8f98b0');
-  disk.addColorStop(1, '#3a4058');
-  ctx.fillStyle = disk;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, r * 1.15, r * 0.36, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineWidth = Math.max(1, r * 0.05);
-  ctx.stroke();
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI + 0.25;
-    const on = Math.sin(time * 8 - i) > 0;
-    ctx.fillStyle = on ? '#ffe066' : '#6b5a20';
-    ctx.beginPath();
-    ctx.arc(Math.cos(a) * r * 0.85, Math.sin(a) * r * 0.2, Math.max(0.8, r * 0.07), 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-// Savaş Gemisi: zırh plakalı uzun gövde, yön değiştirince döner, arkada motor alevi.
-function drawCruiser(ctx, e, T, time) {
-  const r = e.radius * T * 1.25;
-  ctx.save();
-  ctx.translate(0, -r * 0.35);
-  ctx.rotate(e.angle);
-  // motor alevi
-  const flame = r * (0.45 + 0.15 * Math.sin(time * 30 + e.seed));
-  const fg = ctx.createLinearGradient(-r * 0.9, 0, -r * 0.9 - flame, 0);
-  fg.addColorStop(0, 'rgba(120,220,255,0.95)');
-  fg.addColorStop(1, 'rgba(120,120,255,0)');
-  ctx.fillStyle = fg;
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.85, s * r * 0.28 - r * 0.1);
-    ctx.lineTo(-r * 0.9 - flame, s * r * 0.28);
-    ctx.lineTo(-r * 0.85, s * r * 0.28 + r * 0.1);
-    ctx.closePath();
-    ctx.fill();
-  }
-  // kanatlar
-  ctx.fillStyle = '#3e3550';
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.2, 0);
-  ctx.lineTo(-r * 0.8, -r * 0.85);
-  ctx.lineTo(-r * 0.55, -r * 0.85);
-  ctx.lineTo(r * 0.3, 0);
-  ctx.lineTo(-r * 0.55, r * 0.85);
-  ctx.lineTo(-r * 0.8, r * 0.85);
-  ctx.closePath();
-  ctx.fill();
-  // gövde
-  const hull = ctx.createLinearGradient(0, -r * 0.4, 0, r * 0.4);
-  hull.addColorStop(0, '#b3a9c9');
-  hull.addColorStop(0.5, '#6a5f86');
-  hull.addColorStop(1, '#2c253d');
-  ctx.fillStyle = hull;
-  ctx.beginPath();
-  ctx.moveTo(r * 1.15, 0);
-  ctx.lineTo(r * 0.5, -r * 0.38);
-  ctx.lineTo(-r * 0.9, -r * 0.42);
-  ctx.lineTo(-r * 0.9, r * 0.42);
-  ctx.lineTo(r * 0.5, r * 0.38);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineWidth = Math.max(1, r * 0.05);
-  ctx.stroke();
-  // plaka çizgileri
-  ctx.strokeStyle = 'rgba(20,14,30,0.6)';
-  ctx.lineWidth = Math.max(1, r * 0.03);
-  for (const x of [-0.5, -0.1, 0.3]) {
-    ctx.beginPath();
-    ctx.moveTo(r * x, -r * 0.38);
-    ctx.lineTo(r * x, r * 0.38);
-    ctx.stroke();
-  }
-  // kokpit
-  ctx.fillStyle = '#7cff6b';
-  ctx.shadowColor = '#7cff6b';
-  ctx.shadowBlur = r * 0.4;
-  ctx.beginPath();
-  ctx.ellipse(r * 0.62, 0, r * 0.22, r * 0.12, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-// Dev: iri yapılı, geniş omuzlu koyu yeşil uzaylı; yavaş ve ağır adımlı.
-function drawGiant(ctx, e, T, time, look) {
-  drawAlienBody(ctx, e, e.radius * T, time, {
-    skin: '#4f9a3a', light: '#a6e07e', shade: '#24521a',
-    head: 0.8, body: 1.45, bulk: 2.1, walk: 3.5, lean: 0, look,
-    dome(ctx, w, h, cy) {
-      // alındaki yara izi
-      ctx.strokeStyle = 'rgba(30,60,20,0.7)';
-      ctx.lineWidth = Math.max(1, w * 0.03);
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.2, cy - h * 0.5);
-      ctx.lineTo(w * 0.05, cy - h * 0.3);
-      ctx.stroke();
-    },
-  });
-}
-
-// Ana Beyin: dev uzaylı, şişkin pembe kafasında parlayan damarlı beyin.
-function drawBrain(ctx, e, T, time, look) {
-  const r = e.radius * T;
-  const glow = 0.5 + 0.5 * Math.sin(time * 3 + e.seed);
-  drawAlienBody(ctx, e, r, time, {
-    skin: '#e0566f', light: '#ffc2cf', shade: '#8f2440',
-    head: 1.15, body: 0.85, walk: 3, lean: 0, look,
-    dome(ctx, w, h, cy) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(150,30,60,0.7)';
-      ctx.lineWidth = Math.max(1, w * 0.025);
-      ctx.beginPath();
-      ctx.moveTo(0, cy - h * 0.7);
-      ctx.lineTo(0, cy - h * 0.2);
-      for (const s of [-1, 1]) {
-        ctx.moveTo(s * w * 0.1, cy - h * 0.62);
-        ctx.quadraticCurveTo(s * w * 0.4, cy - h * 0.55, s * w * 0.2, cy - h * 0.38);
-        ctx.quadraticCurveTo(s * w * 0.45, cy - h * 0.32, s * w * 0.5, cy - h * 0.15);
+const BUILD = {
+  // Sürüngen: klasik yeşil uzaylı
+  reptile: () => humanoidModel({ color: 0x7ccf4a, head: 1, body: 1, walk: 10 }),
+  // Akrep: turuncu, ince, öne eğik koşan
+  scorpion: () => humanoidModel({ color: 0xff9b3d, head: 0.95, body: 1.1, walk: 22, lean: 0.35 }),
+  // Kabuklu: gri-mor, miğferli ve göğüs zırhlı
+  shell: () =>
+    humanoidModel({ color: 0x8e82a8, head: 1, body: 1.05, walk: 5 }, (h) => {
+      const helm = mesh(G.half, darkMetal, 0, 0.15, -0.05, 1.0, 0.85, 0.98);
+      h.head.add(helm);
+      h.root.add(mesh(G.box, darkMetal, 0, 1.15, 0.05, 0.7, 0.55, 0.5));
+      for (const s of [-1, 1]) h.root.add(mesh(G.ball, darkMetal, s * 0.38, 1.38, 0, 0.17, 0.12, 0.17));
+    }),
+  // Dev: iri yapılı, geniş omuzlu koyu yeşil uzaylı
+  giant: () => humanoidModel({ color: 0x4f9a3a, head: 0.8, body: 1.45, bulk: 2.0, walk: 3.5 }),
+  // Ana Beyin: şişkin pembe kafasında parlayan damarlar
+  brain: () =>
+    humanoidModel({ color: 0xe0566f, head: 1.15, body: 0.85, walk: 3 }, (h) => {
+      for (let i = 0; i < 4; i++) {
+        const v = mesh(G.torus, veinMat, 0, 0.35, 0, 0.75 - i * 0.08);
+        v.rotation.set(Math.PI / 2 + (i - 1.5) * 0.35, 0, i * 0.8);
+        v.castShadow = false;
+        h.head.add(v);
       }
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(255,240,120,${0.35 + 0.55 * glow})`;
-      ctx.shadowColor = '#ffe066';
-      ctx.shadowBlur = w * 0.15;
-      ctx.lineWidth = Math.max(1, w * 0.018);
-      ctx.beginPath();
-      for (const s of [-1, 1]) {
-        ctx.moveTo(s * w * 0.05, cy - h * 0.5);
-        ctx.bezierCurveTo(s * w * 0.3, cy - h * 0.48, s * w * 0.15, cy - h * 0.3, s * w * 0.42, cy - h * 0.25);
-      }
-      ctx.stroke();
-      ctx.restore();
-    },
-  });
-}
-
-const DRAW = {
-  reptile: drawReptile,
-  scorpion: drawScorpion,
-  shell: drawShell,
-  saucer: drawSaucer,
-  cruiser: drawCruiser,
-  giant: drawGiant,
-  brain: drawBrain,
+    }),
 };
 
-function drawHealthBar(ctx, e, T) {
-  if (e.hp >= e.maxHp) return;
-  const ratio = Math.max(0, e.hp / e.maxHp);
-  const w = Math.max(T * 0.5, e.radius * T * 2);
-  const h = Math.max(3, T * 0.07);
-  const x = e.x * T - w / 2;
-  const y = (e.y - e.radius * 1.75) * T - h - T * 0.04;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-  ctx.fillStyle = ratio <= RULES.lowHpRatio ? '#ff4d5e' : '#7cff6b';
-  ctx.fillRect(x, y, w * ratio, h);
+// Uçan Daire: metal disk, cam kubbede pilot, yanıp sönen ışıklar, çekim ışını.
+function buildSaucer() {
+  const body = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc5cce0, metalness: 0.85, roughness: 0.25, emissive: 0xffffff, emissiveIntensity: 0 });
+  const disk = new THREE.Group();
+  disk.position.y = 2.2;
+  disk.add(mesh(G.ball, mat, 0, 0, 0, 1.25, 0.3, 1.25));
+  disk.add(mesh(G.cyl, darkMetal, 0, -0.2, 0, 0.5, 0.15, 0.5));
+  const pilot = mesh(G.ball, pilotMat, 0, 0.35, 0, 0.22, 0.28, 0.22);
+  disk.add(pilot);
+  const dome = mesh(G.half, glassMat, 0, 0.12, 0, 0.55);
+  dome.castShadow = false;
+  disk.add(dome);
+  const lights = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const l = mesh(G.ball, saucerLightMat, Math.cos(a) * 1.1, 0, Math.sin(a) * 1.1, 0.09);
+    l.castShadow = false;
+    disk.add(l);
+    lights.push(l);
+  }
+  const beam = mesh(G.cone, beamMat, 0, 1.0, 0, 0.75, 2.0, 0.75);
+  beam.castShadow = false;
+  body.add(beam);
+  body.add(disk);
+  return { body, mat, disk, lights, height: 2.9, hover: true };
 }
 
-export function drawEnemy(ctx, e, T, time) {
-  const r = e.radius * T;
-  ctx.save();
-  ctx.translate(e.x * T, e.y * T);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath();
-  ctx.ellipse(0, r * 1.05, r * 0.75, r * 0.28, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Uzaylılar ekrana dik durur; yürüdükleri yöne göre sağa/sola bakar.
-  const look = Math.abs(Math.cos(e.angle)) > 0.5 ? Math.sign(Math.cos(e.angle)) : 0;
-  DRAW[e.type](ctx, e, T, time, look);
-  if (slowFactor(e) > 0) {
-    ctx.strokeStyle = 'rgba(127,216,255,0.75)';
-    ctx.lineWidth = Math.max(1, T * 0.03);
-    ctx.beginPath();
-    ctx.ellipse(0, -r * 0.3, r * 1.15, r * 1.6, 0, 0, Math.PI * 2);
-    ctx.stroke();
+// Savaş Gemisi: zırhlı uzun gövde, kanatlar, yeşil kokpit, mavi motor alevi.
+function buildCruiser() {
+  const body = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7d7299, metalness: 0.7, roughness: 0.35, emissive: 0xffffff, emissiveIntensity: 0 });
+  const ship = new THREE.Group();
+  ship.position.y = 1.4;
+  ship.add(mesh(G.box, mat, -0.1, 0, 0, 1.8, 0.5, 0.75));
+  const nose = mesh(noseGeo, mat, 1.05, 0, 0, 0.42, 0.7, 0.42);
+  nose.rotation.z = -Math.PI / 2;
+  nose.rotation.x = Math.PI / 4;
+  ship.add(nose);
+  ship.add(mesh(G.box, darkMetal, -0.4, -0.05, 0, 0.9, 0.1, 2.0));
+  ship.add(mesh(G.box, darkMetal, -0.75, 0.3, 0, 0.4, 0.4, 0.08));
+  const cockpit = mesh(G.ball, cockpitMat, 0.5, 0.25, 0, 0.32, 0.16, 0.22);
+  ship.add(cockpit);
+  const flames = [];
+  for (const s of [-1, 1]) {
+    const f = mesh(flameGeo, flameMat, -1.25, 0, s * 0.22, 1);
+    f.rotation.z = Math.PI / 2;
+    f.castShadow = false;
+    ship.add(f);
+    flames.push(f);
   }
-  if (e.flash > 0) {
-    ctx.globalAlpha = Math.min(1, e.flash / RULES.hitFlashTime) * 0.75;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.ellipse(0, -r * 0.55, r * 1.05, r * 1.1, 0, 0, Math.PI * 2);
-    ctx.fill();
+  body.add(ship);
+  return { body, mat, ship, flames, height: 2.0, hover: true, faceAlong: true };
+}
+
+BUILD.saucer = buildSaucer;
+BUILD.cruiser = buildCruiser;
+
+export function createEnemyModel(e) {
+  const u = BUILD[e.type]();
+  const g = new THREE.Group();
+  const holder = new THREE.Group();
+  holder.add(u.body);
+  holder.scale.setScalar(e.radius * VISUAL_SCALE);
+  g.add(holder);
+  const slowRing = mesh(G.torus, ringMat, 0, 0.03, 0, e.radius * 1.6, e.radius * 1.6, e.radius * 1.6);
+  slowRing.rotation.x = Math.PI / 2;
+  slowRing.castShadow = false;
+  g.add(slowRing);
+  u.holder = holder;
+  u.slowRing = slowRing;
+  u.topY = u.height * e.radius * VISUAL_SCALE;
+  g.userData = u;
+  return g;
+}
+
+export function updateEnemyModel(model, e, time) {
+  const u = model.userData;
+  // insansılar yürüdükleri yöne bakar (+z yüz), gemi burnu +x
+  if (u.faceAlong) {
+    model.rotation.y = -e.angle;
+  } else {
+    const yaw = Math.PI / 2 - e.angle;
+    model.rotation.y = Math.atan2(Math.sin(yaw), Math.cos(yaw) + FACE_CAMERA);
   }
-  ctx.restore();
-  drawHealthBar(ctx, e, T);
+  if (u.legs) {
+    u.body.rotation.x = u.lean;
+    animateWalk(u, e, time, u.walk);
+  } else if (u.disk) {
+    u.disk.position.y = 2.2 + Math.sin(time * 4 + e.seed) * 0.15;
+    u.disk.rotation.y = time * 2;
+    u.lights.forEach((l, i) => (l.visible = Math.sin(time * 8 - i) > 0));
+  } else if (u.ship) {
+    u.ship.position.y = 1.4 + Math.sin(time * 3 + e.seed) * 0.1;
+    const f = 0.8 + 0.4 * Math.sin(time * 30 + e.seed);
+    u.flames.forEach((fl) => fl.scale.set(1, f, 1));
+  }
+  u.mat.emissiveIntensity = e.flash > 0 ? Math.min(1, e.flash / RULES.hitFlashTime) * 0.8 : 0;
+  u.slowRing.visible = e.slow > 0;
+}
+
+export function disposeEnemyModel(model) {
+  model.userData.mat.dispose();
 }

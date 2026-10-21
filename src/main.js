@@ -7,16 +7,12 @@ import '@fontsource/rajdhani/latin-ext-700.css';
 import './styles.css';
 
 import { RULES } from './data/rules.js';
-import { TOWERS, towerStats } from './data/towers.js';
-import { state, resetState, towerAt } from './state.js';
+import { state, resetState } from './state.js';
 import { startWave, updateSpawner, checkWaveEnd } from './systems/spawner.js';
 import { updateMovement } from './systems/movement.js';
 import { updateTowers, updateProjectiles, cleanupEnemies } from './systems/combat.js';
 import { updateEffects } from './systems/effects.js';
-import { createBackground, drawPortal, drawFortress } from './render/background.js';
-import { drawTower, drawProjectile, drawRange, drawSelection } from './render/towers.js';
-import { drawEnemy } from './render/enemies.js';
-import { drawEffects, drawBanners } from './render/fx.js';
+import { createRenderer } from './render/scene.js';
 import { createHud } from './ui/hud.js';
 import { createPanel } from './ui/panel.js';
 import { createOverlay } from './ui/overlay.js';
@@ -28,8 +24,7 @@ document.title = TR.title;
 
 const stage = document.getElementById('stage');
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-const view = { tile: 32, dpr: 1, width: 0, height: 0, background: null };
+const overlayCanvas = document.getElementById('labels');
 
 const hooks = {
   primary() {
@@ -52,24 +47,11 @@ const updateOverlay = createOverlay(document.getElementById('overlay'), restart)
 
 function restart() {
   resetState();
-  resize();
+  renderer.reset();
 }
 
 function resize() {
-  const { cols, rows } = state.map;
-  const w = stage.clientWidth;
-  const h = stage.clientHeight;
-  const tile = Math.max(RULES.minTile, Math.floor(Math.min(w / cols, h / rows)));
-  const dpr = Math.min(window.devicePixelRatio || 1, RULES.maxDpr);
-  view.tile = tile;
-  view.dpr = dpr;
-  view.width = cols * tile;
-  view.height = rows * tile;
-  canvas.style.width = `${view.width}px`;
-  canvas.style.height = `${view.height}px`;
-  canvas.width = Math.round(view.width * dpr);
-  canvas.height = Math.round(view.height * dpr);
-  view.background = createBackground(state.map, state.path, tile, dpr);
+  renderer.resize(Math.max(1, stage.clientWidth), Math.max(1, stage.clientHeight));
 }
 
 function update(dt) {
@@ -81,39 +63,6 @@ function update(dt) {
   cleanupEnemies(state);
   updateEffects(state, dt);
   if (checkWaveEnd(state) || state.phase === 'lost') saveBestWave(state.wave);
-}
-
-function render(realTime) {
-  const T = view.tile;
-  const { path } = state;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
-  if (state.shake > 0) {
-    const k = (state.shake / RULES.shakeTime) * RULES.shakeStrength * T;
-    ctx.translate((Math.random() - 0.5) * 2 * k, (Math.random() - 0.5) * 2 * k);
-  }
-  ctx.drawImage(view.background, 0, 0, view.width, view.height);
-
-  const start = path.points[0];
-  const end = path.points[path.points.length - 1];
-  drawPortal(ctx, start.x, Math.max(start.y, 0) + 0.3, T, realTime);
-
-  const sel = state.selected;
-  if (sel) drawSelection(ctx, sel.c, sel.r, T, realTime);
-
-  for (const t of state.towers) drawTower(ctx, t, T, realTime);
-  for (const e of state.enemies) drawEnemy(ctx, e, T, realTime);
-  drawFortress(ctx, end.x, state.map.rows, T, realTime, state.shield / RULES.startShield);
-  for (const p of state.projectiles) drawProjectile(ctx, p, T);
-  drawEffects(ctx, state.effects, T);
-
-  const selTower = sel && towerAt(sel.c, sel.r);
-  if (selTower) {
-    const def = TOWERS[selTower.type];
-    drawRange(ctx, selTower.x, selTower.y, towerStats(def, selTower.level).range, T, def.color);
-  }
-  drawBanners(ctx, state.effects, T, view.width, view.height);
 }
 
 let last = performance.now();
@@ -130,7 +79,7 @@ function frame(now) {
   } else {
     updateEffects(state, elapsed);
   }
-  render(now / 1000);
+  renderer.render(state, now / 1000);
   updateHud(state);
   updatePanel(state);
   updateOverlay(state);
@@ -138,10 +87,11 @@ function frame(now) {
 }
 
 resetState();
+const renderer = createRenderer(canvas, overlayCanvas, state.map, state.path);
 resize();
-setupInput(canvas, view, hooks);
+setupInput(canvas, renderer, hooks);
 window.addEventListener('resize', resize);
 if (document.fonts) document.fonts.ready.then(() => resize());
 requestAnimationFrame(frame);
 
-if (import.meta.env.DEV) window.__game = { state, hooks };
+if (import.meta.env.DEV) window.__game = { state, hooks, renderer };

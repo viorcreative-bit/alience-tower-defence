@@ -170,7 +170,7 @@ Hazırlık evresinde alt panelde sıradaki dalganın içeriği yazmalı: "Sırad
   - Uzaylı yeşili: `#7cff6b`
 - **Yazı tipleri:** Başlık için bilim kurgu hissi veren bir font (ör. Google Fonts'tan "Orbitron" ya da "Audiowide"), arayüz metinleri için okunaklı dar bir font (ör. "Barlow Semi Condensed" ya da "Rajdhani").
 - **Efektler:** Ekran sarsıntısı (çekirdek hasar alınca), patlama halkaları, parçacıklar, Tesla şimşeği, Kriyo halkası. Abartmadan, telefonda akıcı çalışacak kadar.
-- Grafikler şimdilik Canvas ile çizilen basit şekillerle yapılsın (prototipteki gibi). Sonra istersek gerçek sprite görsellerine geçeriz; kod buna izin verecek şekilde yazılsın (her varlığın çizimi kendi fonksiyonunda olsun).
+- **Görünüm 3D'dir** (kullanıcı isteği): harita, kanyon yolu, uzaylılar, uzay araçları, kale ve kuleler Three.js ile 3D çizilir. Kamera tahtaya güneyden eğik (yaklaşık 56°) bakar, üstten görünüm yok. Modeller koddaki basit 3D şekillerden kurulur (dışarıdan model dosyası yok); her varlığın modeli kendi fonksiyonunda olsun ki ileride gerçek modellerle değiştirilebilsin.
 
 ---
 
@@ -205,8 +205,8 @@ Hazırlık evresinde alt panelde sıradaki dalganın içeriği yazmalı: "Sırad
 
 ### Teknoloji
 
-- Saf **HTML + CSS + JavaScript** (ES modülleri), Canvas 2D ile çizim
-- Framework yok. Paketleme ve yerel sunucu için **Vite** kullanılabilir.
+- Saf **HTML + CSS + JavaScript** (ES modülleri), **Three.js** (WebGL) ile 3D çizim; can çubukları ve yazılar için üstte şeffaf bir 2D canvas katmanı
+- Arayüz framework'ü yok. Paketleme ve yerel sunucu için **Vite** kullanılır; Three.js pakete gömülür (çevrimdışı çalışır).
 - Daha sonra **Capacitor** ile Android/iOS uygulamasına çevrilecek, o yüzden sunucuya bağımlı hiçbir şey olmasın; oyun tamamen çevrimdışı çalışsın.
 
 ### Önerilen klasör yapısı
@@ -232,10 +232,12 @@ alien-wars-td/
     │   ├── combat.js       ← hedef seçimi, ateş, mermi, hasar, zırh
     │   └── effects.js      ← parçacık, halka, şimşek, yazı efektleri
     ├── render/
-    │   ├── background.js   ← zemin, yol, portal, çekirdek (önceden çizilir)
-    │   ├── towers.js       ← kule çizimleri
-    │   ├── enemies.js      ← uzaylı çizimleri
-    │   └── fx.js
+    │   ├── scene.js        ← Three.js sahnesi, kamera, ışık, mantık → 3D eşleme, dokunma ışını
+    │   ├── world.js        ← 3D arazi (kanyon), portal, kale
+    │   ├── background.js   ← zemin ve yol dokusu (2D canvas'ta çizilip araziye kaplanır)
+    │   ├── towers.js       ← 3D kule ve mermi modelleri
+    │   ├── enemies.js      ← 3D uzaylı ve uzay aracı modelleri
+    │   └── fx.js           ← 3D efektler + 2D katman (can çubuğu, yazılar, uyarı şeridi)
     ├── ui/
     │   ├── hud.js          ← üst şerit
     │   ├── panel.js        ← alt bağlamsal panel
@@ -248,9 +250,9 @@ alien-wars-td/
 
 - **Veri ve mantık ayrı:** Tüm denge sayıları `src/data/` içinde. Mantık kodunda sabit sayı olmasın.
 - **Sabit zaman adımı:** Güncelleme, en fazla 0.03 sn'lik adımlarla yapılsın (prototipteki gibi). Hız 2× ve 3× olunca adım sayısı artar, adım boyu artmaz.
-- **Birimler:** Oyun mantığında tüm konumlar ve mesafeler **kare** biriminde. Piksele çeviri sadece çizim katmanında yapılır.
-- **Ekran boyutu:** Canvas, `devicePixelRatio` (en fazla 2) ile keskin çizilir; pencere boyutu değişince yeniden hesaplanır.
-- **Performans:** Arka plan bir kez ayrı bir canvas'a çizilip her karede kopyalanır. Ölü düşman, biten mermi ve efektler her karede listeden temizlenir. Hedef: orta seviye bir Android telefonda 60 FPS.
+- **Birimler:** Oyun mantığında tüm konumlar ve mesafeler **kare** biriminde ve 2D'dir. 3D dünyaya çeviri (`x - sütun/2`, yükseklik, `y - satır/2`) sadece çizim katmanında yapılır.
+- **Ekran boyutu:** 3D canvas oyun alanını doldurur; WebGL çözünürlüğü `devicePixelRatio` en fazla 1.5, 2D katman en fazla 2 ile çizilir. Pencere boyutu değişince kamera tahtanın tamamı sığacak şekilde yeniden konumlanır.
+- **Performans:** Arazi bir kez kurulur; geometri ve malzemeler paylaşılır, parçacıklar tek bir InstancedMesh ile çizilir, tek gölge ışığı (1024 gölge haritası). Ölü düşman, biten mermi ve efektlerin 3D nesneleri her karede sahneden kaldırılır. Hedef: orta seviye bir Android telefonda 60 FPS.
 - **Kayıt:** En yüksek dalga ve ayarlar `localStorage`'da tutulur; her okuma ve yazma `try/catch` içinde olsun.
 - **Kod dili:** Değişken ve fonksiyon adları İngilizce, oyuncuya görünen tüm metinler Türkçe. Metinler ileride çeviri eklenebilsin diye tek bir dosyada (`src/i18n/tr.js`) toplanırsa iyi olur.
 
