@@ -11,10 +11,9 @@ export function startWave(state) {
   state.phase = 'wave';
   state.spawnQueue = [];
   for (const [type, count, interval] of WAVES[state.wave - 1]) {
-    for (let i = 0; i < count; i++) state.spawnQueue.push({ type, delay: interval });
+    for (let i = 0; i < count; i++) state.spawnQueue.push({ type, gap: interval });
   }
-  state.spawnQueue[0].delay = 0;
-  state.spawnTimer = 0;
+  state.spawnTimer = RULES.firstSpawnDelay;
 }
 
 export function spawnEnemy(state, type) {
@@ -34,7 +33,8 @@ export function spawnEnemy(state, type) {
     x: p.x,
     y: p.y,
     angle: p.angle,
-    slows: [],
+    slow: 0,
+    slowTime: 0,
     flash: 0,
     dead: false,
     seed: Math.random() * 10,
@@ -43,23 +43,24 @@ export function spawnEnemy(state, type) {
 }
 
 export function updateSpawner(state, dt) {
-  if (!state.spawnQueue.length) return;
-  state.spawnTimer += dt;
-  while (state.spawnQueue.length && state.spawnTimer >= state.spawnQueue[0].delay) {
+  if (state.phase !== 'wave') return;
+  // Sayaç geri sayar; her uzaylı çıktıktan sonra kendi grubunun aralığı kadar beklenir.
+  state.spawnTimer -= dt;
+  while (state.spawnQueue.length && state.spawnTimer <= 0) {
     const next = state.spawnQueue.shift();
-    state.spawnTimer -= next.delay;
     spawnEnemy(state, next.type);
+    state.spawnTimer += next.gap;
   }
 }
 
 // Dalga bitti mi? Bittiyse bonusu ver ve evreyi değiştir.
 export function checkWaveEnd(state) {
   if (state.phase !== 'wave' || state.spawnQueue.length || state.enemies.length) return false;
-  const bonus = waveBonus(state.wave);
-  state.crystal += bonus;
   if (state.wave >= state.totalWaves) {
     state.phase = 'won';
   } else {
+    const bonus = waveBonus(state.wave);
+    state.crystal += bonus;
     state.phase = 'build';
     addBanner(state, TR.waveCleared(state.wave, bonus), '#5ee6d0');
   }

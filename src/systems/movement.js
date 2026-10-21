@@ -46,23 +46,24 @@ export function pointAt(path, d) {
 }
 
 export function slowFactor(enemy) {
-  let strongest = 0;
-  for (const s of enemy.slows) if (s.amount > strongest) strongest = s.amount;
-  return strongest;
+  return enemy.slow;
 }
 
+// En güçlü yavaşlatma geçerli; her isabet süreyi yeniler.
 export function applySlow(enemy, amount, duration) {
-  enemy.slows.push({ amount, time: duration });
+  enemy.slow = Math.max(enemy.slow, amount);
+  enemy.slowTime = duration;
 }
 
 export function updateMovement(state, dt) {
   for (const e of state.enemies) {
     if (e.dead) continue;
-    const slow = slowFactor(e);
-    e.dist += e.speed * (1 - slow) * dt;
-    for (const s of e.slows) s.time -= dt;
-    if (e.slows.length) e.slows = e.slows.filter((s) => s.time > 0);
     if (e.flash > 0) e.flash -= dt;
+    if (e.slowTime > 0) {
+      e.slowTime -= dt;
+      if (e.slowTime <= 0) e.slow = 0;
+    }
+    e.dist += e.speed * (1 - e.slow) * dt;
 
     const p = pointAt(state.path, e.dist);
     e.x = p.x;

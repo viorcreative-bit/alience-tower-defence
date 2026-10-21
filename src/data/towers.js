@@ -61,7 +61,7 @@ export function upgradeCost(def, level) {
 export function towerStats(def, level) {
   const n = level - 1;
   return {
-    damage: def.damage * Math.pow(UPGRADE.damageMult, n),
+    damage: Math.round(def.damage * Math.pow(UPGRADE.damageMult, n)),
     range: def.range + UPGRADE.rangeAdd * n,
     rate: def.rate * Math.pow(UPGRADE.rateMult, n),
     slow: def.slow ? Math.min(UPGRADE.slowMax, def.slow + UPGRADE.slowAdd * n) : 0,

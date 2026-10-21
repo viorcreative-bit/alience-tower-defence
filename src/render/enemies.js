@@ -163,7 +163,7 @@ function drawHealthBar(ctx, e, T) {
   const y = (e.y - e.radius) * T - h - T * 0.1;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-  ctx.fillStyle = ratio < RULES.lowHpRatio ? '#ff4d5e' : '#7cff6b';
+  ctx.fillStyle = ratio <= RULES.lowHpRatio ? '#ff4d5e' : '#7cff6b';
   ctx.fillRect(x, y, w * ratio, h);
 }
 

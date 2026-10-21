@@ -38,8 +38,8 @@ function fire(state, tower, target, stats) {
   }
   state.projectiles.push({
     type: tower.type,
-    x: tower.x,
-    y: tower.y,
+    x: tower.x + Math.cos(tower.angle) * RULES.muzzleOffset,
+    y: tower.y + Math.sin(tower.angle) * RULES.muzzleOffset,
     tx: target.x,
     ty: target.y,
     target,

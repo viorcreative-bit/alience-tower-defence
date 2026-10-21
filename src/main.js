@@ -59,7 +59,7 @@ function resize() {
   const { cols, rows } = state.map;
   const w = stage.clientWidth;
   const h = stage.clientHeight;
-  const tile = Math.max(8, Math.floor(Math.min(w / cols, h / rows)));
+  const tile = Math.max(RULES.minTile, Math.floor(Math.min(w / cols, h / rows)));
   const dpr = Math.min(window.devicePixelRatio || 1, RULES.maxDpr);
   view.tile = tile;
   view.dpr = dpr;
