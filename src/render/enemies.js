@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RULES } from '../data/rules.js';
+import { toon, noOutline } from './palette.js';
 
 // 3D uzaylı ve uzay aracı modelleri. Modeller 1 birim yarıçapa göre kurulur,
 // sonra uzaylının yarıçapı kadar ölçeklenir. Her türün modeli kendi fonksiyonunda.
@@ -13,23 +14,24 @@ const G = {
   half: new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2),
   cone: new THREE.ConeGeometry(1, 1, 16, 1, true),
 };
-const eyeMat = new THREE.MeshStandardMaterial({ color: 0x050608, metalness: 0.4, roughness: 0.05 });
-const mouthMat = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
-const ringMat = new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.8 });
-const metal = new THREE.MeshStandardMaterial({ color: 0x9aa3bd, metalness: 0.8, roughness: 0.3 });
-const darkMetal = new THREE.MeshStandardMaterial({ color: 0x3e3550, metalness: 0.7, roughness: 0.4 });
-const saucerLightMat = new THREE.MeshBasicMaterial({ color: 0xffe066 });
-const pilotMat = new THREE.MeshStandardMaterial({ color: 0x7ccf4a, roughness: 0.55 });
-const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.45, roughness: 0.05, metalness: 0.2 });
-const beamMat = new THREE.MeshBasicMaterial({ color: 0x7cff6b, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide });
-const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x7cff6b, emissive: 0x3dbf2f, emissiveIntensity: 1.2 });
-const flameMat = new THREE.MeshBasicMaterial({ color: 0x78dcff, transparent: true, opacity: 0.85 });
+const eyeMat = toon(0x0a0c14);
+const eyeShineMat = noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+const mouthMat = noOutline(new THREE.MeshBasicMaterial({ color: 0x1a1a1a }));
+const ringMat = noOutline(new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.8 }));
+const metal = toon(0x9aa3bd);
+const darkMetal = toon(0x4e4566);
+const saucerLightMat = noOutline(new THREE.MeshBasicMaterial({ color: 0xffe066 }));
+const pilotMat = toon(0x7ccf4a);
+const glassMat = noOutline(new THREE.MeshLambertMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.45 }));
+const beamMat = noOutline(new THREE.MeshBasicMaterial({ color: 0x7cff6b, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide }));
+const cockpitMat = toon(0x7cff6b, { emissive: 0x3dbf2f, emissiveIntensity: 0.8 });
+const flameMat = noOutline(new THREE.MeshBasicMaterial({ color: 0x78dcff, transparent: true, opacity: 0.85 }));
 const noseGeo = new THREE.ConeGeometry(1, 1, 4);
 const flameGeo = new THREE.ConeGeometry(0.15, 0.6, 10);
-const veinMat = new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xffd040, emissiveIntensity: 1 });
+const veinMat = toon(0xffe066, { emissive: 0xffd040, emissiveIntensity: 0.8 });
 
 // Modeller mantıktaki yarıçaptan biraz büyük çizilir ki eğik kamerada seçilsin.
-const VISUAL_SCALE = 1.45;
+const VISUAL_SCALE = 1.7;
 // İnsansılar yürüdükleri yöne dönerken yüzlerini kameraya doğru çevirir (0 = hiç, 1 = tam).
 const FACE_CAMERA = 0.9;
 
@@ -42,7 +44,7 @@ function mesh(geo, mat, x, y, z, sx, sy, sz) {
 }
 
 function skin(color) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, emissive: 0xffffff, emissiveIntensity: 0 });
+  return toon(color, { emissive: 0xffffff, emissiveIntensity: 0 });
 }
 
 // Klasik uzaylı gövdesi: iri kel kafa, parlak siyah badem gözler, ince gövde.
@@ -89,12 +91,18 @@ function buildHumanoid(p) {
     eye.rotation.y = s * 0.35;
     eye.castShadow = false;
     head.add(eye);
+    // çizgi film gözü: küçük beyaz parıltı
+    const shine = mesh(G.ball, eyeShineMat, s * headR * 0.3, headR * 0.04, headR * 0.86, headR * 0.06);
+    shine.castShadow = false;
+    head.add(shine);
   }
   const mouth = mesh(G.torus, mouthMat, 0, -headR * 0.6, headR * 0.6, headR * 0.12);
   mouth.rotation.z = Math.PI;
   mouth.scale.z = headR * 0.05;
   mouth.castShadow = false;
   head.add(mouth);
+  // dik kamerada yüz görünsün diye kafa hafifçe yukarı bakar
+  head.rotation.x = -0.5;
   root.add(head);
 
   return { root, mat, legs, arms, head, height: headY + headR * 1.08 };
@@ -147,7 +155,7 @@ const BUILD = {
 // Uçan Daire: metal disk, cam kubbede pilot, yanıp sönen ışıklar, çekim ışını.
 function buildSaucer() {
   const body = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xc5cce0, metalness: 0.85, roughness: 0.25, emissive: 0xffffff, emissiveIntensity: 0 });
+  const mat = toon(0xc5cce0, { emissive: 0xffffff, emissiveIntensity: 0 });
   const disk = new THREE.Group();
   disk.position.y = 2.2;
   disk.add(mesh(G.ball, mat, 0, 0, 0, 1.25, 0.3, 1.25));
@@ -175,7 +183,7 @@ function buildSaucer() {
 // Savaş Gemisi: zırhlı uzun gövde, kanatlar, yeşil kokpit, mavi motor alevi.
 function buildCruiser() {
   const body = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x7d7299, metalness: 0.7, roughness: 0.35, emissive: 0xffffff, emissiveIntensity: 0 });
+  const mat = toon(0x8d82ab, { emissive: 0xffffff, emissiveIntensity: 0 });
   const ship = new THREE.Group();
   ship.position.y = 1.4;
   ship.add(mesh(G.box, mat, -0.1, 0, 0, 1.8, 0.5, 0.75));

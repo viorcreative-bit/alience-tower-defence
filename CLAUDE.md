@@ -156,13 +156,14 @@ Hazırlık evresinde alt panelde sıradaki dalganın içeriği yazmalı: "Sırad
 
 ## 7. Görsel kimlik
 
-- **Ortam:** Mars yüzeyi. Zemin pas kırmızısı ve koyu kahve tonlarında, üstünde küçük kayalar ve kraterler. Yol daha açık renkli, tekerlek izi ya da metal levhalı bir kanyon yolu gibi görünsün.
+- **Ortam (kullanıcı isteği, referans görsele göre):** Çizgi film tarzı mobil kule savunma görünümü. Zemin **yeşil çimen**, üstünde açık/koyu çim lekeleri ve tutamlar; geniş, yuvarlak köşeli, yumuşak kenarlı **kumlu yol**. Kenarlarda yuvarlak çalılar, gri kayalar, kalenin yanında tahta çitler. Kuleler tıknaz taş gövdeli, tepesi parlayan renkli taşlı, altında kendi renginde ışık halkası.
 - **Portal (giriş):** Ekranın üstünde dönen mor-yeşil bir solucan deliği.
 - **Nova Üssü kalesi (çıkış):** Ekranın altında surları, iki yan kulesi ve ortada mavi parlayan enerji kubbesi olan bilim kurgu kalesi. Kalkan azaldıkça ışığı zayıflasın. Kalenin oturduğu iki kareye (3,13 ve 5,13) kule kurulamaz.
 - **Renk paleti önerisi:**
   - Arka plan / gece gökyüzü: `#0d0f1a`
-  - Mars zemini: `#5a2e22`, `#6b3626`
-  - Yol: `#9a6a4a`
+  - Çim zemini: `#6fb33a` (açık `#8fcf4a`, koyu `#4f8f2c`)
+  - Yol: `#efd9a6`, kenar `#c9a46e`
+  - 3D renk paleti `src/render/palette.js` içindedir.
   - Arayüz paneli: `#161a2b`, kenar `#2c3352`
   - Kristal (para): `#5ee6d0`
   - Kalkan: `#4da3ff`
@@ -170,7 +171,7 @@ Hazırlık evresinde alt panelde sıradaki dalganın içeriği yazmalı: "Sırad
   - Uzaylı yeşili: `#7cff6b`
 - **Yazı tipleri:** Başlık için bilim kurgu hissi veren bir font (ör. Google Fonts'tan "Orbitron" ya da "Audiowide"), arayüz metinleri için okunaklı dar bir font (ör. "Barlow Semi Condensed" ya da "Rajdhani").
 - **Efektler:** Ekran sarsıntısı (çekirdek hasar alınca), patlama halkaları, parçacıklar, Tesla şimşeği, Kriyo halkası. Abartmadan, telefonda akıcı çalışacak kadar.
-- **Görünüm 3D'dir** (kullanıcı isteği): harita, kanyon yolu, uzaylılar, uzay araçları, kale ve kuleler Three.js ile 3D çizilir. Kamera tahtaya güneyden eğik (yaklaşık 56°) bakar, üstten görünüm yok. Modeller koddaki basit 3D şekillerden kurulur (dışarıdan model dosyası yok); her varlığın modeli kendi fonksiyonunda olsun ki ileride gerçek modellerle değiştirilebilsin.
+- **Görünüm 3D'dir** (kullanıcı isteği): harita, yol, uzaylılar, uzay araçları, kale ve kuleler Three.js ile 3D çizilir. Kamera tahtaya güneyden yüksek açıyla eğik (yaklaşık 64°) bakar, tam üstten görünüm yok. Çizgi film görünümü için `MeshToonMaterial` (3 basamaklı ışık) ve `OutlineEffect` ile koyu kenar çizgisi kullanılır; parçacık, saydam efekt ve zemin malzemelerinde kenar çizgisi `noOutline` ile kapatılır. Modeller koddaki basit 3D şekillerden kurulur (dışarıdan model dosyası yok); her varlığın modeli kendi fonksiyonunda olsun ki ileride gerçek modellerle değiştirilebilsin.
 
 ---
 
@@ -233,7 +234,7 @@ alien-wars-td/
     │   └── effects.js      ← parçacık, halka, şimşek, yazı efektleri
     ├── render/
     │   ├── scene.js        ← Three.js sahnesi, kamera, ışık, mantık → 3D eşleme, dokunma ışını
-    │   ├── world.js        ← 3D arazi (kanyon), portal, kale
+    │   ├── world.js        ← 3D zemin (çimen), süsler, portal, kale
     │   ├── background.js   ← zemin ve yol dokusu (2D canvas'ta çizilip araziye kaplanır)
     │   ├── towers.js       ← 3D kule ve mermi modelleri
     │   ├── enemies.js      ← 3D uzaylı ve uzay aracı modelleri

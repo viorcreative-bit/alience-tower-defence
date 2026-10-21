@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { noOutline } from './palette.js';
 
 // Efektler: parçacık, halka ve şimşek 3D sahnede; yükselen yazılar, can çubukları
 // ve uyarı şeridi sahnenin üstündeki 2D katmanda çizilir.
@@ -9,7 +10,7 @@ const ringGeo = new THREE.RingGeometry(0.9, 1, 40);
 export function createFx(scene) {
   const particles = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(1, 0),
-    new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff })),
     MAX_PARTICLES,
   );
   particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -24,7 +25,7 @@ export function createFx(scene) {
 function makeRing(e) {
   const m = new THREE.Mesh(
     ringGeo,
-    new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+    noOutline(new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false, side: THREE.DoubleSide })),
   );
   m.rotation.x = -Math.PI / 2;
   return m;
@@ -40,11 +41,11 @@ function makeLightning(e, toWorld, fromY, toY) {
   const g = new THREE.Group();
   g.add(new THREE.Mesh(
     new THREE.TubeGeometry(curve, pts.length * 3, 0.035, 5, false),
-    new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false }),
+    noOutline(new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false })),
   ));
   g.add(new THREE.Mesh(
     new THREE.TubeGeometry(curve, pts.length * 3, 0.012, 4, false),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true }),
+    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true })),
   ));
   return g;
 }

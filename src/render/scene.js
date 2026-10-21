@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
+import { PALETTE, noOutline } from './palette.js';
 import { RULES } from '../data/rules.js';
 import { TOWERS, towerStats } from '../data/towers.js';
 import { buildWorld, updateWorld, GROUND_H } from './world.js';
@@ -9,27 +11,28 @@ import { createFx, updateFx, clearFx, drawOverlay } from './fx.js';
 // 3D çizim katmanı. Oyun mantığı kare biriminde 2D çalışır; burada dünyaya çevrilir:
 // mantık (x, y) → dünya (x - cols/2, yükseklik, y - rows/2). Kamera güneyden eğik bakar.
 
-const CAMERA_PITCH = (56 * Math.PI) / 180;
-const CAMERA_FOV = 40;
-const HEIGHTS = { tower: GROUND_H, shot: GROUND_H + 0.3, hit: 0.3, ring: 0.04, tesla: GROUND_H + 0.7 };
+const CAMERA_PITCH = (64 * Math.PI) / 180;
+const CAMERA_FOV = 36;
+const HEIGHTS = { tower: GROUND_H, shot: GROUND_H + 0.65, hit: 0.3, ring: 0.04, tesla: GROUND_H + 1.05 };
 
 export function createRenderer(canvas, overlay, map, path) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMapping = THREE.NoToneMapping;
+  // çizgi film kenar çizgisi; parçacık ve saydam efektler kendi malzemelerinde kapatır
+  const outline = new OutlineEffect(renderer, { defaultThickness: 0.004, defaultColor: PALETTE.outline });
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a0f14);
-  scene.fog = new THREE.Fog(0x1a0f14, 22, 48);
+  scene.background = new THREE.Color(PALETTE.sky);
+  scene.fog = new THREE.Fog(PALETTE.sky, 24, 50);
 
   const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 120);
   const target = new THREE.Vector3(0, 0, 0.35);
 
-  scene.add(new THREE.HemisphereLight(0xffd2b0, 0x2a120c, 1.1));
-  const sun = new THREE.DirectionalLight(0xfff0dd, 2.2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6f9a4a, 1.6));
+  const sun = new THREE.DirectionalLight(0xfff6e0, 2.0);
   sun.position.set(-5, 11, -4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
@@ -62,11 +65,11 @@ export function createRenderer(canvas, overlay, map, path) {
       new THREE.Vector3(-0.46, 0, -0.46), new THREE.Vector3(0.46, 0, -0.46),
       new THREE.Vector3(0.46, 0, 0.46), new THREE.Vector3(-0.46, 0, 0.46),
     ]),
-    new THREE.LineBasicMaterial({ color: 0x5ee6d0, transparent: true }),
+    noOutline(new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true })),
   );
   const selFill = new THREE.Mesh(
     new THREE.PlaneGeometry(0.92, 0.92),
-    new THREE.MeshBasicMaterial({ color: 0x5ee6d0, transparent: true, opacity: 0.15, depthWrite: false }),
+    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false })),
   );
   selFill.rotation.x = -Math.PI / 2;
   const selGroup = new THREE.Group();
@@ -81,12 +84,12 @@ export function createRenderer(canvas, overlay, map, path) {
   }
   const rangeLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(circlePts),
-    new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.06, gapSize: 0.04 }),
+    noOutline(new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.06, gapSize: 0.04 })),
   );
   rangeLine.computeLineDistances();
   const rangeDisc = new THREE.Mesh(
     new THREE.CircleGeometry(1, 64),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false }),
+    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthWrite: false })),
   );
   rangeDisc.rotation.x = -Math.PI / 2;
   const rangeGroup = new THREE.Group();
@@ -240,7 +243,7 @@ export function createRenderer(canvas, overlay, map, path) {
       camera.position.x += (Math.random() - 0.5) * 2 * k;
       camera.position.y += (Math.random() - 0.5) * 2 * k;
     }
-    renderer.render(scene, camera);
+    outline.render(scene, camera);
 
     ctx2d.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     drawOverlay(ctx2d, state, project, view.width, view.height, view.unit, enemyTops, RULES.lowHpRatio);
