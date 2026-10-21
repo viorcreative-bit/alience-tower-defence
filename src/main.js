@@ -13,7 +13,7 @@ import { startWave, updateSpawner, checkWaveEnd } from './systems/spawner.js';
 import { updateMovement } from './systems/movement.js';
 import { updateTowers, updateProjectiles, cleanupEnemies } from './systems/combat.js';
 import { updateEffects } from './systems/effects.js';
-import { createBackground, drawPortal, drawCore } from './render/background.js';
+import { createBackground, drawPortal, drawFortress } from './render/background.js';
 import { drawTower, drawProjectile, drawRange, drawSelection } from './render/towers.js';
 import { drawEnemy } from './render/enemies.js';
 import { drawEffects, drawBanners } from './render/fx.js';
@@ -104,7 +104,7 @@ function render(realTime) {
 
   for (const t of state.towers) drawTower(ctx, t, T, realTime);
   for (const e of state.enemies) drawEnemy(ctx, e, T, realTime);
-  drawCore(ctx, end.x, Math.min(end.y, state.map.rows) - 0.55, T, realTime, state.shield / RULES.startShield);
+  drawFortress(ctx, end.x, state.map.rows, T, realTime, state.shield / RULES.startShield);
   for (const p of state.projectiles) drawProjectile(ctx, p, T);
   drawEffects(ctx, state.effects, T);
 

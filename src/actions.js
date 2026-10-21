@@ -1,9 +1,9 @@
 import { TOWERS, UPGRADE, upgradeCost } from './data/towers.js';
 import { sellValue } from './data/rules.js';
-import { state, towerAt, isPathTile, inGrid } from './state.js';
+import { state, towerAt, isPathTile, isBlockedTile, inGrid } from './state.js';
 
 export function selectTile(c, r) {
-  if (!inGrid(c, r) || isPathTile(c, r)) {
+  if (!inGrid(c, r) || isPathTile(c, r) || isBlockedTile(c, r)) {
     state.selected = null;
     return;
   }

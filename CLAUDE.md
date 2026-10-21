@@ -34,11 +34,12 @@ Yıl 2189. İnsanlığın Mars'taki son kolonisi **Nova Üssü**, gezegenin alt�
 
 | Kaynak | Prototipteki adı | Başlangıç | Açıklama |
 |---|---|---|---|
-| **Kristal** | Altın | 200 | Kule kurma ve yükseltme parası. Uzaylı öldürünce ve dalga bitince kazanılır. |
-| **Kalkan** | Can | 20 | Çekirdeğe ulaşan her uzaylı kendi "hasar" değeri kadar azaltır. |
+| **Kristal** | Altın | 150 | Kule kurma ve yükseltme parası. Uzaylı öldürünce ve dalga bitince kazanılır. |
+| **Kalkan** | Can | 15 | Çekirdeğe ulaşan her uzaylı kendi "hasar" değeri kadar azaltır. |
 | **Dalga** | Dalga | 0/10 | Hangi dalgada olunduğunu gösterir. |
 
-- Dalga bitiş bonusu: `20 + dalgaNo × 5` kristal
+- Dalga bitiş bonusu: `15 + dalgaNo × 5` kristal (son dalgada bonus yok)
+- Zorluk prototipe göre artırıldı (prototip: 200 kristal, 20 kalkan, bonus `20 + dalgaNo × 5`, can büyümesi 1.13).
 - Kule satış değeri: kuleye harcanan toplam kristalin **%70'i**
 
 ### Hız ve kontrol
@@ -111,7 +112,7 @@ Kule, menzilindeki uzaylılardan **yolda en çok ilerlemiş olanı** hedefler. (
 | **Kabuklu** (zırhlı) | Şövalye | 150 | 0.7 | 4 | 12 | 2 | 0.27 |
 | **Ana Beyin** (boss) | Dev | 2400 | 0.42 | 6 | 150 | 10 | 0.42 |
 
-- Canlar her dalgada büyür: `can = round(temelCan × 1.13^(dalgaNo − 1))`
+- Canlar her dalgada büyür: `can = round(temelCan × 1.2^(dalgaNo − 1))` (prototipte 1.13)
 - **Zırh:** Her vuruştan zırh kadar hasar düşülür, en az 1 hasar geçer. Tesla Bobini zırhı yok sayar.
 - **Yavaşlama:** Hız `× (1 − yavaşlamaOranı)` olur. Birden çok yavaşlamada en güçlüsü geçerlidir.
 
@@ -151,7 +152,7 @@ Hazırlık evresinde alt panelde sıradaki dalganın içeriği yazmalı: "Sırad
 
 - **Ortam:** Mars yüzeyi. Zemin pas kırmızısı ve koyu kahve tonlarında, üstünde küçük kayalar ve kraterler. Yol daha açık renkli, tekerlek izi ya da metal levhalı bir kanyon yolu gibi görünsün.
 - **Portal (giriş):** Ekranın üstünde dönen mor-yeşil bir solucan deliği.
-- **Enerji çekirdeği (çıkış):** Ekranın altında, mavi parlayan kubbeli üs yapısı. Kalkan azaldıkça ışığı zayıflasın.
+- **Nova Üssü kalesi (çıkış):** Ekranın altında surları, iki yan kulesi ve ortada mavi parlayan enerji kubbesi olan bilim kurgu kalesi. Kalkan azaldıkça ışığı zayıflasın. Kalenin oturduğu iki kareye (3,13 ve 5,13) kule kurulamaz.
 - **Renk paleti önerisi:**
   - Arka plan / gece gökyüzü: `#0d0f1a`
   - Mars zemini: `#5a2e22`, `#6b3626`

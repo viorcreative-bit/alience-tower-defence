@@ -28,7 +28,10 @@ export function buildPath(map) {
     }
   }
 
-  return { points, segments, length, tiles };
+  const blocked = new Set();
+  for (const [c, r] of map.blocked || []) blocked.add(r * map.cols + c);
+
+  return { points, segments, length, tiles, blocked };
 }
 
 // Yol üzerindeki d mesafesindeki nokta ve yön.

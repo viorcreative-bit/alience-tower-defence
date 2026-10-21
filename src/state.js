@@ -38,6 +38,10 @@ export function isPathTile(c, r) {
   return state.path.tiles.has(r * state.map.cols + c);
 }
 
+export function isBlockedTile(c, r) {
+  return state.path.blocked.has(r * state.map.cols + c);
+}
+
 export function inGrid(c, r) {
   return c >= 0 && r >= 0 && c < state.map.cols && r < state.map.rows;
 }

@@ -1,11 +1,11 @@
 // Genel oyun kuralları ve denge sabitleri.
 export const RULES = {
-  startCrystal: 200,
-  startShield: 20,
-  waveBonusBase: 20,
+  startCrystal: 150,
+  startShield: 15,
+  waveBonusBase: 15,
   waveBonusPerWave: 5,
   sellRatio: 0.7,
-  hpGrowthPerWave: 1.13,
+  hpGrowthPerWave: 1.2,
   firstSpawnDelay: 0.3,
   maxStep: 0.03,
   maxFrameTime: 0.1,

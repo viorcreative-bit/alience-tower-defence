@@ -4,25 +4,53 @@ import { TOWERS } from '../data/towers.js';
 
 function drawBase(ctx, T, color) {
   const R = T * 0.36;
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath();
-  ctx.ellipse(0, R * 0.25, R * 1.05, R * 0.8, 0, 0, Math.PI * 2);
+  const oct = (r) => {
+    ctx.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
+      ctx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+  };
+  // sağ alta düşen gölge
+  ctx.fillStyle = 'rgba(10,3,2,0.45)';
+  ctx.save();
+  ctx.translate(R * 0.22, R * 0.28);
+  oct(R * 1.02);
   ctx.fill();
-  ctx.fillStyle = '#3a4058';
-  ctx.beginPath();
-  for (let k = 0; k < 8; k++) {
-    const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
-    ctx[k ? 'lineTo' : 'moveTo'](Math.cos(a) * R, Math.sin(a) * R);
-  }
-  ctx.closePath();
+  ctx.restore();
+  // metal kaide: sol üstten ışık
+  const g = ctx.createLinearGradient(-R, -R, R, R);
+  g.addColorStop(0, '#9aa3bd');
+  g.addColorStop(0.45, '#4f5772');
+  g.addColorStop(1, '#22263a');
+  ctx.fillStyle = g;
+  oct(R);
   ctx.fill();
-  ctx.strokeStyle = '#59627a';
-  ctx.lineWidth = Math.max(1, T * 0.03);
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = Math.max(1, T * 0.02);
   ctx.stroke();
+  // iç plaka
+  const g2 = ctx.createLinearGradient(-R, -R, R, R);
+  g2.addColorStop(0, '#3a4058');
+  g2.addColorStop(1, '#2a2f44');
+  ctx.fillStyle = g2;
+  oct(R * 0.78);
+  ctx.fill();
+  // perçinler
+  ctx.fillStyle = 'rgba(220,228,255,0.55)';
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * R * 0.88, Math.sin(a) * R * 0.88, Math.max(0.8, T * 0.018), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // renkli ışık halkası
   ctx.strokeStyle = color;
-  ctx.globalAlpha = 0.5;
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = Math.max(1, T * 0.025);
   ctx.beginPath();
-  ctx.arc(0, 0, R * 0.75, 0, Math.PI * 2);
+  ctx.arc(0, 0, R * 0.66, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
 }
@@ -47,7 +75,10 @@ function drawLaser(ctx, t, T) {
   ctx.save();
   ctx.rotate(t.angle);
   const back = t.recoil * T * 0.05;
-  ctx.fillStyle = '#8a93ad';
+  const bar = ctx.createLinearGradient(0, -T * 0.035, 0, T * 0.035);
+  bar.addColorStop(0, '#c5cce0');
+  bar.addColorStop(1, '#4f5772');
+  ctx.fillStyle = bar;
   ctx.fillRect(-back, -T * 0.035, T * 0.42, T * 0.07);
   ctx.fillStyle = c;
   ctx.fillRect(T * 0.38 - back, -T * 0.045, T * 0.06, T * 0.09);
@@ -68,7 +99,10 @@ function drawPlasma(ctx, t, T, time) {
   ctx.save();
   ctx.rotate(t.angle);
   const back = t.recoil * T * 0.08;
-  ctx.fillStyle = '#5a6380';
+  const bar = ctx.createLinearGradient(0, -T * 0.1, 0, T * 0.1);
+  bar.addColorStop(0, '#9aa3bd');
+  bar.addColorStop(1, '#2f3448');
+  ctx.fillStyle = bar;
   ctx.fillRect(-back, -T * 0.1, T * 0.34, T * 0.2);
   ctx.fillStyle = '#2b3147';
   ctx.fillRect(T * 0.28 - back, -T * 0.12, T * 0.07, T * 0.24);
