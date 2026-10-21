@@ -123,6 +123,7 @@ export function bakeStatic(group) {
     const m = new THREE.Mesh(merged, mat);
     m.castShadow = e.cast;
     m.receiveShadow = true;
+    m.userData.baked = true; // birleşik geometri bu gruba ait; atılırken serbest bırakılabilir
     group.add(m);
   }
   return group;

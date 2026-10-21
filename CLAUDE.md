@@ -198,6 +198,9 @@ Hiçbir hazır kayıt ya da telifli eser kullanılmaz; **tüm sesler Web Audio A
 
 - **Ortam:** Çizgi film tarzı. Yeşil çimen, kumlu yol (önceki görünüm korunur). Surlar kesme taş, mazgallı; iki yanda yuvarlak burç kuleleri, kurşun kaplı sivri külah çatılar, kapının üstünde hilal ve yıldızlı kırmızı sancak.
 - **Şehir:** Arnavut kaldırımı zemin, beyaz badanalı kırmızı kiremit çatılı evler, ortada saray (köşkler, altın alem), Padişah sarayın önünde kırmızı kaftan ve beyaz kavuklu figür olarak durur.
+- **Saray:** Topkapı esinli, kodla kurulur: mermer avlu ve havuz, kasnaklı Divan kubbesi, revak, çini şerit, altın kapı, bahçeler. 2. seviyede iki yanda geniş saçaklı köşkler ve galeriler, 3. seviyede Adalet Kulesi, Bâbüsselâm'ın sivri külahlı kuleleri ve sancaklar.
+- **Binalar:** Hepsi taş kaide üstünde; kaidenin önünde seviye kadar altın düğme. Sivri kemerli pencereler, İznik mavisi çini şerit, kasnaklı kubbeler; her seviyede yeni parça eklenir (revak gözü, yan kubbe, kule, sancak) ve bina biraz büyür.
+- **Arsalar:** Boş arsada taş temel, kırmızı başlı kazıklar ve ip, üstünde "+" ve binanın adı yazan işaret (kurulabiliyorsa kırmızı-altın, değilse gri). Kurulu bina yükseltilebiliyorsa üstünde "▲". Seviyeler oturunca tüm şehir malzeme başına tek ağa birleşir (çizim çağrısı az).
 - **Cami:** Kurşun gri kubbe, altın alem, ince kalem minareler (seviyeye göre 1/2/4).
 - **Ordugâh:** Ekranın üstünde o devletin renginde çadırlar ve sancak; dalga değişince renk değişir.
 - **Renk paleti:**
