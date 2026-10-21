@@ -1,10 +1,15 @@
-// Uzaylı tanımları. hız: kare/sn, boyut: yarıçap (kare).
+// Düşman birlikleri (her devlette aynı; renk ve ad devletten gelir).
+// hız: kare/sn, boyut: yarıçap (kare). mount: atlı, siege: kuşatma aracı (askerler durduramaz).
+// melee: önünü kesen askere vuruş hasarı (ENEMY_MELEE.rate aralıkla).
 export const ENEMIES = {
-  reptile: { id: 'reptile', hp: 42, speed: 1.1, armor: 0, reward: 5, damage: 1, radius: 0.22 },
-  scorpion: { id: 'scorpion', hp: 28, speed: 2.0, armor: 0, reward: 6, damage: 1, radius: 0.18 },
-  shell: { id: 'shell', hp: 150, speed: 0.7, armor: 4, reward: 12, damage: 2, radius: 0.27 },
-  saucer: { id: 'saucer', hp: 36, speed: 1.8, armor: 1, reward: 7, damage: 1, radius: 0.2, mech: true },
-  cruiser: { id: 'cruiser', hp: 260, speed: 0.6, armor: 6, reward: 20, damage: 3, radius: 0.32, mech: true },
-  giant: { id: 'giant', hp: 1100, speed: 0.5, armor: 3, reward: 70, damage: 6, radius: 0.38, warning: true },
-  brain: { id: 'brain', hp: 2400, speed: 0.42, armor: 6, reward: 150, damage: 10, radius: 0.42, warning: true },
+  infantry: { id: 'infantry', hp: 42, speed: 1.1, armor: 0, reward: 5, damage: 1, radius: 0.22, melee: 6 },
+  light: { id: 'light', hp: 28, speed: 2.0, armor: 0, reward: 6, damage: 1, radius: 0.2, melee: 5, mount: true },
+  knight: { id: 'knight', hp: 150, speed: 0.7, armor: 4, reward: 12, damage: 2, radius: 0.27, melee: 12 },
+  horseArcher: { id: 'horseArcher', hp: 36, speed: 1.8, armor: 1, reward: 7, damage: 1, radius: 0.21, melee: 5, mount: true },
+  ram: { id: 'ram', hp: 260, speed: 0.6, armor: 6, reward: 20, damage: 3, radius: 0.32, melee: 0, siege: true },
+  siegeTower: { id: 'siegeTower', hp: 1100, speed: 0.5, armor: 3, reward: 70, damage: 6, radius: 0.38, melee: 0, siege: true, warning: true },
+  commander: { id: 'commander', hp: 2400, speed: 0.42, armor: 6, reward: 150, damage: 10, radius: 0.42, melee: 30, mount: true, warning: true },
 };
+
+// Durdurulan düşmanın askere saldırısı. Hasar dalgayla büyür: × (1 + growth × (dalga − 1)).
+export const ENEMY_MELEE = { rate: 1.0, growth: 0.08 };

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { noOutline } from './palette.js';
 
 // Efektler: parçacık, halka ve şimşek 3D sahnede; yükselen yazılar, can çubukları
 // ve uyarı şeridi sahnenin üstündeki 2D katmanda çizilir.
@@ -10,7 +9,7 @@ const ringGeo = new THREE.RingGeometry(0.9, 1, 40);
 export function createFx(scene) {
   const particles = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(1, 0),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff })),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }),
     MAX_PARTICLES,
   );
   particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -25,28 +24,33 @@ export function createFx(scene) {
 function makeRing(e) {
   const m = new THREE.Mesh(
     ringGeo,
-    noOutline(new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false, side: THREE.DoubleSide })),
+    new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
   );
   m.rotation.x = -Math.PI / 2;
   return m;
 }
 
-function makeLightning(e, toWorld, fromY, toY) {
-  const pts = e.points.map((p, i) => {
-    const t = i / (e.points.length - 1);
-    const w = toWorld(p.x, p.y);
-    return new THREE.Vector3(w.x, fromY + (toY - fromY) * t + (i % 2 ? 0.08 : -0.05), w.z);
-  });
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.1);
+// Tüfek atışı: namludan hedefe düz, ince ışık izi ve namlu alevi
+function makeTracer(e, toWorld, fromY, toY) {
+  const a = e.points[0];
+  const b = e.points[e.points.length - 1];
+  const wa = toWorld(a.x, a.y);
+  const wb = toWorld(b.x, b.y);
+  const curve = new THREE.LineCurve3(new THREE.Vector3(wa.x, fromY, wa.z), new THREE.Vector3(wb.x, toY, wb.z));
   const g = new THREE.Group();
   g.add(new THREE.Mesh(
-    new THREE.TubeGeometry(curve, pts.length * 3, 0.035, 5, false),
-    noOutline(new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false })),
+    new THREE.TubeGeometry(curve, 1, 0.014, 4, false),
+    new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false }),
   ));
-  g.add(new THREE.Mesh(
-    new THREE.TubeGeometry(curve, pts.length * 3, 0.012, 4, false),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true })),
-  ));
+  const flash = new THREE.Mesh(
+    new THREE.SphereGeometry(0.09, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffc04a, transparent: true, depthWrite: false }),
+  );
+  const dx = wb.x - wa.x;
+  const dz = wb.z - wa.z;
+  const len = Math.hypot(dx, dz) || 1;
+  flash.position.set(wa.x + (dx / len) * 0.25, fromY, wa.z + (dz / len) * 0.25);
+  g.add(flash);
   return g;
 }
 
@@ -78,7 +82,7 @@ export function updateFx(fx, effects, toWorld, heights) {
       seen.add(e);
       let m = fx.meshes.get(e);
       if (!m) {
-        m = e.kind === 'ring' ? makeRing(e) : makeLightning(e, toWorld, heights.tesla, heights.hit);
+        m = e.kind === 'ring' ? makeRing(e) : makeTracer(e, toWorld, heights.tesla, heights.hit);
         fx.meshes.set(e, m);
         fx.scene.add(m);
       }
@@ -130,7 +134,23 @@ export function drawOverlay(ctx, state, project, W, H, unit, enemyTops, lowHpRat
     const y = p.y - h - 6;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
-    ctx.fillStyle = ratio <= lowHpRatio ? '#ff4d5e' : '#7cff6b';
+    ctx.fillStyle = ratio <= lowHpRatio ? '#ff5b4d' : '#f2c94c';
+    ctx.fillRect(x, y, w * ratio, h);
+  }
+
+  // askerlerin can çubuğu (yeşil)
+  for (const u of state.units) {
+    if (u.hp >= u.maxHp || u.y >= state.map.wallRow) continue;
+    const p = project(u.x, u.y, enemyTops.get(u) ?? 0.6);
+    if (!p) continue;
+    const ratio = Math.max(0, u.hp / u.maxHp);
+    const w = unit * 0.45;
+    const h = Math.max(3, unit * 0.07);
+    const x = p.x - w / 2;
+    const y = p.y - h - 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = ratio <= lowHpRatio ? '#ff5b4d' : '#5cc48a';
     ctx.fillRect(x, y, w * ratio, h);
   }
 
@@ -142,7 +162,7 @@ export function drawOverlay(ctx, state, project, W, H, unit, enemyTops, lowHpRat
     const p = project(e.x, e.y, 0.7 + t * 0.6);
     if (!p) continue;
     ctx.globalAlpha = Math.max(0, Math.min(1, (e.life / e.max) * 1.5));
-    ctx.font = `700 ${Math.round(unit * 0.4)}px Rajdhani, sans-serif`;
+    ctx.font = `700 ${Math.round(unit * 0.4)}px 'Barlow Semi Condensed', sans-serif`;
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(0,0,0,0.7)';
     ctx.strokeText(e.text, p.x, p.y);
@@ -157,13 +177,16 @@ export function drawOverlay(ctx, state, project, W, H, unit, enemyTops, lowHpRat
     ctx.globalAlpha = Math.min(1, t * 4, (1 - t) * 8);
     const y = H * 0.4;
     const bh = Math.max(36, unit * 0.9);
-    ctx.fillStyle = 'rgba(13,15,26,0.72)';
+    ctx.fillStyle = 'rgba(31,20,14,0.78)';
     ctx.fillRect(0, y - bh / 2, W, bh);
-    ctx.font = `700 ${Math.round(Math.min(bh * 0.45, W / 18))}px Orbitron, sans-serif`;
+    ctx.fillStyle = '#e0b24a';
+    ctx.fillRect(0, y - bh / 2, W, 2);
+    ctx.fillRect(0, y + bh / 2 - 2, W, 2);
+    ctx.font = `900 ${Math.round(Math.min(bh * 0.45, W / 17))}px Cinzel, Georgia, serif`;
     ctx.fillStyle = e.color;
     ctx.shadowColor = e.color;
     ctx.shadowBlur = 12;
-    ctx.fillText(e.text, W / 2, y, W - 24);
+    ctx.fillText(e.text.toLocaleUpperCase('tr-TR'), W / 2, y, W - 24);
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }

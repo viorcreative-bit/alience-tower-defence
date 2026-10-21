@@ -1,5 +1,7 @@
 import { RULES } from '../data/rules.js';
 import { shakeScreen } from './effects.js';
+import { findBlocker } from './army.js';
+import { ARMY } from '../data/buildings.js';
 
 // Yol verisini köşe noktalarından kare merkezli çizgilere çevirir.
 export function buildPath(map) {
@@ -66,7 +68,18 @@ export function updateMovement(state, dt) {
       e.slowTime -= dt;
       if (e.slowTime <= 0) e.slow = 0;
     }
-    e.dist += e.speed * (1 - e.slow) * dt;
+    // önünü kesen asker varken durur ve dövüşür (saldırı army.js'de)
+    if (!e.blocker) {
+      const next = e.dist + e.speed * (1 - e.slow) * dt;
+      const b = findBlocker(state, e, next);
+      if (b) {
+        e.blocker = b;
+        b.engaged += 1;
+        e.dist = Math.max(e.dist, b.post - ARMY.blockGap);
+      } else {
+        e.dist = next;
+      }
+    }
 
     const p = pointAt(state.path, e.dist);
     e.x = p.x;
@@ -75,9 +88,13 @@ export function updateMovement(state, dt) {
 
     if (e.dist >= state.path.length) {
       e.dead = true;
-      state.shield = Math.max(0, state.shield - e.def.damage);
+      state.wall = Math.max(0, state.wall - e.def.damage);
       shakeScreen(state, RULES.shakeTime);
-      if (state.shield <= 0) state.phase = 'lost';
+      state.sounds.push({ id: 'wallHit' });
+      if (state.wall <= 0) {
+        state.phase = 'lost';
+        state.sounds.push({ id: 'defeat' });
+      }
     }
   }
 }

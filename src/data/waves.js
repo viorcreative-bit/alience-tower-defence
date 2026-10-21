@@ -1,13 +1,18 @@
-// Her dalga sırayla çıkan gruplardan oluşur: [uzaylı türü, adet, aralık (sn)].
+// Her dalga bir devletin seferidir. Gruplar sırayla çıkar: [birlik, adet, aralık (sn)].
 export const WAVES = [
-  [['reptile', 10, 0.9]],
-  [['reptile', 14, 0.75]],
-  [['reptile', 8, 0.8], ['scorpion', 8, 0.5]],
-  [['shell', 5, 1.2], ['reptile', 10, 0.6], ['saucer', 6, 0.6]],
-  [['scorpion', 20, 0.4], ['giant', 1, 2.0]],
-  [['shell', 10, 1.0], ['saucer', 8, 0.5], ['reptile', 12, 0.5]],
-  [['scorpion', 14, 0.4], ['shell', 10, 0.9], ['cruiser', 3, 1.5]],
-  [['shell', 18, 0.8], ['giant', 1, 2.0], ['cruiser', 4, 1.4]],
-  [['scorpion', 22, 0.35], ['saucer', 10, 0.4], ['shell', 12, 0.7]],
-  [['shell', 10, 0.9], ['giant', 2, 2.5], ['brain', 1, 2.0], ['scorpion', 16, 0.35], ['cruiser', 5, 1.2]],
+  { nation: 'byzantium', groups: [['infantry', 10, 0.9]] },
+  { nation: 'serbia', groups: [['infantry', 14, 0.75]] },
+  { nation: 'hungary', groups: [['infantry', 8, 0.8], ['light', 8, 0.5]] },
+  { nation: 'venice', groups: [['knight', 5, 1.2], ['infantry', 10, 0.6], ['horseArcher', 6, 0.6]] },
+  { nation: 'mamluk', groups: [['light', 20, 0.4], ['siegeTower', 1, 2.0]] },
+  { nation: 'safavid', groups: [['knight', 10, 1.0], ['horseArcher', 8, 0.5], ['infantry', 12, 0.5]] },
+  { nation: 'poland', groups: [['light', 14, 0.4], ['knight', 10, 0.9], ['ram', 3, 1.5]] },
+  { nation: 'habsburg', groups: [['knight', 18, 0.8], ['siegeTower', 1, 2.0], ['ram', 4, 1.4]] },
+  { nation: 'spain', groups: [['light', 22, 0.35], ['horseArcher', 10, 0.4], ['knight', 12, 0.7]] },
+  { nation: 'russia', groups: [['knight', 16, 0.8], ['horseArcher', 8, 0.4], ['ram', 5, 1.2], ['siegeTower', 1, 2.0]] },
+  { nation: 'france', groups: [['infantry', 24, 0.3], ['knight', 14, 0.7], ['siegeTower', 2, 2.5]] },
+  {
+    nation: 'holyLeague',
+    groups: [['knight', 10, 0.9], ['siegeTower', 2, 2.5], ['commander', 1, 2.0], ['light', 16, 0.35], ['ram', 5, 1.2]],
+  },
 ];

@@ -125,6 +125,41 @@ function drawRoad(g, map, path, T, rand) {
   }
 }
 
+// Surların altı ve şehir: Arnavut kaldırımı
+function drawCity(g, map, T, rand) {
+  const top = map.wallRow * T;
+  const W = map.cols * T;
+  const H = map.rows * T;
+  g.fillStyle = PALETTE.cobbleDark;
+  g.fillRect(0, top, W, H - top);
+  // taşlar: sıra sıra, hafif kaydırılmış yuvarlak dörtgenler
+  const s = T / 4;
+  for (let y = top; y < H; y += s) {
+    const shift = (Math.round((y - top) / s) % 2) * s * 0.5;
+    for (let x = -s; x < W + s; x += s) {
+      const v = rand();
+      g.fillStyle = v < 0.33 ? PALETTE.cobble : v < 0.66 ? PALETTE.cobbleLight : '#d6c9aa';
+      const w = s * (0.78 + rand() * 0.12);
+      const h = s * (0.72 + rand() * 0.12);
+      roundRect(g, x + shift + (s - w) / 2, y + (s - h) / 2, w, h, s * 0.25);
+    }
+  }
+  // kapıdan saraya uzanan geniş yol
+  const gate = map.path[map.path.length - 1][0];
+  g.fillStyle = 'rgba(255,240,210,0.35)';
+  g.fillRect((gate + 0.12) * T, top, T * 0.76, H - top);
+}
+
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.fill();
+}
+
 export function createBackground(map, path, T, dpr) {
   const cv = document.createElement('canvas');
   cv.width = Math.round(map.cols * T * dpr);
@@ -132,7 +167,8 @@ export function createBackground(map, path, T, dpr) {
   const g = cv.getContext('2d');
   g.scale(dpr, dpr);
   const rand = rng(map.seed);
-  drawGround(g, map.cols, map.rows, T, rand, { grid: true });
+  drawGround(g, map.cols, map.wallRow, T, rand, { grid: true });
+  drawCity(g, map, T, rand);
   drawRoad(g, map, path, T, rand);
   return cv;
 }

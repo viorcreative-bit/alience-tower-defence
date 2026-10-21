@@ -1,50 +1,78 @@
 import * as THREE from 'three';
-import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
-import { PALETTE, noOutline } from './palette.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { PALETTE } from './palette.js';
+import { createPost } from './post.js';
 import { RULES } from '../data/rules.js';
 import { TOWERS, towerStats } from '../data/towers.js';
+import { towerBonus } from '../systems/city.js';
 import { buildWorld, updateWorld, GROUND_H } from './world.js';
 import { createTowerModel, updateTowerModel, createProjectileModel, updateProjectileModel } from './towers.js';
 import { createEnemyModel, updateEnemyModel, disposeEnemyModel } from './enemies.js';
 import { createFx, updateFx, clearFx, drawOverlay } from './fx.js';
+import { buildCity, updateCity } from './city.js';
+import { createAmbient } from './ambient.js';
+import { tickFlags } from './flags.js';
+import { createUnitModel, updateUnitModel, disposeUnitModel } from './units.js';
 
 // 3D çizim katmanı. Oyun mantığı kare biriminde 2D çalışır; burada dünyaya çevrilir:
 // mantık (x, y) → dünya (x - cols/2, yükseklik, y - rows/2). Kamera güneyden eğik bakar.
 
-const CAMERA_PITCH = (64 * Math.PI) / 180;
+const CAMERA_PITCH = (54 * Math.PI) / 180;
 const CAMERA_FOV = 36;
-const HEIGHTS = { tower: GROUND_H, shot: GROUND_H + 0.65, hit: 0.3, ring: 0.04, tesla: GROUND_H + 1.05 };
+const HEIGHTS = { tower: GROUND_H, shot: GROUND_H + 0.65, hit: 0.3, ring: 0.04, tesla: GROUND_H + 0.62 };
 
-export function createRenderer(canvas, overlay, map, path) {
+// quality: 'high' (son işlem, yumuşak gölge, dpr ≤ 1.5) | 'low' (doğrudan çizim, dpr 1)
+export function createRenderer(canvas, overlay, map, path, quality = 'high') {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.NoToneMapping;
-  // çizgi film kenar çizgisi; parçacık ve saydam efektler kendi malzemelerinde kapatır
-  const outline = new OutlineEffect(renderer, { defaultThickness: 0.004, defaultColor: PALETTE.outline });
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.95;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(PALETTE.sky);
-  scene.fog = new THREE.Fog(PALETTE.sky, 24, 50);
+  scene.background = new THREE.Color(PALETTE.haze);
+  scene.fog = new THREE.Fog(PALETTE.haze, 26, 60);
+  // yumuşak çevre ışığı (bir kez hesaplanır)
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.35;
+  pmrem.dispose();
 
   const camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 120);
   const target = new THREE.Vector3(0, 0, 0.35);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x6f9a4a, 1.6));
-  const sun = new THREE.DirectionalLight(0xfff6e0, 2.0);
+  scene.add(new THREE.HemisphereLight(0xfff4e0, 0x5d7a3a, 1.0));
+  const sun = new THREE.DirectionalLight(0xffe7c4, 2.3);
   sun.position.set(-5, 11, -4);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = -8;
   sun.shadow.camera.right = 8;
   sun.shadow.camera.top = 10;
   sun.shadow.camera.bottom = -10;
   sun.shadow.camera.near = 2;
   sun.shadow.camera.far = 30;
-  sun.shadow.bias = -0.0008;
+  sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 0.02;
   scene.add(sun);
+
+  let post = null;
+  function applyQuality(q) {
+    quality = q;
+    const high = q === 'high';
+    renderer.shadowMap.type = high ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    sun.shadow.mapSize.set(high ? 2048 : 1024, high ? 2048 : 1024);
+    sun.shadow.radius = high ? 3 : 1;
+    if (sun.shadow.map) {
+      sun.shadow.map.dispose();
+      sun.shadow.map = null;
+    }
+    renderer.shadowMap.needsUpdate = true;
+    scene.traverse((o) => {
+      if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true;
+    });
+    if (high && !post) post = createPost(renderer, scene, camera);
+  }
+  applyQuality(quality);
 
   const ctx2d = overlay.getContext('2d');
   const view = { renderer, scene, camera, target, overlay, ctx2d, width: 1, height: 1, dpr: 1, unit: 32 };
@@ -53,8 +81,20 @@ export function createRenderer(canvas, overlay, map, path) {
   const toWorld = (x, y) => ({ x: x - cols / 2, z: y - rows / 2 });
 
   const world = buildWorld(scene, map, path);
+  const city = buildCity(scene, map);
+  const unitModels = new Map();
   const fx = createFx(scene);
+  const ambient = createAmbient(scene);
+  const bufferSize = new THREE.Vector2();
+  // ordugâh ateşi ve şehir bacaları sürekli tüter
+  {
+    const c = world.camp.position;
+    ambient.addEmitter(c.x - 0.5, 0.3, c.z - 0.2, 'smoke', 2.5);
+    ambient.addEmitter(c.x - 0.5, 0.2, c.z - 0.2, 'ember', 4);
+    for (const p of city.chimneys) ambient.addEmitter(p.x, p.y, p.z, 'chimney', 0.7);
+  }
   const towerModels = new Map();
+  const seenTracers = new WeakSet();
   const enemyModels = new Map();
   const shotModels = new Map();
   const enemyTops = new Map();
@@ -65,11 +105,11 @@ export function createRenderer(canvas, overlay, map, path) {
       new THREE.Vector3(-0.46, 0, -0.46), new THREE.Vector3(0.46, 0, -0.46),
       new THREE.Vector3(0.46, 0, 0.46), new THREE.Vector3(-0.46, 0, 0.46),
     ]),
-    noOutline(new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true })),
+    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true }),
   );
   const selFill = new THREE.Mesh(
     new THREE.PlaneGeometry(0.92, 0.92),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false })),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false }),
   );
   selFill.rotation.x = -Math.PI / 2;
   const selGroup = new THREE.Group();
@@ -84,12 +124,12 @@ export function createRenderer(canvas, overlay, map, path) {
   }
   const rangeLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints(circlePts),
-    noOutline(new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.06, gapSize: 0.04 })),
+    new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.06, gapSize: 0.04 }),
   );
   rangeLine.computeLineDistances();
   const rangeDisc = new THREE.Mesh(
     new THREE.CircleGeometry(1, 64),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthWrite: false })),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthWrite: false }),
   );
   rangeDisc.rotation.x = -Math.PI / 2;
   const rangeGroup = new THREE.Group();
@@ -102,7 +142,7 @@ export function createRenderer(canvas, overlay, map, path) {
     const dir = new THREE.Vector3(0, Math.sin(CAMERA_PITCH), Math.cos(CAMERA_PITCH));
     const corners = [];
     for (const x of [-cols / 2, cols / 2]) {
-      for (const z of [-rows / 2 - 0.3, rows / 2 + 0.1]) {
+      for (const z of [-rows / 2 - 0.5, rows / 2 + 0.05]) {
         for (const y of [0, 1.6]) corners.push(new THREE.Vector3(x, y, z));
       }
     }
@@ -135,8 +175,10 @@ export function createRenderer(canvas, overlay, map, path) {
     view.width = w;
     view.height = h;
     view.dpr = dpr;
-    renderer.setPixelRatio(Math.min(dpr, 1.5));
+    const glDpr = quality === 'high' ? Math.min(dpr, 1.25) : 1;
+    renderer.setPixelRatio(glDpr);
     renderer.setSize(w, h, false);
+    if (post) post.setSize(w, h, glDpr);
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
     overlay.width = Math.round(w * dpr);
@@ -168,6 +210,29 @@ export function createRenderer(canvas, overlay, map, path) {
     return { c: Math.floor(hit.x + cols / 2), r: Math.floor(hit.z + rows / 2) };
   }
 
+  // Kuleye bağlı parçacıklar: kaynayan ziftin dumanı, top atışında duman ve kıvılcım
+  function towerEffects(m, t, w) {
+    const u = m.userData;
+    if (u.smokeY && !u.emitters) {
+      const y = u.smokeY * m.scale.y;
+      u.emitters = [ambient.addEmitter(w.x, y, w.z, 'tarSmoke', 2.2), ambient.addEmitter(w.x, y, w.z, 'ember', 2)];
+    }
+    if (t.type === 'cannon') {
+      if (t.recoil > (u.lastRecoil ?? 0) + 0.5) {
+        const r = 0.45 * m.scale.x;
+        const x = w.x + Math.cos(t.angle) * r;
+        const z = w.z + Math.sin(t.angle) * r;
+        ambient.emit('puff', x, 0.62, z, 5, 0.12);
+        ambient.emit('spark', x, 0.62, z, 8, 0.05);
+      }
+      u.lastRecoil = t.recoil;
+    }
+  }
+
+  function disposeTower(m) {
+    for (const e of m.userData.emitters || []) ambient.removeEmitter(e);
+  }
+
   function sync(map, list, create, update, dispose, extra) {
     const seen = new Set();
     for (const item of list) {
@@ -191,20 +256,32 @@ export function createRenderer(canvas, overlay, map, path) {
   }
 
   function render(state, time) {
-    updateWorld(world, time, state.shield / RULES.startShield);
+    tickFlags(time);
+    updateWorld(world, time, state);
+    updateCity(city, state, time);
+    const boosted = state.charge.active > 0;
 
-    sync(towerModels, state.towers, createTowerModel, (m, t) => updateTowerModel(m, t, time), null, (m, t) => {
+    sync(towerModels, state.towers, createTowerModel, (m, t) => updateTowerModel(m, t, time, boosted), disposeTower, (m, t) => {
       const w = toWorld(t.x, t.y);
       m.position.set(w.x, HEIGHTS.tower, w.z);
+      towerEffects(m, t, w);
     });
 
     enemyTops.clear();
     sync(enemyModels, state.enemies, createEnemyModel, (m, e) => updateEnemyModel(m, e, time), disposeEnemyModel, (m, e) => {
       const w = toWorld(e.x, e.y);
       m.position.set(w.x, 0, w.z);
-      // kalenin kapısına girenler gizlenir
-      m.visible = e.y < rows - 0.4;
+      // kale kapısından girenler gizlenir
+      m.visible = e.y < map.wallRow + 0.15;
       enemyTops.set(e, m.userData.topY + 0.05);
+    });
+
+    sync(unitModels, state.units, createUnitModel, (m, u) => updateUnitModel(m, u, time), disposeUnitModel, (m, u) => {
+      const w = toWorld(u.x, u.y);
+      m.position.set(w.x, 0, w.z);
+      // kapının içindeyken görünmez
+      m.visible = u.y < map.wallRow + 0.1;
+      enemyTops.set(u, m.userData.topY + 0.05);
     });
 
     sync(shotModels, state.projectiles, createProjectileModel, updateProjectileModel, null, (m, p) => {
@@ -213,6 +290,16 @@ export function createRenderer(canvas, overlay, map, path) {
     });
 
     updateFx(fx, state.effects, toWorld, HEIGHTS);
+    // tüfek atışında namlu dumanı ve kıvılcım
+    for (const e of state.effects) {
+      if (e.kind !== 'lightning' || seenTracers.has(e)) continue;
+      seenTracers.add(e);
+      const w = toWorld(e.points[0].x, e.points[0].y);
+      ambient.emit('puff', w.x, HEIGHTS.tesla, w.z, 3, 0.1);
+      ambient.emit('spark', w.x, HEIGHTS.tesla, w.z, 4, 0.05);
+    }
+    renderer.getDrawingBufferSize(bufferSize);
+    ambient.update(time, camera, bufferSize.y);
 
     const sel = state.selected;
     selGroup.visible = !!sel;
@@ -220,12 +307,12 @@ export function createRenderer(canvas, overlay, map, path) {
       const w = toWorld(sel.c + 0.5, sel.r + 0.5);
       selGroup.position.set(w.x, GROUND_H + 0.01, w.z);
       selection.material.opacity = 0.6 + 0.4 * Math.sin(time * 6);
-      const t = state.towers.find((tw) => tw.c === sel.c && tw.r === sel.r);
-      selFill.visible = !t;
+      const t = sel.building ? null : state.towers.find((tw) => tw.c === sel.c && tw.r === sel.r);
+      selFill.visible = !t && !sel.building;
       rangeGroup.visible = !!t;
       if (t) {
         const def = TOWERS[t.type];
-        const r = towerStats(def, t.level).range;
+        const r = towerStats(def, t.level, towerBonus(state, t.type)).range;
         rangeGroup.position.set(w.x, GROUND_H + 0.02, w.z);
         rangeGroup.scale.setScalar(r);
         rangeLine.material.color.set(def.color);
@@ -243,7 +330,8 @@ export function createRenderer(canvas, overlay, map, path) {
       camera.position.x += (Math.random() - 0.5) * 2 * k;
       camera.position.y += (Math.random() - 0.5) * 2 * k;
     }
-    outline.render(scene, camera);
+    if (quality === 'high') post.render();
+    else renderer.render(scene, camera);
 
     ctx2d.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
     drawOverlay(ctx2d, state, project, view.width, view.height, view.unit, enemyTops, RULES.lowHpRatio);
@@ -251,17 +339,31 @@ export function createRenderer(canvas, overlay, map, path) {
 
   // Yeniden oyna: tüm modelleri temizle (arazi aynı kalır).
   function reset() {
-    for (const m of towerModels.values()) scene.remove(m);
+    for (const m of towerModels.values()) {
+      scene.remove(m);
+      disposeTower(m);
+    }
+    ambient.clear();
     for (const m of enemyModels.values()) {
       scene.remove(m);
       disposeEnemyModel(m);
     }
     for (const m of shotModels.values()) scene.remove(m);
+    for (const m of unitModels.values()) {
+      scene.remove(m);
+      disposeUnitModel(m);
+    }
+    unitModels.clear();
     towerModels.clear();
     enemyModels.clear();
     shotModels.clear();
     clearFx(fx);
   }
 
-  return { resize, render, pickTile, project, reset, view };
+  function setQuality(q) {
+    applyQuality(q);
+    resize(view.width, view.height);
+  }
+
+  return { resize, render, pickTile, project, reset, view, ambient, setQuality, get quality() { return quality; } };
 }
