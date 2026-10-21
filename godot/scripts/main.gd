@@ -29,6 +29,7 @@ var hover_tile: MeshInstance3D
 var dust_mat: StandardMaterial3D
 var spark_mat: StandardMaterial3D
 var sultan: Dictionary
+var town: Town
 var save := ConfigFile.new()
 
 
@@ -61,6 +62,9 @@ func _ready() -> void:
 	sultan.root.position = world.to_world(4.5, 13.55)
 	sultan.anim.play("Idle")
 	add_child(sultan.root)
+	town = Town.new()
+	town.setup(models, game, world)
+	add_child(town)
 	get_viewport().size_changed.connect(_fit_camera)
 	await get_tree().process_frame
 	_fit_camera()
@@ -199,6 +203,7 @@ func _process(delta: float) -> void:
 	_sync_units(delta)
 	_sync_projectiles()
 	_sync_buildings()
+	town.update(delta)
 	_update_markers()
 	audio.set_music("wave" if game.phase == "wave" else ("build" if game.phase == "build" else "off"))
 	ui.refresh(audio.enabled, world.light_name())
@@ -466,6 +471,20 @@ func _sync_buildings() -> void:
 			l.position = Vector3(0, 0.32, 0)
 			l.no_depth_test = true
 			l.name = "Sign"
+			node.add_child(l)
+		else:
+			# kurulu binanın adı önünde küçükçe yazar
+			var l := Label3D.new()
+			l.text = String(D.BUILDING_NAMES[id][0])
+			l.font = ui.font_bold
+			l.font_size = 32
+			l.pixel_size = 0.0045
+			l.outline_size = 8
+			l.modulate = Color(1.0, 0.93, 0.78, 0.92)
+			l.outline_modulate = Color(0.15, 0.08, 0.04)
+			l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			l.position = Vector3(0, 0.08, 0.44)
+			l.no_depth_test = true
 			node.add_child(l)
 		add_child(node)
 		if rec != null:

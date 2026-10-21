@@ -295,7 +295,9 @@ func building_block(id: String) -> Dictionary:
 	var level: int = buildings[id]
 	if level >= D.MAX_BUILDING_LEVEL:
 		return {"kind": "max"}
-	var req: Dictionary = def.get("requires", {})
+	var req: Dictionary = def.get("requires", {}).duplicate()
+	if level >= 1:
+		req.merge(def.get("up_requires", {}))
 	for r in req:
 		if buildings[r] < req[r]:
 			return {"kind": "requires", "building": r, "level": req[r]}

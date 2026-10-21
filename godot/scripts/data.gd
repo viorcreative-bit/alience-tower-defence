@@ -106,7 +106,8 @@ const BUILDINGS := {
 	"school": {"slot": [1, 13], "costs": [80, 160, 240], "color": "#5aa0d8"},
 	"barracks": {"slot": [7, 13], "costs": [100, 200, 300], "color": "#c23b32"},
 	"archery": {"slot": [0, 14], "costs": [70, 150, 240], "color": "#e0503c"},
-	"hospital": {"slot": [2, 15], "costs": [90, 180, 270], "color": "#5cc48a"},
+	# up_requires: 2. seviyeden itibaren gereken bina (Darüşşifa'yı geliştirmek için Bilimhane)
+	"hospital": {"slot": [2, 15], "costs": [90, 180, 270], "color": "#5cc48a", "up_requires": {"science": 1}},
 	"cavalry": {"slot": [8, 14], "costs": [140, 240, 340], "requires": {"barracks": 1}, "color": "#b5793a"},
 	"science": {"slot": [1, 15], "costs": [120, 220, 320], "requires": {"school": 1}, "color": "#f2a33a"},
 	"religion": {"slot": [6, 15], "costs": [110, 210, 310], "requires": {"mosque": 1}, "color": "#e8d48a"},
