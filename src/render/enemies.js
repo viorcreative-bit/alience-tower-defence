@@ -1,155 +1,200 @@
 import { RULES } from '../data/rules.js';
 import { slowFactor } from '../systems/movement.js';
 
-// Her uzaylının çizimi kendi fonksiyonunda. Koordinatlar: merkez (0,0), yön sağa (+x).
+// Her uzaylının çizimi kendi fonksiyonunda. Hepsi aynı "klasik uzaylı" gövdesini
+// (iri kel kafa, parlak siyah badem gözler, ince gövde) kendi rengi ve ekleriyle çizer.
+// Koordinatlar: merkez (0,0), ekrana dik duruş; r = uzaylının yarıçapı (piksel).
 
-function drawReptile(ctx, e, T, time) {
-  const r = e.radius * T;
-  const step = Math.sin(time * 10 + e.seed) * r * 0.15;
-  ctx.fillStyle = '#3e9e35';
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(-r * 0.2 + s * step, s * r * 0.85, r * 0.3, r * 0.18, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
-  g.addColorStop(0, '#b6ff9f');
-  g.addColorStop(1, '#4fc43f');
-  ctx.fillStyle = g;
+function headPath(ctx, r, w, h, cy) {
+  // geniş kubbe, sivri çene
   ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(r * 0.35, 0, r * 0.38, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#16130f';
-  ctx.beginPath();
-  ctx.arc(r * 0.48, 0, r * 0.18, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(0, cy + h * 0.55);
+  ctx.bezierCurveTo(-w * 0.35, cy + h * 0.5, -w * 0.62, cy + h * 0.12, -w * 0.6, cy - h * 0.12);
+  ctx.bezierCurveTo(-w * 0.58, cy - h * 0.6, -w * 0.25, cy - h * 0.72, 0, cy - h * 0.72);
+  ctx.bezierCurveTo(w * 0.25, cy - h * 0.72, w * 0.58, cy - h * 0.6, w * 0.6, cy - h * 0.12);
+  ctx.bezierCurveTo(w * 0.62, cy + h * 0.12, w * 0.35, cy + h * 0.5, 0, cy + h * 0.55);
+  ctx.closePath();
 }
 
-function drawScorpion(ctx, e, T, time) {
-  const r = e.radius * T;
-  const wig = Math.sin(time * 22 + e.seed);
-  // bacaklar
-  ctx.strokeStyle = '#b8551c';
-  ctx.lineWidth = Math.max(1, r * 0.18);
-  for (let i = 0; i < 3; i++) {
-    const x = r * (0.3 - i * 0.45);
-    const k = (i % 2 ? 1 : -1) * wig * r * 0.25;
-    for (const s of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x + k, s * r * 1.05);
-      ctx.stroke();
-    }
+function drawEyes(ctx, r, w, h, cy, look) {
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.translate(s * w * 0.24 + look * w * 0.04, cy + h * 0.02);
+    ctx.rotate(s * 0.45);
+    ctx.fillStyle = '#07080c';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.2, h * 0.13, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(-w * 0.06, -h * 0.04, w * 0.06, h * 0.035, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
-  // kuyruk
-  ctx.strokeStyle = '#ff8a2b';
-  ctx.lineWidth = Math.max(1.5, r * 0.32);
+}
+
+// Ortak gövde. p: { skin, light, shade, head, body, walk, lean, look }
+function drawAlienBody(ctx, e, r, time, p) {
+  const swing = Math.sin(time * p.walk + e.seed);
+  const w = r * 2 * p.head;
+  const h = r * 2.1 * p.head;
+  const headCy = -r * 0.55;
+  const bodyTop = headCy + h * 0.5;
+  const bodyLen = r * 1.1 * p.body;
+  const lw = Math.max(1.2, r * 0.16);
+
+  ctx.save();
+  ctx.rotate(p.lean);
   ctx.lineCap = 'round';
+
+  // bacaklar
+  ctx.strokeStyle = p.shade;
+  ctx.lineWidth = lw;
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(s * r * 0.12, bodyTop + bodyLen * 0.8);
+    ctx.lineTo(s * r * 0.2 + swing * s * r * 0.25, bodyTop + bodyLen * 1.35);
+    ctx.stroke();
+  }
+  // gövde
+  ctx.fillStyle = p.skin;
   ctx.beginPath();
-  ctx.moveTo(-r * 0.6, 0);
-  ctx.quadraticCurveTo(-r * 1.6, wig * r * 0.3, -r * 1.3, -r * 0.8);
-  ctx.stroke();
-  ctx.fillStyle = '#ffd04d';
-  ctx.beginPath();
-  ctx.arc(-r * 1.3, -r * 0.8, r * 0.2, 0, Math.PI * 2);
-  ctx.fill();
-  // sivri gövde
-  ctx.fillStyle = '#ff8a2b';
-  ctx.beginPath();
-  ctx.moveTo(r * 1.2, 0);
-  ctx.lineTo(-r * 0.2, r * 0.7);
-  ctx.lineTo(-r * 0.8, 0);
-  ctx.lineTo(-r * 0.2, -r * 0.7);
+  ctx.moveTo(-r * 0.12, bodyTop);
+  ctx.quadraticCurveTo(-r * 0.36, bodyTop + bodyLen * 0.25, -r * 0.2, bodyTop + bodyLen * 0.9);
+  ctx.lineTo(r * 0.2, bodyTop + bodyLen * 0.9);
+  ctx.quadraticCurveTo(r * 0.36, bodyTop + bodyLen * 0.25, r * 0.12, bodyTop);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#2a1206';
-  ctx.beginPath();
-  ctx.arc(r * 0.55, -r * 0.2, r * 0.12, 0, Math.PI * 2);
-  ctx.arc(r * 0.55, r * 0.2, r * 0.12, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawShell(ctx, e, T, time) {
-  const r = e.radius * T;
-  const step = Math.sin(time * 5 + e.seed) * r * 0.1;
-  ctx.fillStyle = '#3d3550';
+  // kollar
+  ctx.strokeStyle = p.skin;
   for (const s of [-1, 1]) {
-    for (const x of [-0.4, 0.3]) {
-      ctx.beginPath();
-      ctx.ellipse(r * x + s * step, s * r * 0.9, r * 0.22, r * 0.14, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-  ctx.fillStyle = '#4a3f60';
-  ctx.beginPath();
-  ctx.arc(r * 0.75, 0, r * 0.35, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#ffcf5a';
-  ctx.beginPath();
-  ctx.arc(r * 0.95, -r * 0.13, r * 0.08, 0, Math.PI * 2);
-  ctx.arc(r * 0.95, r * 0.13, r * 0.08, 0, Math.PI * 2);
-  ctx.fill();
-  const g = ctx.createRadialGradient(-r * 0.2, -r * 0.3, r * 0.1, 0, 0, r);
-  g.addColorStop(0, '#a99cc0');
-  g.addColorStop(1, '#5d5276');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, r, r * 0.88, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#3a3150';
-  ctx.lineWidth = Math.max(1, r * 0.1);
-  for (const x of [-0.35, 0.15]) {
     ctx.beginPath();
-    ctx.ellipse(r * x, 0, r * 0.25, r * 0.8, 0, -Math.PI / 2, Math.PI / 2);
+    ctx.moveTo(s * r * 0.26, bodyTop + bodyLen * 0.2);
+    ctx.lineTo(s * r * 0.42 - swing * s * r * 0.15, bodyTop + bodyLen * 0.85);
     ctx.stroke();
   }
+
+  // kafa
+  const g = ctx.createRadialGradient(-w * 0.15, headCy - h * 0.35, r * 0.05, 0, headCy, w * 0.7);
+  g.addColorStop(0, p.light);
+  g.addColorStop(0.6, p.skin);
+  g.addColorStop(1, p.shade);
+  ctx.fillStyle = g;
+  headPath(ctx, r, w, h, headCy);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.stroke();
+
+  if (p.dome) p.dome(ctx, w, h, headCy);
+  drawEyes(ctx, r, w, h, headCy, p.look);
+
+  // burun ve gülümseme
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(s * w * 0.03, headCy + h * 0.22, Math.max(0.6, r * 0.025), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = Math.max(0.8, r * 0.04);
+  ctx.beginPath();
+  ctx.arc(0, headCy + h * 0.24, w * 0.09, 0.25 * Math.PI, 0.75 * Math.PI);
+  ctx.stroke();
+  ctx.restore();
 }
 
-function drawBrain(ctx, e, T, time) {
+// Sürüngen: klasik yeşil uzaylı.
+function drawReptile(ctx, e, T, time, look) {
+  drawAlienBody(ctx, e, e.radius * T, time, {
+    skin: '#7ccf4a', light: '#c9f59a', shade: '#3f7f25',
+    head: 1, body: 1, walk: 10, lean: 0, look,
+  });
+}
+
+// Akrep: turuncu, ince ve öne eğik koşan hızlı uzaylı, arkasında hız izleri.
+function drawScorpion(ctx, e, T, time, look) {
   const r = e.radius * T;
-  // dokunaçlar
-  ctx.strokeStyle = '#a23050';
+  ctx.strokeStyle = 'rgba(255,170,80,0.45)';
+  ctx.lineWidth = Math.max(1, r * 0.12);
   ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(2, r * 0.14);
-  for (let i = 0; i < 6; i++) {
-    const a = Math.PI * (0.7 + (i / 5) * 0.6);
-    const w = Math.sin(time * 4 + i + e.seed) * r * 0.35;
-    const x0 = Math.cos(a) * r * 0.7;
-    const y0 = Math.sin(a) * r * 0.7;
+  for (let i = -1; i <= 1; i++) {
     ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.quadraticCurveTo(x0 * 1.6, y0 * 1.6 + w, x0 * 2, y0 * 1.9 - w);
+    ctx.moveTo(-look * r * 0.9, i * r * 0.45 - r * 0.2);
+    ctx.lineTo(-look * r * 1.6, i * r * 0.45 - r * 0.2);
     ctx.stroke();
   }
-  const g = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.1, 0, 0, r);
-  g.addColorStop(0, '#ffb3c4');
-  g.addColorStop(1, '#d93a5e');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  for (let k = 0; k < 10; k++) {
-    const a = (k / 10) * Math.PI * 2;
-    ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, r * 0.42, 0, Math.PI * 2);
-  }
-  ctx.fill();
-  // parlayan damarlar
-  const glow = 0.5 + 0.5 * Math.sin(time * 3 + e.seed);
-  ctx.strokeStyle = `rgba(255,240,120,${0.4 + 0.5 * glow})`;
-  ctx.shadowColor = '#ffe066';
-  ctx.shadowBlur = r * 0.4;
+  drawAlienBody(ctx, e, r, time, {
+    skin: '#ff9b3d', light: '#ffd9a0', shade: '#b4561a',
+    head: 0.95, body: 1.1, walk: 24, lean: look * 0.3, look,
+  });
+}
+
+// Kabuklu: gri-mor zırhlı uzaylı; omuz plakaları ve kafada zırh bandı.
+function drawShell(ctx, e, T, time, look) {
+  const r = e.radius * T;
+  drawAlienBody(ctx, e, r, time, {
+    skin: '#8e82a8', light: '#cfc6e0', shade: '#4e4566',
+    head: 1, body: 1.05, walk: 5, lean: 0, look,
+    dome(ctx, w, h, cy) {
+      ctx.fillStyle = '#4a4060';
+      ctx.beginPath();
+      ctx.ellipse(0, cy - h * 0.42, w * 0.5, h * 0.2, 0, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = '#ffcf5a';
+      ctx.beginPath();
+      ctx.arc(0, cy - h * 0.5, Math.max(1, w * 0.04), 0, Math.PI * 2);
+      ctx.fill();
+    },
+  });
+  // göğüs ve omuz zırhı
+  const top = -r * 0.55 + r * 2.1 * 0.5;
+  ctx.fillStyle = '#5d5276';
+  ctx.strokeStyle = '#2f2742';
   ctx.lineWidth = Math.max(1, r * 0.06);
   ctx.beginPath();
-  ctx.moveTo(-r * 0.9, 0);
-  ctx.bezierCurveTo(-r * 0.3, -r * 0.3, r * 0.3, r * 0.3, r * 0.9, 0);
-  ctx.moveTo(-r * 0.4, -r * 0.7);
-  ctx.quadraticCurveTo(-r * 0.1, -r * 0.2, -r * 0.5, r * 0.3);
-  ctx.moveTo(r * 0.3, -r * 0.8);
-  ctx.quadraticCurveTo(r * 0.5, -r * 0.3, r * 0.2, r * 0.6);
+  ctx.moveTo(-r * 0.55, top + r * 0.05);
+  ctx.lineTo(r * 0.55, top + r * 0.05);
+  ctx.lineTo(r * 0.3, top + r * 0.75);
+  ctx.lineTo(-r * 0.3, top + r * 0.75);
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
-  ctx.shadowBlur = 0;
+}
+
+// Ana Beyin: dev uzaylı, şişkin pembe kafasında parlayan damarlı beyin.
+function drawBrain(ctx, e, T, time, look) {
+  const r = e.radius * T;
+  const glow = 0.5 + 0.5 * Math.sin(time * 3 + e.seed);
+  drawAlienBody(ctx, e, r, time, {
+    skin: '#e0566f', light: '#ffc2cf', shade: '#8f2440',
+    head: 1.15, body: 0.85, walk: 3, lean: 0, look,
+    dome(ctx, w, h, cy) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(150,30,60,0.7)';
+      ctx.lineWidth = Math.max(1, w * 0.025);
+      ctx.beginPath();
+      ctx.moveTo(0, cy - h * 0.7);
+      ctx.lineTo(0, cy - h * 0.2);
+      for (const s of [-1, 1]) {
+        ctx.moveTo(s * w * 0.1, cy - h * 0.62);
+        ctx.quadraticCurveTo(s * w * 0.4, cy - h * 0.55, s * w * 0.2, cy - h * 0.38);
+        ctx.quadraticCurveTo(s * w * 0.45, cy - h * 0.32, s * w * 0.5, cy - h * 0.15);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(255,240,120,${0.35 + 0.55 * glow})`;
+      ctx.shadowColor = '#ffe066';
+      ctx.shadowBlur = w * 0.15;
+      ctx.lineWidth = Math.max(1, w * 0.018);
+      ctx.beginPath();
+      for (const s of [-1, 1]) {
+        ctx.moveTo(s * w * 0.05, cy - h * 0.5);
+        ctx.bezierCurveTo(s * w * 0.3, cy - h * 0.48, s * w * 0.15, cy - h * 0.3, s * w * 0.42, cy - h * 0.25);
+      }
+      ctx.stroke();
+      ctx.restore();
+    },
+  });
 }
 
 const DRAW = { reptile: drawReptile, scorpion: drawScorpion, shell: drawShell, brain: drawBrain };
@@ -160,7 +205,7 @@ function drawHealthBar(ctx, e, T) {
   const w = Math.max(T * 0.5, e.radius * T * 2);
   const h = Math.max(3, T * 0.07);
   const x = e.x * T - w / 2;
-  const y = (e.y - e.radius) * T - h - T * 0.1;
+  const y = (e.y - e.radius * 1.75) * T - h - T * 0.04;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
   ctx.fillStyle = ratio <= RULES.lowHpRatio ? '#ff4d5e' : '#7cff6b';
@@ -173,24 +218,23 @@ export function drawEnemy(ctx, e, T, time) {
   ctx.translate(e.x * T, e.y * T);
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
-  ctx.ellipse(0, r * 0.5, r * 1.05, r * 0.55, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, r * 1.05, r * 0.75, r * 0.28, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.save();
-  ctx.rotate(e.angle);
-  DRAW[e.type](ctx, e, T, time);
-  ctx.restore();
+  // Uzaylılar ekrana dik durur; yürüdükleri yöne göre sağa/sola bakar.
+  const look = Math.abs(Math.cos(e.angle)) > 0.5 ? Math.sign(Math.cos(e.angle)) : 0;
+  DRAW[e.type](ctx, e, T, time, look);
   if (slowFactor(e) > 0) {
     ctx.strokeStyle = 'rgba(127,216,255,0.75)';
     ctx.lineWidth = Math.max(1, T * 0.03);
     ctx.beginPath();
-    ctx.arc(0, 0, r * 1.25, 0, Math.PI * 2);
+    ctx.ellipse(0, -r * 0.3, r * 1.15, r * 1.6, 0, 0, Math.PI * 2);
     ctx.stroke();
   }
   if (e.flash > 0) {
     ctx.globalAlpha = Math.min(1, e.flash / RULES.hitFlashTime) * 0.75;
     ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2);
+    ctx.ellipse(0, -r * 0.55, r * 1.05, r * 1.1, 0, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
