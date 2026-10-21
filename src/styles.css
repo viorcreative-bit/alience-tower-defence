@@ -185,6 +185,8 @@ html, body {
 }
 .btn-sound.off { opacity: 0.6; }
 .btn-sound.off::after { border: 0; width: 18px; height: 2px; margin: -1px 0 0 -9px; background: var(--danger); transform: rotate(-45deg); border-radius: 0; }
+.btn-quality { width: 46px; flex: none; padding: 0; font-size: 14px; letter-spacing: 0.5px; }
+.btn-quality.low { opacity: 0.6; }
 .btn-charge {
   flex: none; padding: 0 10px; min-width: 96px;
   border-color: #c99a3a; background: linear-gradient(180deg, #6b4a17, #4a3210); color: #ffe7a3;
@@ -242,4 +244,9 @@ html, body {
   .card-desc { font-size: 11px; }
   .stats { gap: 7px; }
   .stat .label { font-size: 9px; }
+}
+
+.loading {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-title); font-size: 18px; letter-spacing: 1px; color: var(--gold, #e0b24a);
 }

@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { noOutline } from './palette.js';
 
 // Efektler: parçacık, halka ve şimşek 3D sahnede; yükselen yazılar, can çubukları
 // ve uyarı şeridi sahnenin üstündeki 2D katmanda çizilir.
@@ -10,7 +9,7 @@ const ringGeo = new THREE.RingGeometry(0.9, 1, 40);
 export function createFx(scene) {
   const particles = new THREE.InstancedMesh(
     new THREE.IcosahedronGeometry(1, 0),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0xffffff })),
+    new THREE.MeshBasicMaterial({ color: 0xffffff }),
     MAX_PARTICLES,
   );
   particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -25,7 +24,7 @@ export function createFx(scene) {
 function makeRing(e) {
   const m = new THREE.Mesh(
     ringGeo,
-    noOutline(new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false, side: THREE.DoubleSide })),
+    new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
   );
   m.rotation.x = -Math.PI / 2;
   return m;
@@ -41,11 +40,11 @@ function makeTracer(e, toWorld, fromY, toY) {
   const g = new THREE.Group();
   g.add(new THREE.Mesh(
     new THREE.TubeGeometry(curve, 1, 0.014, 4, false),
-    noOutline(new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false })),
+    new THREE.MeshBasicMaterial({ color: e.color, transparent: true, depthWrite: false }),
   ));
   const flash = new THREE.Mesh(
     new THREE.SphereGeometry(0.09, 8, 6),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0xffc04a, transparent: true, depthWrite: false })),
+    new THREE.MeshBasicMaterial({ color: 0xffc04a, transparent: true, depthWrite: false }),
   );
   const dx = wb.x - wa.x;
   const dz = wb.z - wa.z;

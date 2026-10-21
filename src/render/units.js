@@ -1,24 +1,21 @@
 import * as THREE from 'three';
-import { buildPerson, buildRider, animatePerson, animateHorse } from './figures.js';
+import { animateHorse } from './figures.js';
+import { buildSoldier, buildMounted, SOLDIER_HEIGHT } from './soldiers.js';
 
 // Devriye birlikleri: Yeniçeri (yaya) ve Sipahi (atlı). +z ileri.
-const SCALE = { janissary: 0.36, sipahi: 0.34 };
+const SCALE = { janissary: 0.36 * (2.2 / SOLDIER_HEIGHT), sipahi: 0.34 };
 
 export function createPatrolModel(p) {
   const g = new THREE.Group();
   const holder = new THREE.Group();
   let u;
   if (p.kind === 'janissary') {
-    const person = buildPerson({
-      tunic: 0x2f5c9e, trim: 0xb3202a, pants: 0x8a1c22, hat: 'bork', weapon: 'yatagan', shield: null, mustache: true,
-    });
-    holder.add(person.root);
-    u = { person, height: person.height };
+    const soldier = buildSoldier('janissary');
+    soldier.play('Idle');
+    holder.add(soldier.root);
+    u = { soldier, height: SOLDIER_HEIGHT };
   } else {
-    const r = buildRider(
-      { tunic: 0xb3202a, trim: 0xe0b24a, hat: 'turban', weapon: 'lance', mustache: true, shield: 0xe0b24a },
-      { coat: 0x3a2a20, cloth: 0xb3202a, clothTrim: 0xe0b24a },
-    );
+    const r = buildMounted('sipahi', null, null, { coat: 0x3a2a20, cloth: 0xb3202a, clothTrim: 0xe0b24a });
     holder.add(r.horse.root);
     u = { horse: r.horse, rider: r.rider, height: r.height };
   }
@@ -26,21 +23,31 @@ export function createPatrolModel(p) {
   g.add(holder);
   u.holder = holder;
   u.topY = u.height * SCALE[p.kind];
+  u.last = null;
   g.userData = u;
   return g;
 }
 
 export function updatePatrolModel(model, p, time) {
   const u = model.userData;
+  const dt = u.last === null ? 0 : Math.min(0.1, time - u.last);
+  u.last = time;
   const yaw = Math.PI / 2 - p.angle;
-  model.rotation.y = Math.atan2(Math.sin(yaw), Math.cos(yaw) + (u.person ? 0.6 : 0.2));
-  const arm = u.person ? u.person.arms[1] : u.rider.arms[1];
-  if (u.person) {
-    if (p.moving) animatePerson(u.person, time, 10, p.seed);
-    else u.person.root.position.y = 0;
-  } else if (p.moving) {
-    animateHorse(u.horse, time, 15, p.seed);
+  model.rotation.y = Math.atan2(Math.sin(yaw), Math.cos(yaw) + (u.soldier ? 0.6 : 0.2));
+  if (u.soldier) {
+    // kılıç darbesi, koşu ya da bekleyiş
+    if (p.swing > 0) u.soldier.play('1H_Melee_Attack_Chop', 1.6, 0.08);
+    else if (p.moving) u.soldier.play('Running_A', 1.2);
+    else u.soldier.play('Idle');
+    u.soldier.mixer.update(dt);
+  } else {
+    if (p.moving) animateHorse(u.horse, time, 15, p.seed);
+    // mızrak darbesi: binici öne eğilir
+    u.rider.root.rotation.x = p.swing * 0.5;
   }
-  // kılıç / mızrak darbesi
-  arm.rotation.x = -p.swing * 1.6;
+}
+
+export function disposePatrolModel(model) {
+  const u = model.userData;
+  (u.soldier || u.rider).dispose();
 }

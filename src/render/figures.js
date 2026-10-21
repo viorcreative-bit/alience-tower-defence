@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toon, toonShared, noOutline, PALETTE } from './palette.js';
+import { paint, paintShared, PALETTE } from './palette.js';
 
 // İnsan ve at figürleri (çizgi film oranları: iri kafa, kısa gövde).
 // Düşman askerleri, devriyeler ve Padişah aynı kurucudan çıkar. Yüz +z yönündedir.
@@ -21,14 +21,14 @@ export const G = {
 };
 
 const M = {
-  eye: noOutline(new THREE.MeshBasicMaterial({ color: 0x1a120c })),
-  white: toonShared(0xf4f1e8),
-  metal: toonShared(0xb7bcc6),
-  dark: toonShared(0x3a2c22),
-  wood: toonShared(PALETTE.wood),
-  woodDark: toonShared(PALETTE.woodDark),
-  gold: toonShared(PALETTE.gold),
-  boot: toonShared(0x4a3324),
+  eye: new THREE.MeshBasicMaterial({ color: 0x1a120c }),
+  white: paintShared(0xf4f1e8),
+  metal: paintShared(0xb7bcc6),
+  dark: paintShared(0x3a2c22),
+  wood: paintShared(PALETTE.wood),
+  woodDark: paintShared(PALETTE.woodDark),
+  gold: paintShared(PALETTE.gold),
+  boot: paintShared(0x4a3324),
 };
 
 export function mesh(geo, mat, x, y, z, sx, sy, sz) {
@@ -41,11 +41,11 @@ export function mesh(geo, mat, x, y, z, sx, sy, sz) {
 
 // Vuruşta beyaz parlayan, figüre özel malzeme
 export function flashMat(color) {
-  return toon(color, { emissive: 0xffffff, emissiveIntensity: 0 });
+  return paint(color, { emissive: 0xffffff, emissiveIntensity: 0 });
 }
 
 // Şapka / miğfer çeşitleri; kafa grubuna eklenir (kafa yarıçapı r)
-function addHat(head, kind, r, o) {
+export function addHat(head, kind, r, o) {
   const metal = o.metalMat || M.metal;
   switch (kind) {
     case 'kettle': // geniş kenarlı demir başlık
@@ -155,9 +155,9 @@ export function buildPerson(o) {
   const bulk = o.bulk || 1;
   const tunicMat = flashMat(o.tunic);
   const skinMat = flashMat(o.skin ?? PALETTE.skin);
-  const trimMat = toonShared(o.trim ?? 0xe0b24a);
-  const pantsMat = toonShared(o.pants ?? 0x5a4632);
-  const metalMat = o.metal ? toonShared(o.metal) : M.metal;
+  const trimMat = paintShared(o.trim ?? 0xe0b24a);
+  const pantsMat = paintShared(o.pants ?? 0x5a4632);
+  const metalMat = o.metal ? paintShared(o.metal) : M.metal;
   const flashMats = [tunicMat, skinMat];
   const hip = 0.62;
   const legs = [];
@@ -189,7 +189,7 @@ export function buildPerson(o) {
   }
   root.add(mesh(G.box, trimMat, 0, hip + 0.06, 0, 0.66 * bulk, 0.07, 0.54 * bulk)); // kuşak
   if (o.cape) {
-    const cape = mesh(G.box, toonShared(o.cape), 0, hip + 0.15, -0.28 * bulk, 0.6 * bulk, 0.9, 0.05);
+    const cape = mesh(G.box, paintShared(o.cape), 0, hip + 0.15, -0.28 * bulk, 0.6 * bulk, 0.9, 0.05);
     cape.rotation.x = 0.15;
     root.add(cape);
   }
@@ -207,7 +207,7 @@ export function buildPerson(o) {
   }
   if (o.weapon) addWeapon(arms[1], o.weapon, { trimMat, flagMat: o.flagMat });
   if (o.shield) {
-    const sh = mesh(G.disc, toonShared(o.shield), -0.08, -0.35, 0.2, 0.3, 2.2, 0.3);
+    const sh = mesh(G.disc, paintShared(o.shield), -0.08, -0.35, 0.2, 0.3, 2.2, 0.3);
     sh.rotation.x = Math.PI / 2;
     sh.rotation.z = 0.1;
     arms[0].add(sh);
@@ -224,8 +224,8 @@ export function buildPerson(o) {
     eye.castShadow = false;
     head.add(eye);
   }
-  if (o.beard) head.add(mesh(G.ball, toonShared(o.beard), 0, -r * 0.55, r * 0.45, r * 0.55, r * 0.45, r * 0.45));
-  else if (o.mustache) head.add(mesh(G.box, toonShared(0x3a2a1c), 0, -r * 0.28, r * 0.92, r * 0.7, r * 0.12, r * 0.1));
+  if (o.beard) head.add(mesh(G.ball, paintShared(o.beard), 0, -r * 0.55, r * 0.45, r * 0.55, r * 0.45, r * 0.45));
+  else if (o.mustache) head.add(mesh(G.box, paintShared(0x3a2a1c), 0, -r * 0.28, r * 0.92, r * 0.7, r * 0.12, r * 0.1));
   addHat(head, o.hat, r, { trimMat, metalMat });
   head.rotation.x = -0.35; // eğik kamerada yüz görünsün
   root.add(head);
@@ -237,7 +237,7 @@ export function buildPerson(o) {
 export function buildHorse(o = {}) {
   const root = new THREE.Group();
   const coat = flashMat(o.coat ?? 0x8b5a2b);
-  const mane = toonShared(o.mane ?? 0x3a2416);
+  const mane = paintShared(o.mane ?? 0x3a2416);
   const legs = [];
   for (const [x, z] of [[-0.22, 0.55], [0.22, 0.55], [-0.22, -0.55], [0.22, -0.55]]) {
     const pivot = new THREE.Group();
@@ -262,8 +262,8 @@ export function buildHorse(o = {}) {
   root.add(tail);
   if (o.cloth) {
     // eyer örtüsü (devlet ya da Osmanlı rengi)
-    root.add(mesh(G.box, toonShared(o.cloth), 0, 1.12, -0.05, 0.75, 0.42, 0.9));
-    if (o.clothTrim) root.add(mesh(G.box, toonShared(o.clothTrim), 0, 0.92, -0.05, 0.77, 0.06, 0.92));
+    root.add(mesh(G.box, paintShared(o.cloth), 0, 1.12, -0.05, 0.75, 0.42, 0.9));
+    if (o.clothTrim) root.add(mesh(G.box, paintShared(o.clothTrim), 0, 0.92, -0.05, 0.77, 0.06, 0.92));
   }
   return { root, legs, flashMats: [coat], height: 1.8 };
 }

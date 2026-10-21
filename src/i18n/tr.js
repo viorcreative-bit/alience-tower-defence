@@ -111,6 +111,10 @@ export const TR = {
   charge: 'Allah Allah!',
   chargeWait: (s) => `${Math.ceil(s)} sn`,
   chargeBanner: 'Allah Allah! Hücum!',
+  loading: (k) => `Ordu toplanıyor… %${Math.round(k * 100)}`,
+  loadFailed: 'Modeller yüklenemedi. Sayfayı yenile.',
+  qualityShort: (q) => (q === 'high' ? 'HD' : 'SD'),
+  qualityLabel: (q) => `Görüntü kalitesi: ${q === 'high' ? 'Yüksek' : 'Düşük'}`,
   soundOn: 'Ses açık',
   soundOff: 'Ses kapalı',
 

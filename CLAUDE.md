@@ -91,7 +91,7 @@ Menzildeki düşmanlardan yolda en çok ilerlemiş olanı. (Aşama 3: İlk / En 
 
 ### Görsel tarif
 
-- **Okçu Kulesi:** Kesme taş, mazgallı kule; tepede kırmızı külahlı çatı altında ok atan okçu. Ok mermisi.
+- **Okçu Kulesi:** Kesme taş kule, kırmızı külahlı çatı (KayKit). Arkasında ışıklı iz bırakan ok mermisi.
 - **Zift Kazanı:** Taş ocak üstünde bakır kazan, altında ateş, üstünde dumanlı kara zift. Vurduğu düşmanın altında kara leke.
 - **Balyemez Topu:** Ahşap kundak üstünde bronz top. Gülle atar, çarpınca toz halkası.
 - **Tüfekçi Tabyası:** Toprak-taş tabya üstünde beyaz börklü Yeniçeri tüfekçi. Atışta namlu alevi ve duman.
@@ -200,7 +200,10 @@ Hiçbir hazır kayıt ya da telifli eser kullanılmaz; **tüm sesler Web Audio A
   - Osmanlı kırmızısı `#b3202a`, altın `#e0b24a`, akçe `#f2c94c`, sur `#cfd6e0`, tehlike `#ff5b4d`
   - 3D renkler `src/render/palette.js` içinde.
 - **Yazı tipleri:** Başlık "Cinzel" (klasik, oymalı), arayüz "Barlow Semi Condensed" (Türkçe karakterli). İkisi de pakete gömülü.
-- **Görünüm 3D:** Three.js, `MeshToonMaterial` + `OutlineEffect`, kamera güneyden ~62° eğik. Modeller koddaki basit şekillerden kurulur; her varlığın modeli kendi fonksiyonunda.
+- **Görünüm 3D:** Three.js, `MeshStandardMaterial` + ACES ton eşleme, kamera güneyden ~54° eğik. Yüksek kalitede son işlem: parlama (bloom), yumuşak gölge, sıcak renk ayarı ve kenar karartması (`src/render/post.js`).
+- **Modeller:** Yapılar, doğa ve askerler KayKit (CC0) paketlerinden; `scripts/build-models.mjs` seçer ve sıkıştırır, çıktı `public/models/`. Kaynak ve lisanslar `CREDITS.md`'de. Osmanlı'ya özgü yapılar (cami, mektep, darüşşifa, bilimhane, meşihat, mahkeme), toplar, kazanlar ve atlar koddaki şekillerden kurulur. Askerler iskeletli KayKit gövdeleridir: devlet renkleri gri dokuyla boyanır, başlıklar (börk, sarık, kavuk, miğfer) kafa kemiğine takılır.
+- **Canlılık:** Dalgalanan sancaklar (köşe gölgelendiricisi), duman, kıvılcım, namlu dumanı, ok izi, yanan zift ve kuşlar (`src/render/ambient.js`, `flags.js`).
+- **Kalite:** Yüksek / Düşük düğmesi (HD/SD). Düşük kalitede son işlem yok, gölge sert, dpr 1. Oyuncu seçmediyse yavaş karede kendiliğinden düşüğe geçer.
 
 ---
 
@@ -228,8 +231,8 @@ Hiçbir hazır kayıt ya da telifli eser kullanılmaz; **tüm sesler Web Audio A
 ## 11. Teknik yapı
 
 - Saf HTML + CSS + JS (ES modülleri), Three.js, Vite. Arayüz framework'ü yok; tamamen çevrimdışı.
-- Klasörler: `src/data` (denge: towers, enemies, waves, nations, buildings, maps, rules), `src/systems` (spawner, movement, combat, effects, city, patrol, raid), `src/render` (scene, world, city, towers, enemies, units, fx, background, palette), `src/audio` (sfx, mehter, chant), `src/ui`, `src/i18n/tr.js`.
-- **Kurallar:** Denge sayıları sadece `src/data/` içinde. Sabit adım ≤ 0.03 sn. Mantık kare biriminde 2D; 3D çeviri sadece çizimde. WebGL dpr ≤ 1.5. Tek gölge ışığı. Kayıt `localStorage` + try/catch. Kod İngilizce, oyuncu metinleri Türkçe ve `tr.js`'de.
+- Klasörler: `src/data` (denge: towers, enemies, waves, nations, buildings, maps, rules), `src/systems` (spawner, movement, combat, effects, city, patrol, raid), `src/render` (scene, post, models, soldiers, world, city, towers, enemies, units, fx, ambient, flags, background, palette), `src/audio` (sfx, mehter, chant), `src/ui`, `src/i18n/tr.js`.
+- **Kurallar:** Denge sayıları sadece `src/data/` içinde. Sabit adım ≤ 0.03 sn. Mantık kare biriminde 2D; 3D çeviri sadece çizimde. WebGL dpr ≤ 1.25 (yüksek) / 1 (düşük). Tek gölge ışığı. Durağan modeller `bakeStatic` ile malzeme başına tek ağa birleştirilir. Kayıt `localStorage` + try/catch. Kod İngilizce, oyuncu metinleri Türkçe ve `tr.js`'de.
 - Geliştirme sırasında `window.__game` ile durum incelenebilir.
 
 ---

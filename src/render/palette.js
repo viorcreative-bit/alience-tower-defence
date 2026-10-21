@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// Çizgi film görünümü: renk paleti, toon malzeme ve kenar çizgisi yardımcıları.
+// Çizgi film görünümü: renk paleti, paint malzeme ve kenar çizgisi yardımcıları.
 export const PALETTE = {
   ground: '#6fb33a',
   groundLight: '#8fcf4a',
@@ -30,39 +30,24 @@ export const PALETTE = {
   gold: 0xe0b24a,
   ottomanRed: 0xb3202a,
   skin: 0xf0c9a0,
-  sky: 0x1e2a18,
-  outline: [0.08, 0.07, 0.05],
+  haze: 0xbfd0a8, // uzak sis
 };
 
-// 3 kademeli ışık: düz, çizgi film tarzı gölgelendirme
-const gradientMap = (() => {
-  const t = new THREE.DataTexture(new Uint8Array([90, 170, 255]), 3, 1, THREE.RedFormat);
-  t.minFilter = THREE.NearestFilter;
-  t.magFilter = THREE.NearestFilter;
-  t.needsUpdate = true;
-  return t;
-})();
-
-export function toon(color, opts = {}) {
-  return new THREE.MeshToonMaterial({ color, gradientMap, ...opts });
+// Elle kurulan parçaların malzemesi: KayKit modelleriyle aynı mat, düz renkli görünüm
+export function paint(color, opts = {}) {
+  return new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0, ...opts });
 }
 
-// Paylaşılan toon malzemeleri (renk başına bir tane)
+// Paylaşılan malzemeler (renk başına bir tane)
 const cache = new Map();
-export function toonShared(color) {
+export function paintShared(color) {
   const key = typeof color === 'string' ? color : `#${color.toString(16).padStart(6, '0')}`;
   let m = cache.get(key);
   if (!m) {
-    m = toon(color);
+    m = paint(color);
     cache.set(key, m);
   }
   return m;
-}
-
-// Kenar çizgisi istemeyen malzemeler (efektler, şeffaf yüzeyler, zemin)
-export function noOutline(mat) {
-  mat.userData.outlineParameters = { visible: false };
-  return mat;
 }
 
 // Kırmızı zemin üstünde beyaz hilal ve yıldız (Osmanlı sancağı) dokusu

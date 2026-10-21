@@ -11,6 +11,7 @@ export const RULES = {
   maxFrameTime: 0.1,
   speeds: [1, 2, 3],
   maxDpr: 2,
+  slowFrameTime: 1 / 32, // yüksek kalitede ortalama kare bundan uzunsa düşük kaliteye geç
   muzzleOffset: 0.3,
   hitFlashTime: 0.08,
   lowHpRatio: 0.4,
