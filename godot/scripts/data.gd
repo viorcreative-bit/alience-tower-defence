@@ -12,6 +12,9 @@ const MAP := {
 	"path": [[1, -1], [1, 2], [6, 2], [6, 5], [2, 5], [2, 8], [7, 8], [7, 10], [4, 10], [4, 12]],
 	"seed": 1453,
 	# okçu askerlerinin surların önündeki yerleri (kare biriminde x, y)
+	# Odun-Demir Ocağı işçilerinin çalıştığı yerler: sol kapı önünde kesim alanı, sağda demir madeni (kule kurulamaz)
+	"lumber_site": [0, 11],
+	"mine_site": [8, 11],
 	"archer_posts": [[3.3, 11.25], [5.7, 11.25], [2.5, 11.5], [6.5, 11.5], [1.7, 11.5], [7.3, 11.5]],
 }
 
@@ -114,8 +117,9 @@ const BUILDINGS := {
 	"court": {"slot": [5, 13], "costs": [100, 200, 300], "color": "#9b7bd1"},
 	"mosque": {"slot": [7, 15], "costs": [120, 240, 360], "color": "#7fc8c0"},
 	"kitchen": {"slot": [6, 14], "costs": [70, 140, 220], "color": "#d9893b"},
+	"workshop": {"slot": [8, 13], "costs": [80, 160, 240], "color": "#8a6a48"},
 }
-const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen"]
+const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen", "workshop"]
 # Saray yükseltmesi akçeye ek olarak odun ve demir ister (indeks = kurulacak seviye)
 const PALACE_RES := [{}, {}, {"wood": 60, "iron": 30}, {"wood": 120, "iron": 60}]
 # Binalar Saray'ın bir üst seviyesine kadar çıkar: Saray 1 iken en fazla 2, Saray 2 iken 3
@@ -136,6 +140,10 @@ const CITY := {
 	"palace_wood": 25,
 	"palace_iron": 15,
 	"kitchen_food": 40,
+	# Odun-Demir Ocağı: seviye başına işçi; her işçi bir yük getirir (oduncu odun, madenci demir)
+	"workers_per_level": 2,
+	"wood_load": 3,
+	"iron_load": 2,
 	# Darüşşifa: canı bu oranın altına düşen asker hastaneye gider; hastanede sn'de taban + seviye başına iyileşir
 	"wounded_ratio": 0.35,
 	"ward_heal": 18.0,
@@ -238,6 +246,7 @@ const BUILDING_NAMES := {
 	"archery": ["Okçu Ocağı", "Okçu geliştirme"], "hospital": ["Darüşşifa", "Hastane"], "cavalry": ["Sipahi Ocağı", "Atlı birlik"],
 	"science": ["Bilimhane", "Bilim"], "religion": ["Meşihat", "Din işleri"], "court": ["Kadı Mahkemesi", "Adalet"],
 	"mosque": ["Cami", "Sofiler ve vakıf"], "kitchen": ["Yemekhane", "Ordunun aşı"],
+	"workshop": ["Odun-Demir Ocağı", "Oduncular ve madenciler"],
 }
 const TROOP_NAMES := {"janissary": "Yeniçeri", "archer": "Okçu", "sipahi": "Sipahi", "sufi": "Sofi"}
 const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!"}
@@ -280,6 +289,8 @@ static func building_effect(id: String, l: int) -> String:
 			return "Dalga sonu +%d akçe vergi, baskınlar seyrek" % (CITY.court_tax * l)
 		"mosque":
 			return "En fazla %d Sofi (yanındakilere can verir) · dalga sonu +%d akçe vakıf" % [TROOPS.sufi.per_level * l, CITY.mosque_endowment * l]
+		"workshop":
+			return "%d işçi: oduncular ağaçtan +%d odun, madenciler madenden +%d demir taşır" % [CITY.workers_per_level * l, CITY.wood_load, CITY.iron_load]
 		"kitchen":
 			return "Dalga sonu +%d yemek" % (CITY.kitchen_food * l)
 	return ""

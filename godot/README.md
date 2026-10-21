@@ -6,8 +6,9 @@ Tarayıcı sürümünün (Vite + Three.js) Godot 4'e taşınmış hâli. Temel k
 
 - **Kuleler (4):** Okçu Kulesi, Zift Kazanı (yavaşlatır), Balyemez Topu (alan hasarı, Bilimhane gerekir), Tüfekçi Tabyası (Kışla gerekir). Her biri 3 seviyeye yükseltilir, satılınca harcamanın bir kısmı geri gelir.
 - **Düşmanlar (7):** piyade, şövalye, hafif süvari, atlı okçu, komutan, koçbaşı, kuşatma kulesi. 12 dalga, her dalga başka bir milletin sancağıyla gelir; her dalgada düşmanın canı, sayısı ve hızı artar. Dalga aralarında ani baskınlar olur.
-- **Şehir:** surların içinde Saray ve 10 bina (Mektep, Kışla, Okçu Ocağı, Darüşşifa, Sipahi Ocağı, Bilimhane, Meşihat, Kadı Mahkemesi, Cami, Yemekhane). Her binanın 3 seviyesi ve kendi etkisi vardır; binalar 2. seviyeye serbestçe çıkar, 3. seviye için Saray'ın yükseltilmesi gerekir.
-- **Kaynaklar:** akçenin yanında odun, demir ve yemek. Saray her dalga sonunda odun ve demir, Yemekhane yemek verir. Askerler ve Saray yükseltmesi bunlarla ödenir.
+- **Şehir:** surların içinde Saray ve 10 bina (Mektep, Kışla, Okçu Ocağı, Darüşşifa, Sipahi Ocağı, Bilimhane, Meşihat, Kadı Mahkemesi, Cami, Yemekhane, Odun-Demir Ocağı). Her binanın 3 seviyesi ve kendi etkisi vardır; binalar 2. seviyeye serbestçe çıkar, 3. seviye için Saray'ın yükseltilmesi gerekir.
+- **Kaynaklar:** akçenin yanında odun, demir ve yemek. Saray her dalga sonunda odun ve demir, Yemekhane yemek verir. Odun-Demir Ocağı'nın işçileri surların önündeki kesim alanından odun, madenden demir taşır. Askerler ve Saray yükseltmesi bunlarla ödenir.
+- **Şehir görünüşü:** "Şehre Bak" düğmesi kamerayı surların içine yaklaştırır (parmakla sağa sola kaydırılır). Sokaklarda halk gezer; şadırvan, çarşı, bahçeler, cumbalı evler, fenerler ve Cami önünde semazenler vardır.
 - **Askerler:** Kışla Yeniçeri (en güçlü asker, en önde durur), Okçu Ocağı okçu, Sipahi Ocağı süvari, Cami Sofi yetiştirir. Sofiler arka sırada savaşır ve yanındaki askerlere can verir. Askerler surların önünde nöbet tutar; canı azalan asker Darüşşifa'ya yürür, iyileşince yerine döner.
 - **"Allah Allah!" hücumu:** Meşihat kurulunca açılır, bir süre bütün kulelerin atış hızını artırır.
 - Mehter müziği ve savaş sesleri koddan üretilir (dosya yok). Ses, ışık (Öğle · İkindi · Gece) ve en iyi dalga cihazda saklanır.

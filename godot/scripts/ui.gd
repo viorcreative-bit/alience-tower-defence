@@ -35,6 +35,7 @@ var btn_speed: Button
 var btn_light: Button
 var btn_charge: Button
 var btn_primary: Button
+var btn_view: Button
 var banner: Label
 var banner_tween: Tween
 var overlay: Control
@@ -79,6 +80,7 @@ func _ready() -> void:
 
 	_build_top()
 	_build_panel()
+	_build_view_button()
 	_build_banner()
 	_build_overlay()
 
@@ -439,6 +441,24 @@ func _render_building(id: String) -> void:
 		row.add_child(b)
 
 
+# Savaş ile şehir görünüşü arasında geçiş: haritanın sağ üstünde durur
+func _build_view_button() -> void:
+	btn_view = Button.new()
+	btn_view.custom_minimum_size = Vector2(150, 52)
+	btn_view.add_theme_font_size_override("font_size", 22)
+	btn_view.add_theme_stylebox_override("normal", _box(Color(0.12, 0.09, 0.07, 0.88), C_GOLD, 10))
+	btn_view.add_theme_stylebox_override("hover", _box(Color(0.2, 0.14, 0.1, 0.92), C_GOLD, 10))
+	btn_view.add_theme_stylebox_override("pressed", _box(Color(0.2, 0.14, 0.1, 0.92), C_GOLD, 10))
+	btn_view.add_theme_color_override("font_color", C_GOLD)
+	btn_view.pressed.connect(func(): action.emit("view", ""))
+	root.add_child(btn_view)
+	set_view_label(false)
+
+
+func set_view_label(city: bool) -> void:
+	btn_view.text = "Savaşa Dön" if city else "Şehre Bak"
+
+
 # ---------------------------------------------------------------- duyuru ve bitiş ekranı
 
 func _build_banner() -> void:
@@ -502,6 +522,7 @@ func _build_overlay() -> void:
 # ---------------------------------------------------------------- her kare
 
 func refresh(sound_on: bool, light_name: String) -> void:
+	btn_view.position = Vector2(root.size.x - btn_view.size.x - 14, top_bottom() + 12)
 	lbl_gold.text = str(game.gold)
 	lbl_wall.text = str(game.wall)
 	lbl_wave.text = "%d/%d" % [game.wave, game.total_waves]

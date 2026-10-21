@@ -669,6 +669,20 @@ func building(id: String, level: int) -> Node3D:
 			if level >= 3:
 				cyl(g, 0.08, 0.09, 0.5, Vector3(-0.3, 0.45, -0.18), mat(WHITEWASH), 10)
 				cyl(g, 0.0, 0.1, 0.2, Vector3(-0.3, 0.8, -0.18), mat(LEAD, 0.5, 0.3), 10)
+		"workshop":
+			# Odun-Demir Ocağı: demirhane, odun yığını, örs; seviyeyle kereste atölyesi ve ocak eklenir
+			add_prop(g, "building_blacksmith", Vector3(0.08, 0, -0.06), 0.36, PI)
+			add_prop(g, "resource_lumber", Vector3(-0.24, 0.0, 0.22), 0.5, 0.3)
+			box(g, Vector3(0.08, 0.06, 0.05), Vector3(0.2, 0.09, 0.3), mat(IRON, 0.4, 0.7))
+			cyl(g, 0.03, 0.04, 0.06, Vector3(0.2, 0.03, 0.3), mat(WOOD_DARK), 6)
+			for k in 3:
+				sphere(g, 0.035, Vector3(-0.02 + k * 0.05, 0.035, 0.32), mat(Color("#4a4440"), 0.6, 0.5), false, 6)
+			if level >= 2:
+				add_prop(g, "resource_lumber", Vector3(-0.3, 0.0, -0.05), 0.45, 1.6)
+				add_prop(g, "wheelbarrow", Vector3(0.32, 0, 0.12), 0.3, 0.6)
+			if level >= 3:
+				add_prop(g, "resource_stone", Vector3(-0.05, 0.0, 0.33), 0.45, 0.9)
+				pole_flag(g, Vector3(-0.32, 0, -0.3), 0.55, ottoman_flag(), 0.22)
 		"kitchen":
 			# Yemekhane: uzun yapı, ocak bacası, önünde kazanlar
 			ottoman_block(g, Vector3(0, 0, -0.08), Vector3(0.66, 0.3, 0.42), 0.0)

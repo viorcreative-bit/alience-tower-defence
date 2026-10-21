@@ -14,6 +14,13 @@ var ui: GameUI
 var audio: GameAudio
 var camera: Camera3D
 var cam_base := Transform3D()
+var cam_board := Transform3D()
+var cam_city := Transform3D()
+var city_view := false
+var city_pan := 0.0
+var drag_from := Vector2.ZERO
+var dragged := false
+var cam_tween: Tween
 var shake := 0.0
 
 var tower_nodes := {}  # id → {info, level}
@@ -73,9 +80,49 @@ func _ready() -> void:
 
 # ---------------------------------------------------------------- kamera
 
-# Tahtanın tamamı (ordugâh dahil) üst şerit ile alt panelin arasına sığacak uzaklık ve kaydırma.
+# İki görünüş: savaş (tahtanın tamamı, ordugâh dahil) ve şehir (surların içi yakından).
 func _fit_camera() -> void:
-	var pitch := deg_to_rad(54.0)
+	var board: Array[Vector3] = []
+	for x in [-game.cols / 2.0 - 0.1, game.cols / 2.0 + 0.1]:
+		for z in [-game.rows / 2.0 - 1.6, game.rows / 2.0 + 0.3]:
+			for y in [0.0, 1.0]:
+				board.append(Vector3(x, y, z))
+	var city: Array[Vector3] = []
+	var wz: float = game.wall_row - game.rows / 2.0
+	# şehir görünüşü dar tutulur (yaklaşık 5,5 kare); kalanı parmakla sağa sola kaydırılır
+	for x in [-2.8, 2.8]:
+		for z in [wz - 0.1, game.rows / 2.0 + 0.2]:
+			for y in [0.0, 0.5]:
+				city.append(Vector3(x, y, z))
+	cam_city = _fit(city, 60.0, Vector3(0, 0, wz + 2.0))
+	cam_board = _fit(board, 54.0, Vector3(0, 0, 0.3))
+	camera.transform = _city_cam() if city_view else cam_board
+	cam_base = camera.transform
+
+
+func set_city_view(on: bool) -> void:
+	if on == city_view:
+		return
+	city_view = on
+	ui.set_view_label(on)
+	shake = 0.0
+	city_pan = 0.0
+	cam_base = _city_cam() if on else cam_board
+	if cam_tween:
+		cam_tween.kill()
+	cam_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	cam_tween.tween_property(camera, "transform", cam_base, 0.8)
+
+
+func _city_cam() -> Transform3D:
+	var t := cam_city
+	t.origin.x += city_pan
+	return t
+
+
+# Verilen noktalar üst şerit ile alt panelin arasına sığacak uzaklık ve kaydırma.
+func _fit(corners: Array[Vector3], pitch_deg: float, target: Vector3) -> Transform3D:
+	var pitch := deg_to_rad(pitch_deg)
 	var dir := Vector3(0, sin(pitch), cos(pitch))
 	var vs := get_viewport().get_visible_rect().size
 	var y0 := ui.top_bottom() + 6.0
@@ -83,12 +130,6 @@ func _fit_camera() -> void:
 	if y1 - y0 < 100.0:
 		y0 = 0.0
 		y1 = vs.y
-	var corners: Array[Vector3] = []
-	for x in [-game.cols / 2.0 - 0.1, game.cols / 2.0 + 0.1]:
-		for z in [-game.rows / 2.0 - 1.6, game.rows / 2.0 + 0.3]:
-			for y in [0.0, 1.0]:
-				corners.append(Vector3(x, y, z))
-	var target := Vector3(0, 0, 0.3)
 	var lo := 4.0
 	var hi := 90.0
 	for i in 26:
@@ -107,7 +148,7 @@ func _fit_camera() -> void:
 			lo = mid
 	var tt := _center(target, dir, hi, corners, (y0 + y1) / 2.0)
 	camera.look_at_from_position(tt + dir * hi, tt)
-	cam_base = camera.transform
+	return camera.transform
 
 
 # Görüntü dikey olarak istenen bandın ortasına gelsin diye hedefi z ekseninde kaydırır.
@@ -131,13 +172,26 @@ func _center(target: Vector3, dir: Vector3, d: float, corners: Array[Vector3], w
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
 		var t := _tile_under(event.position)
-		var ok := t.y >= 0 and t.y < game.wall_row and t.x >= 0 and t.x < game.cols and not game.is_path_tile(t.x, t.y)
+		var ok := t.y >= 0 and t.y < game.wall_row and t.x >= 0 and t.x < game.cols and not game.is_path_tile(t.x, t.y) and not game.is_work_site(t.x, t.y)
 		hover_tile.visible = ok and game.tower_at(t.x, t.y) == null
 		if ok:
 			hover_tile.position = world.to_world(t.x + 0.5, t.y + 0.5, 0.012)
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var t := _tile_under(event.position)
-		game.select_tile(t.x, t.y)
+		# şehir görünüşünde basılı sürükleme kamerayı kaydırır
+		if city_view and event.button_mask & MOUSE_BUTTON_MASK_LEFT and not (cam_tween and cam_tween.is_running()):
+			if event.position.distance_to(drag_from) > 12.0:
+				dragged = true
+			if dragged:
+				var k: float = cam_city.origin.y / get_viewport().get_visible_rect().size.x * 1.4
+				city_pan = clampf(city_pan - event.relative.x * k, -1.9, 1.9)
+				camera.transform = _city_cam()
+				cam_base = camera.transform
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			drag_from = event.position
+			dragged = false
+		elif not dragged:
+			var t := _tile_under(event.position)
+			game.select_tile(t.x, t.y)
 
 
 func _tile_under(screen: Vector2) -> Vector2i:
@@ -163,6 +217,9 @@ func _on_action(name: String, arg: String) -> void:
 			game.train_troop(arg)
 		"primary":
 			game.start_wave()
+			set_city_view(false)
+		"view":
+			set_city_view(not city_view)
 		"speed":
 			var list: Array = D.RULES.speeds
 			game.speed = list[(list.find(game.speed) + 1) % list.size()]
@@ -207,7 +264,7 @@ func _process(delta: float) -> void:
 	_update_markers()
 	audio.set_music("wave" if game.phase == "wave" else ("build" if game.phase == "build" else "off"))
 	ui.refresh(audio.enabled, world.light_name())
-	if shake > 0.0:
+	if shake > 0.0 and not (cam_tween and cam_tween.is_running()):
 		shake = maxf(0.0, shake - delta)
 		camera.transform = cam_base
 		camera.position += Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * shake * 0.35
@@ -745,10 +802,16 @@ func _debug_hooks() -> void:
 		if a.begins_with("--light="):
 			world.time_of_day = int(a.substr(8))
 			world.apply_light(true)
+	if "--city" in args:
+		set_city_view(true)
+		city_pan = float(_arg(args, "--pan=", "0"))
+		cam_base = _city_cam()
+		cam_tween.kill()
+		camera.transform = cam_base
 	if "--demo" in args:
 		game.gold = 5000
 		game.res = {"wood": 500, "iron": 500, "food": 500}
-		for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion", "kitchen"]:
+		for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion", "kitchen", "workshop"]:
 			game.upgrade_building(id)
 		game.upgrade_building("palace")
 		game.upgrade_building("mosque")

@@ -115,6 +115,21 @@ func is_path_tile(c: int, r: int) -> bool:
 	return path_tiles.has(Vector2i(c, r))
 
 
+func is_work_site(c: int, r: int) -> bool:
+	var a: Array = D.MAP.lumber_site
+	var b: Array = D.MAP.mine_site
+	return (c == a[0] and r == a[1]) or (c == b[0] and r == b[1])
+
+
+# İşçinin getirdiği yük (görüntü tarafı çağırır)
+func deliver(kind: String, x: float, y: float) -> void:
+	if not is_active():
+		return
+	var n: int = D.CITY.wood_load if kind == "wood" else D.CITY.iron_load
+	res[kind] += n
+	text(x, y - 0.3, "+%d %s" % [n, D.RES_NAMES[kind]], "#d39a5e" if kind == "wood" else "#b9c3cf")
+
+
 func in_grid(c: int, r: int) -> bool:
 	return c >= 0 and r >= 0 and c < cols and r < rows
 
@@ -168,7 +183,7 @@ func select_tile(c: int, r: int) -> void:
 	if selected != null and selected.c == c and selected.r == r:
 		selected = null
 		return
-	if not in_grid(c, r) or is_path_tile(c, r):
+	if not in_grid(c, r) or is_path_tile(c, r) or is_work_site(c, r):
 		selected = null
 		return
 	if r >= wall_row:
