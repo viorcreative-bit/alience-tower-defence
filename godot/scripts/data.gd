@@ -1,7 +1,8 @@
 class_name GameData
 extends RefCounted
 
-# Denge sayıları ve oyuncuya görünen metinler. Değerler tarayıcı sürümündeki src/data ile birebir aynıdır.
+# Denge sayıları ve oyuncuya görünen metinler. Temel değerler tarayıcı sürümündeki src/data'dan gelir;
+# kaynaklar, Yemekhane, Sofiler, hastaneye dönüş ve dalga dalga artan zorluk Godot sürümüne eklenmiştir.
 # Mesafeler kare, süreler saniye.
 
 const MAP := {
@@ -17,6 +18,11 @@ const MAP := {
 const RULES := {
 	"start_gold": 220,
 	"start_wall": 20,
+	# kaynaklar: askerler akçenin yanında odun, demir ve yemekle yetişir
+	"start_res": {"wood": 60, "iron": 40, "food": 80},
+	# her dalgada düşman canı hp_growth ile, kalabalık birliklerin sayısı count_growth ile, hızı speed_growth ile artar
+	"count_growth": 0.06,
+	"speed_growth": 0.015,
 	"wave_bonus_base": 20,
 	"wave_bonus_per_wave": 5,
 	"sell_ratio": 0.7,
@@ -106,8 +112,13 @@ const BUILDINGS := {
 	"religion": {"slot": [6, 15], "costs": [110, 210, 310], "requires": {"mosque": 1}, "color": "#e8d48a"},
 	"court": {"slot": [5, 13], "costs": [100, 200, 300], "color": "#9b7bd1"},
 	"mosque": {"slot": [7, 15], "costs": [120, 240, 360], "color": "#7fc8c0"},
+	"kitchen": {"slot": [6, 14], "costs": [70, 140, 220], "color": "#d9893b"},
 }
-const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque"]
+const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen"]
+# Saray yükseltmesi akçeye ek olarak odun ve demir ister (indeks = kurulacak seviye)
+const PALACE_RES := [{}, {}, {"wood": 60, "iron": 30}, {"wood": 120, "iron": 60}]
+# Binalar Saray'ın bir üst seviyesine kadar çıkar: Saray 1 iken en fazla 2, Saray 2 iken 3
+const FREE_LEVELS := 1
 const MAX_BUILDING_LEVEL := 3
 
 const CITY := {
@@ -120,21 +131,35 @@ const CITY := {
 	"court_tax": 12,
 	"court_raid_delay": 0.2,
 	"mosque_endowment": 10,
+	# dalga sonu kaynak geliri: Saray seviyesi başına odun ve demir, Yemekhane seviyesi başına yemek
+	"palace_wood": 25,
+	"palace_iron": 15,
+	"kitchen_food": 40,
+	# Darüşşifa: canı bu oranın altına düşen asker hastaneye gider; hastanede sn'de taban + seviye başına iyileşir
+	"wounded_ratio": 0.35,
+	"ward_heal": 18.0,
+	"ward_heal_level": 12.0,
 	"minarets": [0, 1, 2, 4],
 }
 
 # "Allah Allah!" hücumu (Meşihat seviyesine göre; indeks = seviye)
 const CHARGE := {"boost": [0.0, 0.3, 0.45, 0.6], "duration": [0, 6, 8, 10], "cooldown": [0, 60, 50, 40]}
 
+# res: akçe dışındaki eğitim bedeli. Yeniçeri en güçlü askerdir.
 const TROOPS := {
-	"janissary": {"building": "barracks", "role": "melee", "cost": 40, "train": 4.0, "per_level": 2,
-		"hp": 120, "damage": 10, "rate": 0.7, "range": 0.6, "block": 1, "speed": 1.3},
-	"archer": {"building": "archery", "role": "ranged", "cost": 35, "train": 3.5, "per_level": 2,
+	"janissary": {"building": "barracks", "role": "melee", "cost": 60, "res": {"food": 15, "iron": 10}, "train": 5.0, "per_level": 2,
+		"hp": 230, "damage": 19, "rate": 0.65, "range": 0.6, "block": 2, "speed": 1.3},
+	"archer": {"building": "archery", "role": "ranged", "cost": 35, "res": {"food": 10, "wood": 10}, "train": 3.5, "per_level": 2,
 		"hp": 60, "damage": 8, "rate": 0.9, "range": 2.4, "block": 0, "speed": 1.2, "projectile": 10.0},
-	"sipahi": {"building": "cavalry", "role": "melee", "cost": 70, "train": 6.0, "per_level": 1,
-		"hp": 200, "damage": 16, "rate": 0.8, "range": 0.65, "block": 2, "speed": 2.2},
+	"sipahi": {"building": "cavalry", "role": "melee", "cost": 70, "res": {"food": 20, "iron": 8, "wood": 6}, "train": 6.0, "per_level": 1,
+		"hp": 170, "damage": 14, "rate": 0.8, "range": 0.65, "block": 2, "speed": 2.2},
+	# Sofiler camiden çıkar; savaşırken yanındaki askerlere can verir
+	"sufi": {"building": "mosque", "role": "melee", "cost": 30, "res": {"food": 15}, "train": 4.0, "per_level": 2,
+		"hp": 90, "damage": 7, "rate": 0.8, "range": 0.6, "block": 1, "speed": 1.2, "heal": 3.0, "heal_range": 1.3},
 }
-const TROOP_ORDER := ["janissary", "archer", "sipahi"]
+const TROOP_ORDER := ["janissary", "archer", "sipahi", "sufi"]
+const RES_ORDER := ["wood", "iron", "food"]
+const RES_NAMES := {"wood": "odun", "iron": "demir", "food": "yemek"}
 
 const ARMY := {
 	"level_bonus": 0.25,
@@ -149,6 +174,17 @@ const ARMY := {
 
 static func wave_bonus(n: int) -> int:
 	return RULES.wave_bonus_base + n * RULES.wave_bonus_per_wave
+
+
+# n. dalgada (1'den başlar) bir grubun gerçek sayısı: kalabalık birlikler her dalgada çoğalır
+static func group_count(count: int, n: int) -> int:
+	if count < 4:
+		return count
+	return ceili(count * (1.0 + RULES.count_growth * maxi(0, n - 1)))
+
+
+static func difficulty(n: int) -> float:
+	return pow(RULES.hp_growth, maxi(0, n - 1))
 
 
 static func sell_value(spent: int) -> int:
@@ -200,9 +236,9 @@ const BUILDING_NAMES := {
 	"palace": ["Saray", "Padişahın sarayı"], "school": ["Mektep", "Okul"], "barracks": ["Kışla", "Yeniçeri Ocağı"],
 	"archery": ["Okçu Ocağı", "Okçu geliştirme"], "hospital": ["Darüşşifa", "Hastane"], "cavalry": ["Sipahi Ocağı", "Atlı birlik"],
 	"science": ["Bilimhane", "Bilim"], "religion": ["Meşihat", "Din işleri"], "court": ["Kadı Mahkemesi", "Adalet"],
-	"mosque": ["Cami", "İbadet ve vakıf"],
+	"mosque": ["Cami", "Sofiler ve vakıf"], "kitchen": ["Yemekhane", "Ordunun aşı"],
 }
-const TROOP_NAMES := {"janissary": "Yeniçeri", "archer": "Okçu", "sipahi": "Sipahi"}
+const TROOP_NAMES := {"janissary": "Yeniçeri", "archer": "Okçu", "sipahi": "Sipahi", "sufi": "Sofi"}
 const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!"}
 
 
@@ -224,7 +260,7 @@ static func troop_boost(l: int) -> String:
 static func building_effect(id: String, l: int) -> String:
 	match id:
 		"palace":
-			return "Binalar en fazla %d. seviyeye çıkabilir" % l
+			return "Binalar en fazla %d. seviye · dalga sonu +%d odun, +%d demir" % [mini(MAX_BUILDING_LEVEL, l + FREE_LEVELS), CITY.palace_wood * l, CITY.palace_iron * l]
 		"school":
 			return "Kule yükseltmeleri %s ucuz" % pct(CITY.school_discount * l)
 		"barracks":
@@ -232,7 +268,7 @@ static func building_effect(id: String, l: int) -> String:
 		"archery":
 			return "Okçu Kulesi hasarı +%s, menzil +%s · en fazla %d okçu" % [pct(CITY.archery_damage * l), num(CITY.archery_range * l, 2), TROOPS.archer.per_level * l]
 		"hospital":
-			return "Her dalga sonunda Sur +%d · savaşta askerler sn'de +%s can" % [CITY.hospital_repair * l, num(ARMY.hospital_regen * l)]
+			return "Yaralı askerler burada iyileşir (sn'de +%d can) · dalga sonu Sur +%d" % [roundi(CITY.ward_heal + CITY.ward_heal_level * l), CITY.hospital_repair * l]
 		"cavalry":
 			return "En fazla %d Sipahi (ikişer düşman durdurur)%s" % [TROOPS.sipahi.per_level * l, troop_boost(l)]
 		"science":
@@ -242,7 +278,9 @@ static func building_effect(id: String, l: int) -> String:
 		"court":
 			return "Dalga sonu +%d akçe vergi, baskınlar seyrek" % (CITY.court_tax * l)
 		"mosque":
-			return "Dalga sonu +%d akçe vakıf geliri" % (CITY.mosque_endowment * l)
+			return "En fazla %d Sofi (yanındakilere can verir) · dalga sonu +%d akçe vakıf" % [TROOPS.sufi.per_level * l, CITY.mosque_endowment * l]
+		"kitchen":
+			return "Dalga sonu +%d yemek" % (CITY.kitchen_food * l)
 	return ""
 
 
@@ -269,5 +307,6 @@ static func describe_wave(i: int) -> String:
 	var w: Dictionary = WAVES[i]
 	var items := []
 	for g in w.groups:
-		items.append("%d %s" % [g[1], ENEMY_NAMES[g[0]]])
-	return "Sıradaki sefer: %s — %s." % [NATION_NAMES[w.nation], join_list(items)]
+		items.append("%d %s" % [group_count(g[1], i + 1), ENEMY_NAMES[g[0]]])
+	var hard := " Düşman canı ×%s." % num(difficulty(i + 1)) if i > 0 else ""
+	return "Sıradaki sefer: %s — %s.%s" % [NATION_NAMES[w.nation], join_list(items), hard]

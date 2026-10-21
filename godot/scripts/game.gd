@@ -17,6 +17,7 @@ var path_length := 0.0
 var path_tiles := {}
 
 var gold: int
+var res := {}  # odun, demir, yemek
 var wall: int
 var max_wall: int
 var wave := 0
@@ -48,6 +49,7 @@ func _init() -> void:
 
 func reset() -> void:
 	gold = D.RULES.start_gold
+	res = D.RULES.start_res.duplicate()
 	wall = D.RULES.start_wall
 	max_wall = wall
 	wave = 0
@@ -254,7 +256,37 @@ func tower_stats(t: Dictionary) -> Dictionary:
 # ---------------------------------------------------------------- şehir
 
 func level_cap(id: String) -> int:
-	return D.MAX_BUILDING_LEVEL if id == "palace" else buildings.palace
+	return D.MAX_BUILDING_LEVEL if id == "palace" else mini(D.MAX_BUILDING_LEVEL, buildings.palace + D.FREE_LEVELS)
+
+
+# ---------------------------------------------------------------- kaynaklar
+
+func has_res(cost: Dictionary) -> bool:
+	for k in cost:
+		if res.get(k, 0) < cost[k]:
+			return false
+	return true
+
+
+func pay_res(cost: Dictionary) -> void:
+	for k in cost:
+		res[k] -= cost[k]
+
+
+# Eksik kaynakların adları ("odun, demir"), yeterse boş
+func missing_res(cost: Dictionary) -> String:
+	var miss := []
+	for k in D.RES_ORDER:
+		if cost.has(k) and res[k] < cost[k]:
+			miss.append(D.RES_NAMES[k])
+	return ", ".join(miss)
+
+
+func building_res(id: String) -> Dictionary:
+	if id != "palace":
+		return {}
+	var next: int = buildings.palace + 1
+	return D.PALACE_RES[next] if next < D.PALACE_RES.size() else {}
 
 
 # Kurulamıyorsa nedeni, kurulabiliyorsa boş sözlük (para ayrıca bakılır)
@@ -279,7 +311,7 @@ func building_cost(id: String) -> int:
 
 
 func can_upgrade_building(id: String) -> bool:
-	return is_active() and building_block(id).is_empty() and gold >= building_cost(id)
+	return is_active() and building_block(id).is_empty() and gold >= building_cost(id) and has_res(building_res(id))
 
 
 func upgrade_building(id: String) -> bool:
@@ -287,6 +319,7 @@ func upgrade_building(id: String) -> bool:
 		return false
 	var s: Array = D.BUILDINGS[id].slot
 	gold -= building_cost(id)
+	pay_res(building_res(id))
 	buildings[id] += 1
 	particles(s[0] + 0.5, s[1] + 0.5, "#e8d6a8", 14, 1.6, 0.05, 0.5)
 	text(s[0] + 0.5, s[1], "Seviye %d" % buildings[id], "#f2c94c")
@@ -330,7 +363,7 @@ func start_wave() -> void:
 	nation = w.nation
 	spawn_queue = []
 	for g in w.groups:
-		for i in g[1]:
+		for i in D.group_count(g[1], wave):
 			spawn_queue.append({"type": g[0], "gap": g[2], "nation": w.nation})
 	spawn_timer = D.RULES.first_spawn_delay + 1.2
 	banner("%s seferde!" % D.NATION_NAMES[w.nation], "#f3e6c8", 2.4)
@@ -340,10 +373,11 @@ func start_wave() -> void:
 
 func _spawn_enemy(type: String, nat: String) -> void:
 	var def: Dictionary = D.ENEMIES[type]
-	var hp := roundi(def.hp * pow(D.RULES.hp_growth, max(0, wave - 1)))
+	var hp := roundi(def.hp * D.difficulty(wave))
+	var spd: float = def.speed * (1.0 + D.RULES.speed_growth * max(0, wave - 1))
 	var p := point_at(0.0)
 	enemies.append({"id": _id(), "def": def, "type": type, "nation": nat, "hp": float(hp), "max_hp": float(hp),
-		"speed": def.speed, "armor": def.armor, "radius": def.radius, "dist": 0.0, "x": p.x, "y": p.y, "angle": p.z,
+		"speed": spd, "armor": def.armor, "radius": def.radius, "dist": 0.0, "x": p.x, "y": p.y, "angle": p.z,
 		"slow": 0.0, "slow_time": 0.0, "flash": 0.0, "dead": false, "blocker": null, "attack_cd": 0.3, "swing": 0.0})
 	if def.get("warning", false):
 		banner(D.WARNINGS[type], "#ff5b4d")
@@ -379,6 +413,8 @@ func _check_wave_end() -> bool:
 	var income := city_income()
 	gold += bonus + income.tax + income.endowment
 	wall = mini(max_wall, wall + income.repair)
+	for k in D.RES_ORDER:
+		res[k] += income[k]
 	phase = "build"
 	nation = D.WAVES[wave].nation
 	charge.active = 0.0
@@ -390,7 +426,9 @@ func _check_wave_end() -> bool:
 
 func city_income() -> Dictionary:
 	return {"tax": D.CITY.court_tax * buildings.court, "endowment": D.CITY.mosque_endowment * buildings.mosque,
-		"repair": D.CITY.hospital_repair * buildings.hospital}
+		"repair": D.CITY.hospital_repair * buildings.hospital,
+		"wood": D.CITY.palace_wood * buildings.palace, "iron": D.CITY.palace_iron * buildings.palace,
+		"food": D.CITY.kitchen_food * buildings.kitchen}
 
 
 func _reset_raid_timer() -> void:
@@ -591,13 +629,14 @@ func troop_stats(kind: String) -> Dictionary:
 
 func can_train(kind: String) -> bool:
 	var t := training_of(kind)
-	return is_active() and troop_count(kind) + t.queue < troop_cap(kind) and gold >= D.TROOPS[kind].cost
+	return is_active() and troop_count(kind) + t.queue < troop_cap(kind) and gold >= D.TROOPS[kind].cost and has_res(D.TROOPS[kind].res)
 
 
 func train_troop(kind: String) -> bool:
 	if not can_train(kind):
 		return false
 	gold -= D.TROOPS[kind].cost
+	pay_res(D.TROOPS[kind].res)
 	training_of(kind).queue += 1
 	sound("build")
 	return true
@@ -615,16 +654,18 @@ func _spawn_unit(kind: String) -> void:
 	var hp: float = troop_stats(kind).hp
 	units.append({"id": _id(), "kind": kind, "def": D.TROOPS[kind], "hp": hp, "max_hp": hp, "x": gate.x, "y": gate.y + 0.6,
 		"tx": gate.x, "ty": gate.y, "post": path_length, "ready": false, "engaged": 0, "cooldown": 0.0, "swing": 0.0,
-		"angle": -PI / 2, "moving": false, "dead": false, "flash": 0.0})
+		"angle": -PI / 2, "moving": false, "dead": false, "flash": 0.0, "healing": false})
 	sound("chant", {"voices": 4})
 
 
 func _assign_posts() -> void:
-	var melee := units.filter(func(u): return u.def.role == "melee")
+	var melee := units.filter(func(u): return u.def.role == "melee" and not u.healing)
+	# kapıya en yakın sırada Sofiler (arkadan can verir), en önde Yeniçeriler
+	var order := {"sufi": 0, "sipahi": 1, "janissary": 2}
 	melee.sort_custom(func(a, b):
 		if a.kind == b.kind:
 			return a.id < b.id
-		return a.kind == "janissary")
+		return order.get(a.kind, 1) < order.get(b.kind, 1))
 	for i in melee.size():
 		var u: Dictionary = melee[i]
 		var row := i / 2
@@ -638,7 +679,7 @@ func _assign_posts() -> void:
 	var spots: Array = D.MAP.archer_posts
 	var i := 0
 	for u in units:
-		if u.def.role == "ranged":
+		if u.def.role == "ranged" and not u.healing:
 			var s: Array = spots[i % spots.size()]
 			_set_target(u, s[0], s[1])
 			i += 1
@@ -655,10 +696,17 @@ func _walk(u: Dictionary, dt: float) -> void:
 	var gate_x: float = point_at(path_length).x
 	var tx: float = u.tx
 	var ty: float = u.ty
-	# önce kapıdan surların önüne çık, sonra yerine yürü
-	if u.y > wall_row - 0.35 + 0.05 and absf(u.x - gate_x) < 0.3 and absf(tx - gate_x) > 0.3:
+	# surların içi ile dışı arasında yalnızca kapıdan geçilir
+	var out_y: float = wall_row - 0.35
+	var in_y: float = wall_row + 1.1
+	var u_in: bool = u.y > wall_row + 0.5
+	var t_in: bool = ty > wall_row + 0.5
+	if u_in and not t_in:
 		tx = gate_x
-		ty = wall_row - 0.35
+		ty = in_y if absf(u.x - gate_x) > 0.08 else out_y
+	elif t_in and not u_in:
+		tx = gate_x
+		ty = out_y if absf(u.x - gate_x) > 0.08 or u.y < out_y - 0.05 else in_y
 	var dx: float = tx - u.x
 	var dy: float = ty - u.y
 	var d := sqrt(dx * dx + dy * dy)
@@ -760,8 +808,25 @@ func _update_army(dt: float) -> void:
 			e.blocker = null
 	units = units.filter(func(u): return not u.dead)
 
+	_send_wounded()
 	_assign_posts()
-	var regen: float = D.ARMY.hospital_regen * buildings.hospital if phase == "wave" else D.ARMY.regen_build
+	var regen: float = 0.0 if phase == "wave" else D.ARMY.regen_build
+	var ward := hospital_pos()
+	var ward_heal: float = D.CITY.ward_heal + D.CITY.ward_heal_level * buildings.hospital
+	for u in units:
+		if u.healing and u.ready:
+			u.hp = minf(u.max_hp, u.hp + ward_heal * dt)
+			if u.hp >= u.max_hp:
+				u.healing = false
+				u.ready = false
+				text(ward.x, ward.y - 0.4, "İyileşti", "#5cc48a")
+		elif u.def.has("heal") and u.ready and not u.healing:
+			for o in units:
+				if o != u and not o.healing and Vector2(o.x - u.x, o.y - u.y).length() <= u.def.heal_range:
+					if o.hp < o.max_hp:
+						o.hp = minf(o.max_hp, o.hp + u.def.heal * dt)
+						if randf() < dt * 1.5:
+							particles(o.x, o.y - 0.2, "#7fe0a0", 3, 0.6, 0.04, 0.6)
 	for u in units:
 		var max_hp: float = troop_stats(u.kind).hp
 		if max_hp != u.max_hp:
@@ -777,8 +842,29 @@ func _update_army(dt: float) -> void:
 			_walk(u, dt)
 		else:
 			u.moving = false
-		if u.ready:
+		if u.ready and not u.healing:
 			_attack(u, dt)
+
+
+func hospital_pos() -> Vector2:
+	var s: Array = D.BUILDINGS.hospital.slot
+	return Vector2(s[0] + 0.5, s[1] + 0.5)
+
+
+# Canı azalan asker, Darüşşifa kuruluysa savaşı bırakıp hastaneye yürür
+func _send_wounded() -> void:
+	if buildings.hospital <= 0:
+		return
+	var ward := hospital_pos()
+	for u in units:
+		if u.healing or u.hp >= u.max_hp * D.CITY.wounded_ratio:
+			continue
+		u.healing = true
+		for e in enemies:
+			if e.blocker == u:
+				e.blocker = null
+		_set_target(u, ward.x + randf_range(-0.3, 0.3), ward.y + randf_range(-0.2, 0.2))
+		text(u.x, u.y - 0.3, "Darüşşifa'ya", "#5cc48a")
 
 
 func _find_blocker(e: Dictionary, next_dist: float):
@@ -786,7 +872,7 @@ func _find_blocker(e: Dictionary, next_dist: float):
 		return null
 	var best = null
 	for u in units:
-		if not u.ready or u.def.block <= u.engaged or u.def.role != "melee":
+		if not u.ready or u.healing or u.def.block <= u.engaged or u.def.role != "melee":
 			continue
 		if e.dist > u.post or next_dist < u.post - D.ARMY.block_gap:
 			continue

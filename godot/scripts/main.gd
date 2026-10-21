@@ -728,7 +728,8 @@ func _debug_hooks() -> void:
 			world.apply_light(true)
 	if "--demo" in args:
 		game.gold = 5000
-		for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion"]:
+		game.res = {"wood": 500, "iron": 500, "food": 500}
+		for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion", "kitchen"]:
 			game.upgrade_building(id)
 		game.upgrade_building("palace")
 		game.upgrade_building("mosque")
@@ -738,7 +739,7 @@ func _debug_hooks() -> void:
 			game.selected = {"c": s[0], "r": s[1]}
 			game.build_tower(s[2])
 			game.upgrade_tower()
-		for k in ["janissary", "archer", "sipahi"]:
+		for k in D.TROOP_ORDER:
 			while game.can_train(k):
 				game.train_troop(k)
 		for k in game.training:

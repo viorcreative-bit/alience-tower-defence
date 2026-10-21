@@ -496,6 +496,16 @@ func troop(kind: String) -> Dictionary:
 			hr.root.add_child(ch.root)
 			info.horse = hr
 			info.char = ch
+		"sufi":
+			# beyaz tennure, uzun keçe sikke, elinde asa
+			var ch := character("mage", [], {"Body": Color("#efe9dc"), "Arm": Color("#efe9dc"), "Leg": Color("#d9cfba")}, 0.26)
+			var h := attach(ch, "head")
+			h.position = Vector3(0, 0.7, 0)
+			cyl(h, 0.36, 0.42, 1.05, Vector3(0, 0.45, 0), mat(Color("#8a6a48")), 12)
+			var hs := attach(ch, "handslot_r")
+			cyl(hs, 0.04, 0.04, 1.9, Vector3(0, 0.35, 0), mat(WOOD), 6)
+			root.add_child(ch.root)
+			info.char = ch
 	return info
 
 
@@ -659,6 +669,19 @@ func building(id: String, level: int) -> Node3D:
 			if level >= 3:
 				cyl(g, 0.08, 0.09, 0.5, Vector3(-0.3, 0.45, -0.18), mat(WHITEWASH), 10)
 				cyl(g, 0.0, 0.1, 0.2, Vector3(-0.3, 0.8, -0.18), mat(LEAD, 0.5, 0.3), 10)
+		"kitchen":
+			# Yemekhane: uzun yapı, ocak bacası, önünde kazanlar
+			ottoman_block(g, Vector3(0, 0, -0.08), Vector3(0.66, 0.3, 0.42), 0.0)
+			box(g, Vector3(0.1, 0.32, 0.1), Vector3(0.24, 0.5, -0.18), mat(STONE_DARK))
+			var pots := [Vector3(-0.18, 0, 0.28)]
+			if level >= 2:
+				pots.append(Vector3(0.05, 0, 0.3))
+			if level >= 3:
+				pots.append(Vector3(0.27, 0, 0.27))
+				dome(g, Vector3(-0.15, 0.36, -0.08), 0.1, 0.03)
+			for pp in pots:
+				cyl(g, 0.07, 0.05, 0.08, pp + Vector3(0, 0.04, 0), mat(STONE_DARK), 8)
+				cyl(g, 0.075, 0.06, 0.09, pp + Vector3(0, 0.12, 0), mat(IRON, 0.5, 0.6), 10)
 		"mosque":
 			box(g, Vector3(0.62, 0.06, 0.62), Vector3(0, 0.03, 0), mat(STONE_DARK))
 			box(g, Vector3(0.5, 0.3, 0.5), Vector3(0, 0.21, 0), mat(WHITEWASH))

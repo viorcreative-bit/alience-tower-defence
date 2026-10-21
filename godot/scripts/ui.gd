@@ -15,6 +15,7 @@ const C_GOLD := Color("#e0b24a")
 const C_COIN := Color("#f2c94c")
 const C_WALL := Color("#cfd6e0")
 const C_DANGER := Color("#ff5b4d")
+const C_RES := {"wood": Color("#d39a5e"), "iron": Color("#b9c3cf"), "food": Color("#a8d872")}
 
 signal action(name: String, arg: String)
 
@@ -27,6 +28,7 @@ var root: Control
 var lbl_gold: Label
 var lbl_wall: Label
 var lbl_wave: Label
+var lbl_res := {}
 var context: VBoxContainer
 var btn_sound: Button
 var btn_speed: Button
@@ -138,9 +140,12 @@ func _build_top() -> void:
 	top.add_theme_stylebox_override("panel", sb)
 	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	root.add_child(top)
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 0)
+	top.add_child(rows)
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 22)
-	top.add_child(hb)
+	rows.add_child(hb)
 	var title := VBoxContainer.new()
 	title.add_theme_constant_override("separation", -6)
 	title.add_child(_label("OSMANLI", 34, C_GOLD, font_title))
@@ -152,6 +157,18 @@ func _build_top() -> void:
 	lbl_gold = _stat(hb, "AKÇE", C_COIN)
 	lbl_wall = _stat(hb, "SUR", C_WALL)
 	lbl_wave = _stat(hb, "DALGA", C_TEXT)
+	# odun, demir, yemek: askerler ve Saray bunlarla yükselir
+	var rb := HBoxContainer.new()
+	rb.alignment = BoxContainer.ALIGNMENT_END
+	rb.add_theme_constant_override("separation", 6)
+	rows.add_child(rb)
+	for k in D.RES_ORDER:
+		var n := _label(String(D.RES_NAMES[k]).to_upper(), 15, C_DIM, font_bold)
+		rb.add_child(n)
+		var v := _label("0", 22, C_RES[k], font_bold)
+		v.custom_minimum_size = Vector2(52, 0)
+		rb.add_child(v)
+		lbl_res[k] = v
 
 
 func _stat(parent: Control, name: String, color: Color) -> Label:
@@ -340,6 +357,14 @@ func _render_tower(t: Dictionary) -> void:
 	row.add_child(sell)
 
 
+func res_text(cost: Dictionary) -> String:
+	var parts := []
+	for k in D.RES_ORDER:
+		if cost.has(k):
+			parts.append("%d %s" % [cost[k], D.RES_NAMES[k]])
+	return ", ".join(parts)
+
+
 func _render_building(id: String) -> void:
 	var level: int = game.buildings[id]
 	var names: Array = D.BUILDING_NAMES[id]
@@ -354,8 +379,11 @@ func _render_building(id: String) -> void:
 	var block := game.building_block(id)
 	var cost := game.building_cost(id)
 	var label := ""
+	var need := game.building_res(id)
 	if block.is_empty():
 		label = ("Yükselt · %d" if level else "Kur · %d") % cost
+		if need.size():
+			label += " · " + res_text(need)
 	elif block.kind == "max":
 		label = "En yüksek seviye"
 	elif block.kind == "requires":
@@ -368,7 +396,7 @@ func _render_building(id: String) -> void:
 	var up := Button.new()
 	up.text = label
 	up.disabled = not game.can_upgrade_building(id)
-	up.custom_minimum_size = Vector2(0, 60)
+	up.custom_minimum_size = Vector2(0, 84 if game.troop_of(id) != null and level > 0 else 60)
 	up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	up.pressed.connect(func(): action.emit("building", id))
 	row.add_child(up)
@@ -379,7 +407,7 @@ func _render_building(id: String) -> void:
 		var have := game.troop_count(kind)
 		var full: bool = have + tr.queue >= cap
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(0, 60)
+		b.custom_minimum_size = Vector2(0, 84)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.disabled = not game.can_train(kind)
 		b.pressed.connect(func(): action.emit("train", kind))
@@ -393,7 +421,11 @@ func _render_building(id: String) -> void:
 		var q := " · %d eğitimde" % tr.queue if tr.queue else ""
 		var c := _label("%s %d/%d%s" % [D.TROOP_NAMES[kind], have, cap, q], 18, C_DIM)
 		c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		for l in [a, c]:
+		var tres: Dictionary = D.TROOPS[kind].res
+		var miss := game.missing_res(tres)
+		var r := _label(("Eksik: " + miss) if miss != "" and not full else res_text(tres), 18, C_DANGER if miss != "" and not full else C_RES.food)
+		r.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		for l in [a, r, c]:
 			l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			v.add_child(l)
 		train_bar = ColorRect.new()
@@ -473,6 +505,8 @@ func refresh(sound_on: bool, light_name: String) -> void:
 	lbl_gold.text = str(game.gold)
 	lbl_wall.text = str(game.wall)
 	lbl_wave.text = "%d/%d" % [game.wave, game.total_waves]
+	for k in lbl_res:
+		lbl_res[k].text = str(game.res[k])
 	lbl_wall.add_theme_color_override("font_color", C_DANGER if game.wall <= 5 else C_WALL)
 
 	var sel = game.selected
@@ -486,7 +520,7 @@ func refresh(sound_on: bool, light_name: String) -> void:
 		if kind != null:
 			var tr := game.training_of(kind)
 			tkey = "%d,%d" % [game.troop_count(kind), tr.queue]
-	var key := "|".join([mode, game.phase, game.raid, game.wave, game.gold, sel.c if sel else -1, sel.r if sel else -1,
+	var key := "|".join([mode, game.phase, game.raid, game.wave, game.gold, str(game.res.values()), sel.c if sel else -1, sel.r if sel else -1,
 		tower.level if tower else 0, str(game.buildings.values()), tkey])
 	if key != last_key:
 		last_key = key
