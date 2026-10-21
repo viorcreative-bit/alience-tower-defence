@@ -11,7 +11,8 @@ import { createEnemyModel, updateEnemyModel, disposeEnemyModel } from './enemies
 import { createFx, updateFx, clearFx, drawOverlay } from './fx.js';
 import { buildCity, updateCity } from './city.js';
 import { createAmbient } from './ambient.js';
-import { createPatrolModel, updatePatrolModel, disposePatrolModel } from './units.js';
+import { tickFlags } from './flags.js';
+import { createUnitModel, updateUnitModel, disposeUnitModel } from './units.js';
 
 // 3D çizim katmanı. Oyun mantığı kare biriminde 2D çalışır; burada dünyaya çevrilir:
 // mantık (x, y) → dünya (x - cols/2, yükseklik, y - rows/2). Kamera güneyden eğik bakar.
@@ -81,7 +82,7 @@ export function createRenderer(canvas, overlay, map, path, quality = 'high') {
 
   const world = buildWorld(scene, map, path);
   const city = buildCity(scene, map);
-  const patrolModels = new Map();
+  const unitModels = new Map();
   const fx = createFx(scene);
   const ambient = createAmbient(scene);
   const bufferSize = new THREE.Vector2();
@@ -255,6 +256,7 @@ export function createRenderer(canvas, overlay, map, path, quality = 'high') {
   }
 
   function render(state, time) {
+    tickFlags(time);
     updateWorld(world, time, state);
     updateCity(city, state, time);
     const boosted = state.charge.active > 0;
@@ -274,11 +276,12 @@ export function createRenderer(canvas, overlay, map, path, quality = 'high') {
       enemyTops.set(e, m.userData.topY + 0.05);
     });
 
-    sync(patrolModels, state.patrols, createPatrolModel, (m, p) => updatePatrolModel(m, p, time), disposePatrolModel, (m, p) => {
-      const w = toWorld(p.x, p.y);
+    sync(unitModels, state.units, createUnitModel, (m, u) => updateUnitModel(m, u, time), disposeUnitModel, (m, u) => {
+      const w = toWorld(u.x, u.y);
       m.position.set(w.x, 0, w.z);
       // kapının içindeyken görünmez
-      m.visible = p.y < map.wallRow + 0.1;
+      m.visible = u.y < map.wallRow + 0.1;
+      enemyTops.set(u, m.userData.topY + 0.05);
     });
 
     sync(shotModels, state.projectiles, createProjectileModel, updateProjectileModel, null, (m, p) => {
@@ -346,11 +349,11 @@ export function createRenderer(canvas, overlay, map, path, quality = 'high') {
       disposeEnemyModel(m);
     }
     for (const m of shotModels.values()) scene.remove(m);
-    for (const m of patrolModels.values()) {
+    for (const m of unitModels.values()) {
       scene.remove(m);
-      disposePatrolModel(m);
+      disposeUnitModel(m);
     }
-    patrolModels.clear();
+    unitModels.clear();
     towerModels.clear();
     enemyModels.clear();
     shotModels.clear();

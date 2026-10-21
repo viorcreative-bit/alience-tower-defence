@@ -152,11 +152,14 @@ export function updateEnemyModel(model, e, time) {
   if (u.soldier) {
     model.rotation.y = Math.atan2(Math.sin(yaw), Math.cos(yaw) + FACE_CAMERA);
     // adım, kat edilen yola bağlı: yavaşlayınca ve hızlandırınca doğru görünür
-    u.soldier.pose('Walking_A', e.dist / u.stride + e.seed);
+    // önü kesilince durup kılıç sallar
+    if (e.blocker) u.soldier.pose(e.swing > 0 ? '1H_Melee_Attack_Chop' : 'Idle', e.swing > 0 ? (1 - e.swing) * 0.9 : time + e.seed);
+    else u.soldier.pose('Walking_A', e.dist / u.stride + e.seed);
   } else {
     // atlılar ve kuşatma araçları gittikleri yöne bakar (biraz kameraya)
     model.rotation.y = Math.atan2(Math.sin(yaw), Math.cos(yaw) + 0.25);
-    if (u.horse) animateHorse(u.horse, time, u.gallop * (1 - e.slow * 0.6), e.seed);
+    if (u.horse && !e.blocker) animateHorse(u.horse, time, u.gallop * (1 - e.slow * 0.6), e.seed);
+    if (u.rider) u.rider.root.rotation.x = (e.swing || 0) * 0.45;
     if (u.wheels) u.wheels.forEach((w) => (w.rotation.x = -e.dist * 3));
     if (u.flag) u.flag.rotation.y = Math.sin(time * 3 + e.seed) * 0.3;
     if (u.rolls) u.body.rotation.z = Math.sin(time * 6 + e.seed) * 0.02;

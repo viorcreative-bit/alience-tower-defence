@@ -28,7 +28,8 @@ export function resetState(mapId = DEFAULT_MAP) {
     buildings,
     towers: [],
     enemies: [],
-    patrols: [],
+    units: [], // yetiştirilen askerler (surların önünde)
+    training: {}, // asker türü → { queue, time }
     projectiles: [],
     effects: [],
     sounds: [], // ses sistemine giden olay kuyruğu

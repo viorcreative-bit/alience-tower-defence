@@ -16,7 +16,7 @@ Oyun önceden "Alien Wars Tower Defence" adlı uzaylı temalı bir kule savunmas
 
 ### Hikâye
 
-Devlet-i Aliyye'nin sınır kalesi. Surların içinde **Padişah** sarayında, halk evlerinde yaşar. Dünyanın dört bir yanından devletler sırayla sefere çıkar; her dalgada farklı bir devletin ordusu ordugâhından çıkıp yoldan kale kapısına yürür. Oyuncu yolun kenarına savunma kuleleri kurar, surların içinde şehri seviye seviye geliştirir (okul, kışla, okçu ocağı, hastane, sipahi ocağı, bilimhane, din işleri, mahkeme, cami), askerlerini devriyeye çıkarır. Kapıya ulaşan her düşman **Sur**'u yıpratır; Sur yıkılırsa kale düşer.
+Devlet-i Aliyye'nin sınır kalesi. Surların içinde **Padişah** sarayında, halk evlerinde yaşar. Dünyanın dört bir yanından devletler sırayla sefere çıkar; her dalgada farklı bir devletin ordusu ordugâhından çıkıp yoldan kale kapısına yürür. Oyuncu yolun kenarına savunma kuleleri kurar, surların içinde şehri seviye seviye geliştirir (okul, kışla, okçu ocağı, hastane, sipahi ocağı, bilimhane, din işleri, mahkeme, cami), Kışla, Okçu Ocağı ve Sipahi Ocağı'nda asker yetiştirir; askerler kapıdan çıkıp surların önünde düşmanı karşılar. Kapıya ulaşan her düşman **Sur**'u yıpratır; Sur yıkılırsa kale düşer.
 
 ### Ton ve saygı kuralları
 
@@ -128,10 +128,10 @@ Birlik türleri her devlette aynıdır; rengi, sancağı ve adı o dalganın dev
 |---|---|---|---|---|---|
 | **Saray** (Padişah) | (4,14) | başta 1 / 260 / 480 | — | Diğer binaların seviye sınırı = Saray seviyesi | 1 |
 | **Mektep** (okul) | (1,13) | 80 / 160 / 240 | — | Kule yükseltmeleri %10 ucuz | 1 |
-| **Kışla** (asker geliştirme) | (7,13) | 100 / 200 / 300 | — | 1: Tüfekçi Tabyası açılır. Her seviye 1 Yeniçeri devriyesi | 1 |
-| **Okçu Ocağı** (okçu geliştirme) | (0,14) | 70 / 150 / 240 | — | Okçu Kulesi hasarı +%20, menzil +0.15 | 1 |
-| **Darüşşifa** (hastane) | (2,15) | 90 / 180 / 270 | — | Dalga sonunda Sur +1 onarım | 1 |
-| **Sipahi Ocağı** (atlı birlik geliştirme) | (8,14) | 140 / 240 / 340 | Kışla 1 | Her seviye 1 Sipahi devriyesi (hızlı, uzun rota) | 1 |
+| **Kışla** (asker geliştirme) | (7,13) | 100 / 200 / 300 | — | 1: Tüfekçi Tabyası açılır. Seviye başına 2 Yeniçeri yetiştirilebilir | 1 |
+| **Okçu Ocağı** (okçu geliştirme) | (0,14) | 70 / 150 / 240 | — | Okçu Kulesi hasarı +%20, menzil +0.15. Seviye başına 2 okçu yetiştirilebilir | 1 |
+| **Darüşşifa** (hastane) | (2,15) | 90 / 180 / 270 | — | Dalga sonunda Sur +1 onarım; dalga sırasında askerler saniyede +2 can | 1 |
+| **Sipahi Ocağı** (atlı birlik geliştirme) | (8,14) | 140 / 240 / 340 | Kışla 1 | Seviye başına 1 Sipahi yetiştirilebilir (ikişer düşman durdurur) | 1 |
 | **Bilimhane** (bilim) | (1,15) | 120 / 220 / 320 | Mektep 1 | 1: Balyemez Topu açılır. Top hasarı +%15, zift yavaşlatma +%5 | 1 |
 | **Meşihat** (din işleri) | (6,15) | 110 / 210 / 310 | Cami 1 | 1: "Allah Allah!" hücum düğmesi açılır; seviye süreyi ve gücü artırır | 1 |
 | **Kadı Mahkemesi** | (5,13) | 100 / 200 / 300 | — | Dalga sonu +12 akçe vergi; ani baskınlar %20 seyrek | 1 |
@@ -141,14 +141,19 @@ Birlik türleri her devlette aynıdır; rengi, sancağı ve adı o dalganın dev
 ### "Allah Allah!" hücumu (Meşihat)
 
 - Düğmeye basınca askerler tekbir getirir (sentezlenmiş kalabalık sesi), ekranda altın şerit çıkar.
-- Süresince tüm kulelerin ve devriyelerin atış hızı artar: seviye 1/2/3 için +%30 / +%45 / +%60, süre 6 / 8 / 10 sn, bekleme 60 / 50 / 40 sn.
+- Süresince tüm kulelerin ve askerlerin atış hızı artar: seviye 1/2/3 için +%30 / +%45 / +%60, süre 6 / 8 / 10 sn, bekleme 60 / 50 / 40 sn.
 
-### Devriye (Kışla ve Sipahi Ocağı)
+### Asker yetiştirme ve sur önü savunması
 
-- Dalga başında askerler kale kapısından "Allah Allah!" diye çıkar, yolu geriye doğru yürüyerek devriye gezer, dönüp kapıya geri gelir, tekrar çıkar.
-- **Yeniçeri:** yürür (hız 0.9), devriye mesafesi kapıdan 7 kare, yakın dövüş hasarı 9 / 0.6 sn, menzil 0.55.
-- **Sipahi:** atlı (hız 1.8), devriye mesafesi 14 kare, hasar 14 / 0.7 sn, menzil 0.6.
-- Aşama 1'de devriyeler hasar almaz; Aşama 2'de canları ve Darüşşifa'da iyileşme eklenecek.
+- Kışla, Okçu Ocağı ve Sipahi Ocağı'nın bina kartında "Yetiştir · akçe" düğmesi vardır. Basınca akçe ödenir, asker sıraya girer, süresi dolunca kale kapısından "Allah Allah!" diye çıkıp surların önündeki yerine yürür. Askerler hem hazırlıkta hem dalga sırasında yetiştirilir.
+- Binanın her seviyesi asker sınırını artırır (Yeniçeri ve Okçu seviye başına 2, Sipahi 1). Seviye arttıkça askerlerin canı ve hasarı +%25 artar (var olanlar dahil).
+- **Yeniçeri:** 40 akçe, 4 sn; can 120, kılıç 10 / 0.7 sn, menzil 0.6; 1 düşmanı durdurur.
+- **Okçu:** 35 akçe, 3.5 sn; can 60, ok 8 / 0.9 sn, menzil 2.4; düşman durdurmaz, kapının iki yanında, surların önünde durur.
+- **Sipahi:** 70 akçe, 6 sn; can 200, mızrak 16 / 0.8 sn, menzil 0.65; aynı anda 2 düşmanı durdurur, sıranın önünde durur.
+- Yakın dövüşçüler kapıdan dışarıya doğru yolun üstünde ikişerli sıralanır. Önünü kestikleri düşman durur ve onlarla dövüşür. Koçbaşı ve kuşatma kulesi durdurulamaz.
+- Durdurulan düşman askere saniyede bir vurur (Piyade 6, Hafif Süvari 5, Şövalye 12, Atlı Okçu 5, Başkomutan 30; dalga başına +%8).
+- Askerler hazırlıkta saniyede 10 can, dalga sırasında Darüşşifa seviyesi × 2 can iyileşir (dövüşmüyorken). Ölen asker dağılır ("Şehit düştü"), yeniden yetiştirilmelidir.
+- Sayılar `src/data/buildings.js` (TROOPS, ARMY) ve `src/data/enemies.js` (melee, ENEMY_MELEE) içinde; mantık `src/systems/army.js`.
 
 ---
 
@@ -182,7 +187,7 @@ Her dalga farklı bir devletin ordusudur. Gruplar `[birlik, adet, aralık (sn)]`
 Hiçbir hazır kayıt ya da telifli eser kullanılmaz; **tüm sesler Web Audio API ile kodda üretilir** (çevrimdışı çalışır).
 
 - **Mehter müziği:** Mehter tarzında özgün bir marş: kös/davul (alçak sinüs + gürültü vuruşu), nakkare (kısa, tiz davul), zil (filtrelenmiş beyaz gürültü), zurna (testere dişi dalga + bant geçiren filtre + vibrato, Hicaz dizisinde ezgi). Dalga sırasında tam, hazırlıkta sadece davul ve hafif zurna.
-- **"Allah Allah!" sesi:** Formant sentezi ile çok sesli kalabalık tekbiri ("Al-lah Al-lah"): her ses farklı perdede, hafif zaman kaymalı. Dalga başında, devriye çıkışında ve hücum düğmesinde.
+- **"Allah Allah!" sesi:** Formant sentezi ile çok sesli kalabalık tekbiri ("Al-lah Al-lah"): her ses farklı perdede, hafif zaman kaymalı. Dalga başında, yetişen asker kapıdan çıkarken ve hücum düğmesinde.
 - **Efektler:** ok vınlaması, top gümlemesi, tüfek patlaması, zift fokurtusu, düşman dağılması, ani baskın borusu, bina kurma çekici.
 - Ses aç/kapa düğmesi; ayar `localStorage`'da saklanır. Tarayıcı kuralı gereği ses ilk dokunuşta başlar.
 - İleride oyuncu kendi kayıt dosyalarını `public/sounds/` içine koyarsa sentez yerine onlar çalınabilir (Aşama 2).
@@ -231,7 +236,7 @@ Hiçbir hazır kayıt ya da telifli eser kullanılmaz; **tüm sesler Web Audio A
 ## 11. Teknik yapı
 
 - Saf HTML + CSS + JS (ES modülleri), Three.js, Vite. Arayüz framework'ü yok; tamamen çevrimdışı.
-- Klasörler: `src/data` (denge: towers, enemies, waves, nations, buildings, maps, rules), `src/systems` (spawner, movement, combat, effects, city, patrol, raid), `src/render` (scene, post, models, soldiers, world, city, towers, enemies, units, fx, ambient, flags, background, palette), `src/audio` (sfx, mehter, chant), `src/ui`, `src/i18n/tr.js`.
+- Klasörler: `src/data` (denge: towers, enemies, waves, nations, buildings, maps, rules), `src/systems` (spawner, movement, combat, effects, city, army, raid), `src/render` (scene, post, models, soldiers, world, city, towers, enemies, units, fx, ambient, flags, background, palette), `src/audio` (sfx, mehter, chant), `src/ui`, `src/i18n/tr.js`.
 - **Kurallar:** Denge sayıları sadece `src/data/` içinde. Sabit adım ≤ 0.03 sn. Mantık kare biriminde 2D; 3D çeviri sadece çizimde. WebGL dpr ≤ 1.25 (yüksek) / 1 (düşük). Tek gölge ışığı. Durağan modeller `bakeStatic` ile malzeme başına tek ağa birleştirilir. Kayıt `localStorage` + try/catch. Kod İngilizce, oyuncu metinleri Türkçe ve `tr.js`'de.
 - Geliştirme sırasında `window.__game` ile durum incelenebilir.
 
@@ -247,14 +252,13 @@ Her aşamanın sonunda oyun oynanabilir olmalı.
 - 12 devletlik sefer listesi, her dalgada devlet adı ve rengi
 - Şehir: Saray ve 9 bina, seviye sınırı, arsaya dokunarak kurma/yükseltme, 3D bina modelleri, Padişah figürü
 - Kilitli kuleler (Balyemez ← Bilimhane, Tüfekçi ← Kışla)
-- Yeniçeri ve Sipahi devriyeleri
+- Binalarda asker yetiştirme (Yeniçeri, Okçu, Sipahi); askerler surların önünde düşmanı durdurur
 - Ani baskın
 - "Allah Allah!" hücumu
 - Sentezlenmiş mehter müziği, tekbir sesi ve efektler; ses düğmesi
 
 **Aşama 2 — Derinlik ve cila**
 - Başlangıç ekranı, duraklatma, kayıtlı oyuna devam (uzun oyun için otomatik kayıt)
-- Devriyelerin canı; düşmanlarla çarpışma ve durdurma; Darüşşifa iyileştirmesi
 - Düşman okçuları kulelere ateş eder, kuleler onarılır
 - İsteğe bağlı gerçek ses dosyası desteği
 
@@ -274,7 +278,7 @@ Her aşamanın sonunda oyun oynanabilir olmalı.
 - [ ] 4 kule kurulup 3. seviyeye yükseltilebiliyor ve satılabiliyor; kilitli kuleler bina kurulunca açılıyor
 - [ ] 12 dalga tabloya göre, her biri kendi devletinin adı ve rengiyle geliyor
 - [ ] Saray ve 9 bina kurulup yükseltilebiliyor; Saray seviye sınırı ve ön koşullar çalışıyor; etkiler oyuna yansıyor
-- [ ] Devriyeler dalga sırasında yolda gezip düşmanlara vuruyor
+- [ ] Binalarda asker yetiştiriliyor; askerler surların önünde düşmanı durdurup dövüşüyor, ölünce yeniden yetiştiriliyor
 - [ ] Ani baskın geliyor; "Allah Allah!" hücumu atış hızını artırıyor
 - [ ] Mehter müziği ve tekbir sesi çalıyor, ses düğmesiyle kapanıyor
 - [ ] Zafer/yenilgi ekranları ve "Yeniden Oyna" çalışıyor

@@ -1,12 +1,14 @@
 import { TR } from '../i18n/tr.js';
 import { TOWERS, TOWER_ORDER, UPGRADE, towerStats } from '../data/towers.js';
-import { BUILDINGS, MAX_BUILDING_LEVEL } from '../data/buildings.js';
+import { BUILDINGS, MAX_BUILDING_LEVEL, TROOPS, TROOP_ORDER } from '../data/buildings.js';
 import { sellValue } from '../data/rules.js';
 import { describeWave } from '../systems/spawner.js';
 import { towerAt } from '../state.js';
 import {
   buildTower, upgradeTower, sellTower, canBuild, canUpgrade, selectedTower, towerUpgradeCost, upgradeSelectedBuilding,
+  trainSelected,
 } from '../actions.js';
+import { troopCap, troopCount, training, canTrain } from '../systems/army.js';
 import { isTowerUnlocked, towerBonus, buildingBlock, buildingCost, canUpgradeBuilding, canCharge } from '../systems/city.js';
 
 // Alt bağlamsal panel ve kontrol düğmeleri.
@@ -20,6 +22,7 @@ export function createPanel(contextEl, controls, hooks) {
     else if (a === 'upgrade') upgradeTower();
     else if (a === 'sell') sellTower();
     else if (a === 'building') upgradeSelectedBuilding();
+    else if (a === 'train') trainSelected(btn.dataset.kind);
   });
   soundBtn.addEventListener('click', hooks.sound);
   speedBtn.addEventListener('click', hooks.speed);
@@ -87,14 +90,40 @@ export function createPanel(contextEl, controls, hooks) {
     else label = TR.needPalace(block.level);
     const now = level ? TR.buildingEffect[id](level) : TR.buildingNotBuilt;
     const next = level < MAX_BUILDING_LEVEL ? `<div class="ti-next">${TR.buildingNext}: ${TR.buildingEffect[id](level + 1)}</div>` : '';
+    const kind = troopOf(id);
+    let trainBtn = '';
+    if (kind && level) {
+      const cap = troopCap(state, kind);
+      const t = training(state, kind);
+      const have = troopCount(state, kind);
+      const full = have + t.queue >= cap;
+      const p = t.queue ? Math.min(1, t.time / TROOPS[kind].train) : 0;
+      trainBtn = `<button class="btn btn-train" data-action="train" data-kind="${kind}" ${canTrain(state, kind) ? '' : 'disabled'} style="--p:${p}">
+        <span class="bt-main">${full ? TR.trainFull : TR.train(TROOPS[kind].cost)}</span>
+        <span class="bt-sub">${TR.troopCount(TR.troops[kind].name, have, cap, t.queue)}</span>
+      </button>`;
+    }
     return `<div class="tower-info building-info" style="--c:${def.color}">
       <div class="ti-head"><span class="card-swatch"></span><b>${text.name}</b><span class="sub">${text.short}</span><span class="lvl">${TR.level(level, MAX_BUILDING_LEVEL)}</span></div>
       <div class="ti-feature">${now}</div>
       ${next}
       <div class="ti-actions">
         <button class="btn btn-upgrade" data-action="building" ${canUpgradeBuilding(state, id) ? '' : 'disabled'}>${label}</button>
+        ${trainBtn}
       </div>
     </div>`;
+  }
+
+  function troopKey(state, id) {
+    const kind = troopOf(id);
+    if (!kind) return '';
+    const t = training(state, kind);
+    return [troopCount(state, kind), t.queue, Math.floor((t.time / TROOPS[kind].train) * 20)].join(',');
+  }
+
+  // binanın yetiştirdiği asker türü
+  function troopOf(id) {
+    return TROOP_ORDER.find((k) => TROOPS[k].building === id) || null;
   }
 
   return function updatePanel(state, soundOn) {
@@ -105,6 +134,7 @@ export function createPanel(contextEl, controls, hooks) {
     const key = [
       mode, state.phase, state.raid, state.wave, state.gold, sel && sel.c, sel && sel.r, tower && tower.level,
       Object.values(state.buildings).join(','),
+      mode === 'building' ? troopKey(state, sel.building) : '',
     ].join('|');
     if (key !== lastKey) {
       lastKey = key;

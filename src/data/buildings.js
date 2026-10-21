@@ -40,8 +40,32 @@ export const CHARGE = {
   cooldown: [0, 60, 50, 40],
 };
 
-// Devriyeler. count: bina seviyesi kadar birlik.
-export const PATROLS = {
-  janissary: { id: 'janissary', building: 'barracks', speed: 0.9, reach: 7, damage: 9, rate: 0.6, range: 0.55, spacing: 0.6 },
-  sipahi: { id: 'sipahi', building: 'cavalry', speed: 1.8, reach: 14, damage: 14, rate: 0.7, range: 0.6, spacing: 0.8 },
+// Binalarda yetiştirilen askerler. Kapıdan çıkıp surların önündeki yerlerine dizilirler.
+// perLevel: bina seviyesi başına en fazla asker. block: aynı anda durdurabildiği düşman (0: durdurmaz).
+// train: yetiştirme süresi (sn). Can ve hasar bina seviyesiyle artar (ARMY.levelBonus).
+export const TROOPS = {
+  janissary: {
+    id: 'janissary', building: 'barracks', role: 'melee', cost: 40, train: 4, perLevel: 2,
+    hp: 120, damage: 10, rate: 0.7, range: 0.6, block: 1, speed: 1.3,
+  },
+  archer: {
+    id: 'archer', building: 'archery', role: 'ranged', cost: 35, train: 3.5, perLevel: 2,
+    hp: 60, damage: 8, rate: 0.9, range: 2.4, block: 0, speed: 1.2, projectileSpeed: 10,
+  },
+  sipahi: {
+    id: 'sipahi', building: 'cavalry', role: 'melee', cost: 70, train: 6, perLevel: 1,
+    hp: 200, damage: 16, rate: 0.8, range: 0.65, block: 2, speed: 2.2,
+  },
+};
+
+export const TROOP_ORDER = ['janissary', 'archer', 'sipahi'];
+
+export const ARMY = {
+  levelBonus: 0.25, // bina seviyesi başına can ve hasar artışı (1. seviyeden sonra)
+  regenBuild: 10, // hazırlık evresinde saniyede iyileşme
+  hospitalRegen: 2, // dalga sırasında Darüşşifa seviyesi başına saniyede iyileşme
+  blockGap: 0.38, // durdurulan düşmanın askere uzaklığı
+  firstPost: 0.75, // ilk yakın dövüş yerinin kapıya uzaklığı (yol boyunca)
+  postSpacing: 0.6, // sıralar arası
+  postSide: 0.24, // yan yana iki askerin yoldan sapması
 };

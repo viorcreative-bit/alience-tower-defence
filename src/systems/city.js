@@ -1,7 +1,6 @@
 import { BUILDINGS, MAX_BUILDING_LEVEL, CITY, CHARGE } from '../data/buildings.js';
 import { TOWERS } from '../data/towers.js';
 import { addBanner, addParticles, addText } from './effects.js';
-import { syncPatrols } from './patrol.js';
 import { TR } from '../i18n/tr.js';
 
 // Şehir binaları: kurma/yükseltme kuralları ve oyuna etkileri.
@@ -45,7 +44,6 @@ export function upgradeBuilding(state, id) {
       if (TOWERS[t].unlock === id) addBanner(state, TR.towerUnlocked(TR.towers[t].name), '#f2c94c');
     }
   }
-  syncPatrols(state);
   return true;
 }
 

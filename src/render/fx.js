@@ -138,6 +138,22 @@ export function drawOverlay(ctx, state, project, W, H, unit, enemyTops, lowHpRat
     ctx.fillRect(x, y, w * ratio, h);
   }
 
+  // askerlerin can çubuğu (yeşil)
+  for (const u of state.units) {
+    if (u.hp >= u.maxHp || u.y >= state.map.wallRow) continue;
+    const p = project(u.x, u.y, enemyTops.get(u) ?? 0.6);
+    if (!p) continue;
+    const ratio = Math.max(0, u.hp / u.maxHp);
+    const w = unit * 0.45;
+    const h = Math.max(3, unit * 0.07);
+    const x = p.x - w / 2;
+    const y = p.y - h - 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillStyle = ratio <= lowHpRatio ? '#ff5b4d' : '#5cc48a';
+    ctx.fillRect(x, y, w * ratio, h);
+  }
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (const e of state.effects) {

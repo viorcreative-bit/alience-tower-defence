@@ -2,6 +2,7 @@ import { TOWERS, UPGRADE, upgradeCost } from './data/towers.js';
 import { sellValue } from './data/rules.js';
 import { state, towerAt, buildingAt, isPathTile, isCityTile, inGrid } from './state.js';
 import { isTowerUnlocked, upgradeDiscount, upgradeBuilding } from './systems/city.js';
+import { trainTroop } from './systems/army.js';
 
 // Dokunulan kare: savaş alanında boş kare / kule, şehirde bina arsası.
 export function selectTile(c, r) {
@@ -90,6 +91,10 @@ export function sellTower() {
 export function upgradeSelectedBuilding() {
   const sel = state.selected;
   if (sel && sel.building) upgradeBuilding(state, sel.building);
+}
+
+export function trainSelected(kind) {
+  trainTroop(state, kind);
 }
 
 export function isActive() {

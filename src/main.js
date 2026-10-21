@@ -14,7 +14,7 @@ import { startWave, updateSpawner, checkWaveEnd } from './systems/spawner.js';
 import { updateMovement } from './systems/movement.js';
 import { updateTowers, updateProjectiles, cleanupEnemies } from './systems/combat.js';
 import { updateEffects } from './systems/effects.js';
-import { updatePatrols, syncPatrols } from './systems/patrol.js';
+import { updateArmy } from './systems/army.js';
 import { updateRaid } from './systems/raid.js';
 import { updateCharge, triggerCharge } from './systems/city.js';
 import { createRenderer } from './render/scene.js';
@@ -95,7 +95,6 @@ const updateOverlay = createOverlay(document.getElementById('overlay'), restart)
 
 function restart() {
   resetState();
-  syncPatrols(state);
   renderer.reset();
 }
 
@@ -107,8 +106,8 @@ function update(dt) {
   state.time += dt;
   updateRaid(state, dt);
   updateSpawner(state, dt);
+  updateArmy(state, dt);
   updateMovement(state, dt);
-  updatePatrols(state, dt);
   updateTowers(state, dt);
   updateProjectiles(state, dt);
   cleanupEnemies(state);
@@ -154,7 +153,6 @@ async function start() {
   await loadModels((k) => (loading.textContent = TR.loading(k)));
   loading.remove();
   resetState();
-  syncPatrols(state);
   renderer = createRenderer(canvas, overlayCanvas, state.map, state.path, getSettings().quality || defaultQuality());
   setQuality(renderer.quality, false);
   resize();

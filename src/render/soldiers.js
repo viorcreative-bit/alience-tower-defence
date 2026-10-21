@@ -4,7 +4,7 @@ import { createSoldier } from './models.js';
 import { G, mesh, addHat, buildHorse } from './figures.js';
 
 // KayKit iskeletli askerlerin görünüşleri: hangi gövde, hangi parçalar, hangi renk, hangi başlık.
-// Düşmanlar dalganın devlet renklerini alır; Osmanlı tarafı Yeniçeri, Sipahi ve Padişah.
+// Düşmanlar dalganın devlet renklerini alır; Osmanlı tarafı Yeniçeri, Okçu, Sipahi ve Padişah.
 // Ölçü: ayakta ~2.15 birim boy, yüz +z; çağıran taraf ölçekler.
 
 export const SOLDIER_HEIGHT = 2.15;
@@ -50,6 +50,23 @@ function musket() {
     g.add(mesh(G.cyl6, paintShared(PALETTE.woodDark), 0, 0.35, 0.1, 0.05, 1.5, 0.05));
     g.add(mesh(G.cyl6, paintShared(0x55585f), 0, 0.95, 0.1, 0.035, 0.6, 0.035));
     g.rotation.x = 1.2;
+    slot.add(g);
+  };
+}
+
+// Türk yayı: sol ele tutulan, uçları geriye kıvrık kısa yay ve kiriş
+const bowGeo = new THREE.TorusGeometry(0.42, 0.035, 5, 14, Math.PI * 0.9);
+function bow() {
+  return (root) => {
+    const slot = root.getObjectByName('handslotl');
+    const g = new THREE.Group();
+    const arc = new THREE.Mesh(bowGeo, paintShared(PALETTE.woodDark));
+    arc.rotation.z = Math.PI / 2 - Math.PI * 0.45;
+    arc.castShadow = true;
+    g.add(arc);
+    for (const s of [1, -1]) g.add(mesh(G.ball, paintShared(PALETTE.gold), 0, s * 0.41, -0.06, 0.05));
+    g.add(mesh(G.cyl6, paintShared(0xf4f1e8), 0, 0, -0.06, 0.008, 0.8, 0.008));
+    g.rotation.y = Math.PI / 2;
     slot.add(g);
   };
 }
@@ -113,6 +130,13 @@ const LOOKS = {
     dye: { Knight_Body: 0x3566b0 },
     hats: [hat('bork')],
     items: [musket()],
+  }),
+  archer: () => ({
+    base: 'knight',
+    show: [],
+    dye: { Knight_Body: 0x2f7a4a },
+    hats: [hat('turban', { metal: 0xe0b24a })],
+    items: [bow()],
   }),
   sipahi: () => ({
     base: 'knight',

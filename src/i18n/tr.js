@@ -1,9 +1,10 @@
 // Oyuncuya görünen tüm metinler.
-import { CITY, CHARGE } from '../data/buildings.js';
+import { CITY, CHARGE, TROOPS, ARMY } from '../data/buildings.js';
 
 const num = (v, digits = 1) =>
   Number(v).toLocaleString('tr-TR', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 const pct = (v) => `%${Math.round(v * 100)}`;
+const troopBoost = (l) => (l > 1 ? `, güç +${pct(ARMY.levelBonus * (l - 1))}` : '');
 
 export const TR = {
   num,
@@ -71,15 +72,24 @@ export const TR = {
   buildingEffect: {
     palace: (l) => `Binalar en fazla ${l}. seviyeye çıkabilir`,
     school: (l) => `Kule yükseltmeleri ${pct(CITY.schoolDiscount * l)} ucuz`,
-    barracks: (l) => `Tüfekçi Tabyası açık · ${l} Yeniçeri devriyesi`,
-    archery: (l) => `Okçu hasarı +${pct(CITY.archeryDamage * l)}, menzil +${num(CITY.archeryRange * l, 2)}`,
-    hospital: (l) => `Her dalga sonunda Sur +${CITY.hospitalRepair * l}`,
-    cavalry: (l) => `${l} Sipahi devriyesi`,
+    barracks: (l) => `Tüfekçi Tabyası açık · en fazla ${TROOPS.janissary.perLevel * l} Yeniçeri${troopBoost(l)}`,
+    archery: (l) => `Okçu Kulesi hasarı +${pct(CITY.archeryDamage * l)}, menzil +${num(CITY.archeryRange * l, 2)} · en fazla ${TROOPS.archer.perLevel * l} okçu`,
+    hospital: (l) => `Her dalga sonunda Sur +${CITY.hospitalRepair * l} · savaşta askerler sn'de +${ARMY.hospitalRegen * l} can`,
+    cavalry: (l) => `En fazla ${TROOPS.sipahi.perLevel * l} Sipahi (ikişer düşman durdurur)${troopBoost(l)}`,
     science: (l) => `Balyemez açık · top hasarı +${pct(CITY.scienceCannonDamage * l)}, zift +${pct(CITY.scienceTarSlow * l)}`,
     religion: (l) => `"Allah Allah!" hücumu: atış hızı +${pct(CHARGE.rateBoost[l])}, ${CHARGE.duration[l]} sn`,
     court: (l) => `Dalga sonu +${CITY.courtTax * l} akçe vergi, baskınlar seyrek`,
     mosque: (l) => `Dalga sonu +${CITY.mosqueEndowment * l} akçe vakıf geliri`,
   },
+  troops: {
+    janissary: { name: 'Yeniçeri', plural: 'Yeniçeriler' },
+    archer: { name: 'Okçu', plural: 'Okçular' },
+    sipahi: { name: 'Sipahi', plural: 'Sipahiler' },
+  },
+  train: (cost) => `Yetiştir · ${cost}`,
+  trainFull: 'Ocak dolu',
+  troopCount: (name, have, cap, queue) => `${name} ${have}/${cap}${queue ? ` · ${queue} eğitimde` : ''}`,
+  troopFell: 'Şehit düştü',
   buildingNotBuilt: 'Henüz kurulmadı',
   buildingNext: 'Sonraki',
   buildAction: (cost) => `Kur · ${cost}`,
@@ -97,7 +107,7 @@ export const TR = {
   maxLevel: 'En yüksek seviye',
   sell: (value) => `Sat +${value}`,
 
-  hintIdle: 'Yolun dışındaki boş kareye dokunup kule kur. Surların içindeki arsalara dokunup şehri geliştir.',
+  hintIdle: 'Yolun dışındaki boş kareye dokunup kule kur. Surların içindeki arsalara dokunup şehri geliştir; Kışla, Okçu Ocağı ve Sipahi Ocağı surların önüne asker yetiştirir.',
   hintWave: 'Dalga sürerken de kule ve bina kurabilirsin.',
   hintRaid: 'Ani baskın! Akıncıları kapıya varmadan durdur.',
   nextWave: (nation, list) => `Sıradaki sefer: ${nation} — ${list}.`,

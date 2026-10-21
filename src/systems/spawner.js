@@ -3,7 +3,6 @@ import { WAVES } from '../data/waves.js';
 import { RULES, RAID, waveBonus } from '../data/rules.js';
 import { pointAt } from './movement.js';
 import { addBanner } from './effects.js';
-import { deployPatrols } from './patrol.js';
 import { cityIncome } from './city.js';
 import { resetRaidTimer } from './raid.js';
 import { TR } from '../i18n/tr.js';
@@ -22,9 +21,8 @@ export function startWave(state) {
   state.spawnTimer = RULES.firstSpawnDelay + 1.2;
   addBanner(state, TR.waveBanner(TR.nations[wave.nation]), '#f3e6c8', 2.4);
   state.sounds.push({ id: 'waveStart' });
-  // askerler kapıdan tekbirle çıkar
-  const out = deployPatrols(state);
-  state.sounds.push({ id: 'chant', voices: out ? 12 : 8, delay: 0.9 });
+  // surların önündeki askerler tekbirle karşılık verir
+  state.sounds.push({ id: 'chant', voices: state.units.length ? 12 : 8, delay: 0.9 });
 }
 
 export function spawnEnemy(state, type, nation) {
