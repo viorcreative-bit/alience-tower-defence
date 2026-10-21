@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { createBackground, createGrassTile } from './background.js';
-import { PALETTE, toon, noOutline } from './palette.js';
+import { PALETTE, toon, toonShared, noOutline, ottomanFlagTexture, nationFlagTexture } from './palette.js';
+import { NATIONS } from '../data/nations.js';
 
-// Zemin, süsler, portal ve kale. Dünya birimi = 1 kare;
+// Zemin, süsler, düşman ordugâhı ve surlar. Dünya birimi = 1 kare;
 // mantıktaki (x, y) → dünyada (x - cols/2, y - rows/2). Zemin düz, y = 0.
 export const GROUND_H = 0;
 const TEX_TILE = 64;
@@ -94,35 +95,12 @@ function rocks(rand, size) {
   return g;
 }
 
-// Ahşap çit
-const woodMat = toon(0x9a6436);
-const postGeo = new THREE.CylinderGeometry(0.05, 0.06, 0.4, 6);
-const railGeo = new THREE.BoxGeometry(1, 0.06, 0.05);
-function fence(length) {
-  const g = new THREE.Group();
-  const posts = Math.max(2, Math.round(length / 0.6) + 1);
-  for (let i = 0; i < posts; i++) {
-    const p = new THREE.Mesh(postGeo, woodMat);
-    p.position.set(-length / 2 + (i * length) / (posts - 1), 0.2, 0);
-    p.castShadow = true;
-    g.add(p);
-  }
-  for (const y of [0.15, 0.3]) {
-    const r = new THREE.Mesh(railGeo, woodMat);
-    r.scale.x = length;
-    r.position.y = y;
-    r.castShadow = true;
-    g.add(r);
-  }
-  return g;
-}
-
 function buildDecor(map, path, rand) {
   const group = new THREE.Group();
   const W = map.cols / 2;
   const D = map.rows / 2;
   // tahtanın kenarı boyunca çalılar ve kayalar
-  for (let i = 0; i < 46; i++) {
+  for (let i = 0; i < 50; i++) {
     const side = rand() < 0.5 ? -1 : 1;
     const x = side * (W + 0.35 + rand() * 3);
     const z = -D - 2 + rand() * (2 * D + 4);
@@ -130,158 +108,164 @@ function buildDecor(map, path, rand) {
     d.position.set(x, 0, z);
     group.add(d);
   }
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 10; i++) {
     const x = -W + rand() * 2 * W;
+    if (Math.abs(x + W - 1.5) < 1.6) continue; // ordugâhın önü boş
     const z = -D - 0.6 - rand() * 2.5;
     const d = rand() < 0.6 ? bush(rand, 0.3 + rand() * 0.2) : rocks(rand, 0.25);
     d.position.set(x, 0, z);
     group.add(d);
   }
-  // tahta üstünde, kare köşelerinde küçük taş öbekleri (kulelere değmez)
+  // savaş alanında, kare köşelerinde küçük taş öbekleri (kulelere değmez)
   for (let i = 0; i < 18; i++) {
     const c = Math.floor(rand() * map.cols);
-    const r = Math.floor(rand() * map.rows);
-    const key = r * map.cols + c;
-    if (path.tiles.has(key) || path.blocked.has(key)) continue;
+    const r = Math.floor(rand() * (map.wallRow - 1));
+    if (path.tiles.has(r * map.cols + c)) continue;
     const d = rocks(rand, 0.07);
     d.position.set(c + (rand() < 0.5 ? 0.1 : 0.9) - W, 0, r + (rand() < 0.5 ? 0.1 : 0.9) - D);
     group.add(d);
   }
-  // alt kenarda çitler
-  for (const [x, len] of [[-3.1, 2.4], [3.1, 2.4]]) {
-    const f = fence(len);
-    f.position.set(x, 0, D + 0.35);
-    group.add(f);
-  }
   return group;
 }
 
-function swirlTexture() {
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = 128;
-  const g = cv.getContext('2d');
-  const grad = g.createRadialGradient(64, 64, 4, 64, 64, 64);
-  grad.addColorStop(0, '#f6e6ff');
-  grad.addColorStop(0.3, '#a64dff');
-  grad.addColorStop(0.75, '#3a1266');
-  grad.addColorStop(1, '#1a0833');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 128, 128);
-  g.lineCap = 'round';
-  for (let i = 0; i < 5; i++) {
-    g.strokeStyle = i % 2 ? 'rgba(124,255,107,0.85)' : 'rgba(220,170,255,0.85)';
-    g.lineWidth = 5 - i * 0.6;
-    g.beginPath();
-    for (let a = 0; a < Math.PI * 3; a += 0.1) {
-      const rr = 6 + a * 5.5;
-      const x = 64 + Math.cos(a + (i * Math.PI * 2) / 5) * rr;
-      const y = 64 + Math.sin(a + (i * Math.PI * 2) / 5) * rr;
-      a ? g.lineTo(x, y) : g.moveTo(x, y);
-    }
-    g.stroke();
-  }
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-// Portal: taş çerçeveli, dönen mor-yeşil solucan deliği.
-function buildPortal() {
+// Düşman ordugâhı: devlet renginde çadırlar ve sancak. Dalga değişince renk değişir.
+const tentGeo = new THREE.ConeGeometry(1, 1, 8);
+const poleGeo = new THREE.CylinderGeometry(0.03, 0.03, 1, 6);
+const flagGeo = new THREE.PlaneGeometry(1, 1);
+function buildCamp() {
   const group = new THREE.Group();
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.52, 32), noOutline(new THREE.MeshBasicMaterial({ map: swirlTexture() })));
-  group.add(disc);
-  const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.57, 0.09, 10, 40), toon(0x6b3fa0, { emissive: 0x8a3cff, emissiveIntensity: 0.6 }));
-  group.add(ringA);
-  const ringB = new THREE.Mesh(
-    new THREE.TorusGeometry(0.7, 0.03, 6, 40, Math.PI * 1.3),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0x7cff6b })),
-  );
-  group.add(ringB);
-  const stone = toon(0x8d8a96);
-  for (const s of [-1, 1]) {
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.4, 0.3), stone);
-    pillar.position.set(s * 0.78, -0.05, 0);
-    pillar.castShadow = true;
-    group.add(pillar);
-    const cap = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), toon(0x7cff6b, { emissive: 0x3dbf2f, emissiveIntensity: 0.8 }));
-    cap.position.set(s * 0.78, 0.75, 0);
-    group.add(cap);
+  const tentMat = toon(0xffffff);
+  const trimMat = toon(0xffffff);
+  const tents = [
+    [-1.3, -0.9, 0.55], [1.2, -1.0, 0.5], [0, -1.6, 0.7], [-2.4, -1.5, 0.45], [2.3, -1.6, 0.45],
+  ];
+  for (const [x, z, s] of tents) {
+    const t = new THREE.Mesh(tentGeo, tentMat);
+    t.position.set(x, s * 0.5, z);
+    t.scale.set(s, s, s);
+    t.castShadow = true;
+    group.add(t);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.12, 8), trimMat);
+    band.position.set(x, s * 0.12, z);
+    band.scale.set(s * 0.92, s, s * 0.92);
+    group.add(band);
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), toonShared(PALETTE.gold));
+    tip.position.set(x, s + 0.02, z);
+    group.add(tip);
   }
-  const light = new THREE.PointLight(0xb45aff, 2.5, 4, 1.5);
-  light.position.set(0, 0, 0.5);
+  const pole = new THREE.Mesh(poleGeo, toonShared(PALETTE.woodDark));
+  pole.position.set(0.75, 0.9, 0.1);
+  pole.scale.y = 1.8;
+  pole.castShadow = true;
+  group.add(pole);
+  const flagMat = noOutline(new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }));
+  const flag = new THREE.Mesh(flagGeo, flagMat);
+  flag.scale.set(0.7, 0.46, 1);
+  flag.position.set(1.1, 1.55, 0.1);
+  group.add(flag);
+  // ateş
+  const fire = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.25, 8), noOutline(new THREE.MeshBasicMaterial({ color: 0xffa23a })));
+  fire.position.set(-0.5, 0.12, -0.2);
+  group.add(fire);
+  const light = new THREE.PointLight(0xffa040, 1.2, 3, 1.5);
+  light.position.set(-0.5, 0.5, -0.2);
   group.add(light);
-  group.userData = { disc, ringB, light };
+  group.userData = { tentMat, trimMat, flagMat, flag, fire, light, nation: null, textures: new Map() };
   return group;
 }
 
-// Nova Üssü kalesi: surlar, iki yan kule, enerji kubbesi ve kalkan balonu.
-function buildFortress() {
+function setCampNation(camp, nation) {
+  const u = camp.userData;
+  if (u.nation === nation) return;
+  u.nation = nation;
+  const n = NATIONS[nation];
+  u.tentMat.color.set(n.primary).lerp(new THREE.Color(0xffffff), 0.25);
+  u.trimMat.color.set(n.secondary);
+  let tex = u.textures.get(nation);
+  if (!tex) {
+    tex = nationFlagTexture(n.primary, n.secondary);
+    u.textures.set(nation, tex);
+  }
+  u.flagMat.map = tex;
+  u.flagMat.needsUpdate = true;
+}
+
+// Surlar: kesme taş, mazgallı; ortada kapı ve iki burç, köşelerde yuvarlak kuleler,
+// kurşun külahlar, burçlarda Osmanlı sancakları.
+const box = new THREE.BoxGeometry(1, 1, 1);
+const cyl = new THREE.CylinderGeometry(1, 1, 1, 16);
+const cone = new THREE.ConeGeometry(1, 1, 16);
+function buildWalls(map) {
   const g = new THREE.Group();
-  const wall = toon(0xc9ced9);
-  const trim = toon(0x4a5578);
-  const roof = toon(0x3d7bd9);
-  const add = (geo, mat, x, y, z) => {
+  const stone = toonShared(PALETTE.stone);
+  const stoneDark = toonShared(PALETTE.stoneDark);
+  const lead = toonShared(PALETTE.lead);
+  const add = (geo, mat, x, y, z, sx, sy, sz) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
+    m.scale.set(sx, sy, sz);
     m.castShadow = true;
     m.receiveShadow = true;
     g.add(m);
     return m;
   };
-  add(new THREE.BoxGeometry(3.0, 0.75, 0.5), wall, 0, 0.375, 0);
-  add(new THREE.BoxGeometry(3.08, 0.08, 0.56), trim, 0, 0.76, 0);
-  for (let i = -5; i <= 5; i++) {
-    if (Math.abs(i) < 2) continue;
-    add(new THREE.BoxGeometry(0.17, 0.16, 0.5), wall, i * 0.26, 0.88, 0);
-  }
-  const winMat = noOutline(new THREE.MeshBasicMaterial({ color: 0x8ee6ff }));
-  for (const i of [-4, -3, 3, 4]) {
-    const w = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.12), winMat);
-    w.position.set(i * 0.26, 0.5, 0.252);
-    g.add(w);
-  }
-  add(new THREE.BoxGeometry(0.66, 0.62, 0.54), trim, 0, 0.31, 0.01);
-  const field = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.5, 0.5),
-    noOutline(new THREE.MeshBasicMaterial({ color: 0x4da3ff, transparent: true, opacity: 0.8 })),
-  );
-  field.position.set(0, 0.27, 0.285);
-  g.add(field);
-
-  const blinkers = [];
+  const W = map.cols / 2;
+  const H = 0.85;
+  const T = 0.5;
+  const gateHalf = 0.5;
+  // iki sur parçası
   for (const s of [-1, 1]) {
-    add(new THREE.CylinderGeometry(0.28, 0.31, 1.3, 12), wall, s * 1.28, 0.65, 0);
-    add(new THREE.CylinderGeometry(0.34, 0.34, 0.1, 12), trim, s * 1.28, 1.33, 0);
-    add(new THREE.ConeGeometry(0.36, 0.5, 12), roof, s * 1.28, 1.63, 0);
-    for (const y of [0.55, 0.9]) {
-      const w = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.12), winMat);
-      w.position.set(s * 1.28, y, 0.3);
-      g.add(w);
-    }
-    const blink = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), noOutline(new THREE.MeshBasicMaterial({ color: 0xff4d5e })));
-    blink.position.set(s * 1.28, 1.93, 0);
-    g.add(blink);
-    blinkers.push(blink);
+    const len = W - gateHalf;
+    const cx = s * (gateHalf + len / 2);
+    add(box, stone, cx, H / 2, 0, len, H, T);
+    add(box, stoneDark, cx, H + 0.03, 0, len, 0.06, T + 0.06);
+    // mazgallar
+    for (let x = gateHalf + 0.15; x < W - 0.1; x += 0.3) add(box, stone, s * x, H + 0.13, T * 0.36, 0.16, 0.16, 0.12);
+    // taş sıraları
+    for (const y of [0.25, 0.55]) add(box, stoneDark, cx, y, T / 2 + 0.005, len, 0.025, 0.01);
   }
-
-  add(new THREE.CylinderGeometry(0.64, 0.68, 0.12, 20), trim, 0, 0.84, 0);
-  const domeMat = noOutline(toon(0x5ab8ff, { emissive: 0x2a7fff, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 }));
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.56, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), domeMat);
-  dome.position.set(0, 0.9, 0);
-  g.add(dome);
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), noOutline(new THREE.MeshBasicMaterial({ color: 0xe0f6ff })));
-  core.position.set(0, 1.12, 0);
-  g.add(core);
-  const shieldMat = noOutline(new THREE.MeshBasicMaterial({
-    color: 0x6ec1ff, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false,
-  }));
-  const shield = new THREE.Mesh(new THREE.SphereGeometry(1.85, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), shieldMat);
-  g.add(shield);
-  const light = new THREE.PointLight(0x4da3ff, 2, 4, 1.5);
-  light.position.set(0, 1.3, 0.6);
-  g.add(light);
-
-  g.userData = { domeMat, core, shieldMat, shield, light, blinkers, field };
+  // kapı burçları
+  const flags = [];
+  const flagMat = noOutline(new THREE.MeshLambertMaterial({ map: ottomanFlagTexture(), side: THREE.DoubleSide }));
+  const tower = (x, r, h) => {
+    add(cyl, stone, x, h / 2, 0, r, h, r);
+    add(cyl, stoneDark, x, h + 0.03, 0, r + 0.05, 0.06, r + 0.05);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      add(box, stone, x + Math.cos(a) * r * 0.9, h + 0.14, Math.sin(a) * r * 0.9, 0.12, 0.16, 0.12);
+    }
+    add(cone, lead, x, h + 0.55, 0, r * 0.95, 0.8, r * 0.95);
+    add(new THREE.SphereGeometry(0.04, 8, 6), toonShared(PALETTE.gold), x, h + 1.0, 0, 1, 1, 1);
+    add(new THREE.CylinderGeometry(0.015, 0.015, 1, 6), toonShared(PALETTE.woodDark), x, h + 1.25, 0, 1, 0.5, 1);
+    const f = new THREE.Mesh(flagGeo, flagMat);
+    f.scale.set(0.42, 0.27, 1);
+    f.position.set(x + 0.21, h + 1.35, 0);
+    g.add(f);
+    flags.push(f);
+  };
+  tower(-0.68, 0.3, 1.3);
+  tower(0.68, 0.3, 1.3);
+  tower(-W + 0.1, 0.36, 1.1);
+  tower(W - 0.1, 0.36, 1.1);
+  // kapı kemeri ve ahşap kanatlar
+  add(box, stone, 0, H + 0.12, 0, gateHalf * 2 + 0.2, 0.34, T);
+  add(box, stoneDark, 0, H - 0.08, T / 2 + 0.01, gateHalf * 2, 0.06, 0.02);
+  const doorMat = toonShared(PALETTE.woodDark);
+  const doors = [];
+  for (const s of [-1, 1]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(s * 0.42, 0, -0.18);
+    const d = new THREE.Mesh(box, doorMat);
+    d.scale.set(0.42, 0.72, 0.05);
+    d.position.set(-s * 0.21, 0.36, 0);
+    d.castShadow = true;
+    pivot.add(d);
+    g.add(pivot);
+    doors.push({ pivot, side: s });
+  }
+  // kapının üstünde tuğra yerine altın hilal levha
+  add(new THREE.TorusGeometry(0.08, 0.02, 6, 16, Math.PI * 1.5), toonShared(PALETTE.gold), 0, H + 0.15, T / 2 + 0.01, 1, 1, 1).rotation.z = 0.8;
+  g.userData = { flags, doors };
   return g;
 }
 
@@ -292,32 +276,31 @@ export function buildWorld(scene, map, path) {
   root.add(buildDecor(map, path, rand));
 
   const start = path.points[0];
-  const end = path.points[path.points.length - 1];
-  const portal = buildPortal();
-  portal.position.set(start.x - map.cols / 2, 0.7, Math.max(start.y, 0) - map.rows / 2 - 0.15);
-  root.add(portal);
+  const camp = buildCamp();
+  camp.position.set(start.x - map.cols / 2, 0, -map.rows / 2 - 0.2);
+  root.add(camp);
 
-  const fortress = buildFortress();
-  fortress.position.set(end.x - map.cols / 2, 0, map.rows / 2 - 0.45);
-  root.add(fortress);
+  const walls = buildWalls(map);
+  walls.position.set(0, 0, map.wallRow + 0.5 - map.rows / 2);
+  root.add(walls);
 
   scene.add(root);
-  return { root, portal, fortress };
+  return { root, camp, walls };
 }
 
-export function updateWorld(world, time, shieldRatio) {
-  const p = world.portal.userData;
-  p.disc.rotation.z = -time * 1.5;
-  p.ringB.rotation.z = time * 2.2;
-  p.light.intensity = 2.2 + Math.sin(time * 4) * 0.5;
+export function updateWorld(world, time, state) {
+  setCampNation(world.camp, state.nation);
+  const c = world.camp.userData;
+  c.flag.rotation.y = Math.sin(time * 2.5) * 0.25;
+  c.fire.scale.y = 0.8 + 0.3 * Math.sin(time * 17);
+  c.light.intensity = 1 + 0.3 * Math.sin(time * 11);
 
-  const f = world.fortress.userData;
-  const power = Math.max(0.1, shieldRatio) * (0.85 + 0.15 * Math.sin(time * 3));
-  f.domeMat.emissiveIntensity = 0.2 + power * 0.9;
-  f.light.intensity = 0.4 + power * 2;
-  f.core.scale.setScalar(0.6 + power * 0.5);
-  f.shield.visible = shieldRatio > 0;
-  f.shieldMat.opacity = 0.05 + 0.12 * shieldRatio;
-  f.field.material.opacity = 0.35 + 0.5 * power;
-  f.blinkers.forEach((b, i) => (b.visible = Math.sin(time * 4 + i) > 0.2));
+  const w = world.walls.userData;
+  w.flags.forEach((f, i) => (f.rotation.y = Math.sin(time * 2.4 + i) * 0.3));
+  // dalga sırasında kapı açılır (devriyeler çıkar), hazırlıkta kapanır
+  const open = state.phase === 'wave' && state.patrols.length > 0;
+  for (const d of w.doors) {
+    const target = open ? d.side * 1.4 : 0;
+    d.pivot.rotation.y += (target - d.pivot.rotation.y) * 0.08;
+  }
 }

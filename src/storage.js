@@ -1,5 +1,5 @@
 // localStorage sarmalayıcısı; her erişim try/catch içinde.
-const KEY = 'alienwars.save.v1';
+const KEY = 'osmanli-kale.save.v1';
 
 function read() {
   try {

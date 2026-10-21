@@ -113,7 +113,7 @@ Birlik türleri her devlette aynıdır; rengi, sancağı ve adı o dalganın dev
 | **Kuşatma Kulesi** | 1100 | 0.5 | 3 | 70 | 6 | 0.38 | Uyarı: "Kuşatma kulesi geliyor!" |
 | **Başkomutan** | 2400 | 0.42 | 6 | 150 | 10 | 0.42 | Atlı komutan; uyarı şeridi |
 
-- Can büyümesi: `round(temelCan × 1.18^(dalgaNo − 1))`
+- Can büyümesi: `round(temelCan × 1.2^(dalgaNo − 1))`
 - Zırh: her vuruştan zırh kadar düşülür, en az 1 geçer. Tüfekçi zırhı deler.
 
 ---

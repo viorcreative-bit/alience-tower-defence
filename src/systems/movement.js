@@ -75,9 +75,13 @@ export function updateMovement(state, dt) {
 
     if (e.dist >= state.path.length) {
       e.dead = true;
-      state.shield = Math.max(0, state.shield - e.def.damage);
+      state.wall = Math.max(0, state.wall - e.def.damage);
       shakeScreen(state, RULES.shakeTime);
-      if (state.shield <= 0) state.phase = 'lost';
+      state.sounds.push({ id: 'wallHit' });
+      if (state.wall <= 0) {
+        state.phase = 'lost';
+        state.sounds.push({ id: 'defeat' });
+      }
     }
   }
 }

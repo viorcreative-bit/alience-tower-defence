@@ -19,8 +19,9 @@ export function createOverlay(root, onRestart) {
     const won = phase === 'won';
     root.innerHTML = `
       <div class="overlay-box ${won ? 'won' : 'lost'}">
+        <div class="crest"></div>
         <h2>${won ? TR.wonTitle : TR.lostTitle}</h2>
-        <p>${won ? TR.wonText(state.totalWaves, state.shield) : TR.lostText(state.wave)}</p>
+        <p>${won ? TR.wonText(state.totalWaves, state.wall) : TR.lostText(state.wave)}</p>
         <p class="best">${TR.bestWave(getBestWave())}</p>
         <button class="btn btn-primary" data-action="restart">${TR.playAgain}</button>
       </div>`;
