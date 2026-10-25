@@ -71,7 +71,51 @@ const ENEMIES := {
 	"ram": {"hp": 260, "speed": 0.6, "armor": 6, "reward": 20, "damage": 3, "radius": 0.32, "melee": 0, "siege": true},
 	"siegeTower": {"hp": 1100, "speed": 0.5, "armor": 3, "reward": 70, "damage": 6, "radius": 0.38, "melee": 0, "siege": true, "warning": true},
 	"commander": {"hp": 2400, "speed": 0.42, "armor": 6, "reward": 150, "damage": 10, "radius": 0.42, "melee": 30, "mount": true, "warning": true},
+	# Patronlar (boss): büyük can çubuğuyla gelir, askerler durduramaz.
+	# throw: her rate sn'de range içindeki en yakın kuleye taş atar, kule stun sn susar
+	"trebuchet": {"hp": 1800, "speed": 0.3, "armor": 5, "reward": 200, "damage": 8, "radius": 0.5, "melee": 0, "siege": true,
+		"warning": true, "boss": true, "throw": {"rate": 6.0, "range": 4.2, "stun": 4.0, "flight": 0.9}},
+	# trample: her rate sn'de range içindeki askerleri ezer
+	"elephant": {"hp": 2200, "speed": 0.45, "armor": 5, "reward": 220, "damage": 10, "radius": 0.5, "melee": 0, "siege": true,
+		"warning": true, "boss": true, "trample": {"rate": 1.0, "range": 0.65, "damage": 45}},
+	# spawn: her rate sn'de içinden count piyade çıkar
+	"bossTower": {"hp": 3200, "speed": 0.28, "armor": 6, "reward": 300, "damage": 12, "radius": 0.55, "melee": 0, "siege": true,
+		"warning": true, "boss": true, "spawn": {"rate": 6.0, "count": 2, "type": "infantry"}},
 }
+# Patron dalgaları: serbest savaşta dalga dizinine (0'dan) göre; kuşatmalarda STAGES[...].bosses
+const BOSS_WAVES := {3: ["trebuchet"], 7: ["elephant"], 11: ["bossTower"]}
+
+# Düello: iki oyuncu aynı anda serbest savaş oynar, dalgalar bitmez (12'den sonra son dört dalga
+# güçlenerek döner). Hazırlık süresi dolunca dalga kendiliğinden başlar. Yenilen düşmanların ödülü
+# cost'a ulaştıkça rakibe bir asker gider; hangi askerin gideceği dalgaya göre açılır (send: [dalga, tür]).
+# Patron yenen rakibe kuşatma kulesi yollar. Suru önce düşen kaybeder.
+const DUEL := {"first_build": 35.0, "build": 20.0, "cost": 40, "boss_send": "siegeTower", "gap": 0.7,
+	"send": [[1, "infantry"], [3, "light"], [5, "knight"], [8, "ram"]], "honor_win": 150, "honor_lose": 30,
+	"timeout": 45.0, "code_len": 4}
+
+# Saldıran ve Savunan: savunan bildiği oyunu oynar ama düşmanları saldıran gönderir. Saldıranın akçesi
+# atk_start + her saniye atk_income (zamanla atk_growth kadar artar) + ganimettir (yıkılan kule başına loot_tower × seviye, sura vurulan her
+# puan için loot_wall). İlk prep saniyesinde asker gönderilemez. Saldıran askerleri yol kenarındaki kulelere
+# (merkezden tower_reach kadar) saniyede damage × tower_dps vurur; tek kişilik oyunda bütün düşmanlar
+# tower_dps_solo ile vurur. Savunan duration saniye dayanırsa kazanır.
+# up: yükseltme başına can, güç ve hız artışı; up_cost: sıradaki seviyenin bedeli.
+const PVP := {"duration": 600.0, "prep": 40.0, "snap": 0.2, "atk_start": 90, "atk_income": 4.0, "atk_growth": 0.012,
+	"def_every": 30.0, "def_gold": 30, "loot_tower": 45, "loot_wall": 12, "tower_dps": 4.0, "tower_dps_solo": 0.8, "solo_cap": 3.0, "tower_reach": 1.15,
+	"tower_regen": 0.03, "gap": 0.55, "batch": 5,
+	"units": {"infantry": 10, "light": 14, "horseArcher": 18, "knight": 32, "ram": 55, "siegeTower": 180,
+		"commander": 330, "trebuchet": 380, "elephant": 420, "bossTower": 520},
+	"unit_order": ["infantry", "light", "horseArcher", "knight", "ram", "siegeTower", "commander", "trebuchet", "elephant", "bossTower"],
+	"reach": {"horseArcher": 2.2, "trebuchet": 0.0},
+	"up": {"hp": 0.15, "dmg": 0.2, "spd": 0.06}, "up_order": ["hp", "dmg", "spd"],
+	"up_names": {"hp": "Can", "dmg": "Güç", "spd": "Hız"}, "up_max": 5, "up_cost": [60, 100, 160, 240, 340],
+	"honor_win": 150, "honor_lose": 30}
+# Kulelerin canı (yalnız Saldıran ve Savunan oyununda azalır); her seviye %50 artar
+const TOWER_HP := {"archer": 220, "tar": 240, "cannon": 320, "musket": 260}
+
+
+static func tower_hp(type: String, level: int) -> float:
+	return TOWER_HP.get(type, 150) * (1.0 + 0.5 * (level - 1))
+const BOSS_GAP := 3.0  # patron, dalganın son birliğinden bu kadar sonra çıkar
 const ENEMY_MELEE := {"rate": 1.0, "growth": 0.08}
 
 const NATIONS := {
@@ -88,6 +132,7 @@ const NATIONS := {
 	"russia": {"primary": "#f0eee8", "secondary": "#2f5fa8", "metal": "#a9adb8"},
 	"france": {"primary": "#2b4fa0", "secondary": "#f1d36b", "metal": "#b3b7c2"},
 	"holyLeague": {"primary": "#f4f1e8", "secondary": "#c0392b", "metal": "#c3c7d0"},
+	"hospitaller": {"primary": "#a31d26", "secondary": "#f4f1e8", "metal": "#b3b7c2"},
 }
 
 # Her dalga bir devletin seferidir. Gruplar sırayla çıkar: [birlik, adet, aralık]
@@ -105,6 +150,91 @@ const WAVES := [
 	{"nation": "france", "groups": [["infantry", 24, 0.3], ["knight", 14, 0.7], ["siegeTower", 2, 2.5]]},
 	{"nation": "holyLeague", "groups": [["knight", 10, 0.9], ["siegeTower", 2, 2.5], ["commander", 1, 2.0], ["light", 16, 0.35], ["ram", 5, 1.2]]},
 ]
+
+# Sefer haritası: sırayla açılan kuşatmalar. Her kalenin kendi yolu (yolun sonu hep kapıdır, [4, 12]),
+# dalga sayısı, düşmanları ve zorluğu vardır. picks: her dalganın WAVES'teki birlik dizilişi,
+# nations: o dalgayı gönderen devlet, hp: düşman canı çarpanı, honor: ilk zaferde verilen şeref.
+# map: haritadaki yeri (boylam, enlem). ground: zemin renkleri (yoksa varsayılan çim).
+# ambience: arka plan sesi (city: çarşı ve şadırvan, harbor: liman ve martılar, field: ordugâh ve kuşlar).
+const STAGES := {
+	"istanbul": {"name": "İstanbul", "year": 1453, "map": [28.98, 41.01], "hp": 0.85, "honor": 150, "gold": 0, "season": "spring", "ambience": "city",
+		"path": [[1, -1], [1, 2], [6, 2], [6, 5], [2, 5], [2, 8], [7, 8], [7, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5], "bosses": {5: ["trebuchet"]},
+		"nations": ["byzantium", "byzantium", "serbia", "venice", "byzantium", "venice"],
+		"text": "Kostantiniyye'yi Bizans'ın ve müttefiklerinin karşı saldırısından koru."},
+	"belgrad": {"name": "Belgrad", "year": 1521, "map": [20.46, 44.82], "hp": 0.95, "honor": 200, "gold": 20, "season": "summer", "ambience": "field",
+		"path": [[7, -1], [7, 3], [2, 3], [2, 7], [6, 7], [6, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7], "bosses": {7: ["elephant"]},
+		"nations": ["serbia", "hungary", "hungary", "serbia", "hungary", "hungary", "habsburg", "hungary"],
+		"ground": {"grass_a": Color(0.56, 0.6, 0.22), "grass_b": Color(0.36, 0.42, 0.14)},
+		"text": "Tuna'nın kilidi Belgrad. Macar ordusu kaleyi geri almak için yürüyor; yol kısa, kuleleri erken kur."},
+	"rodos": {"name": "Rodos", "year": 1522, "map": [28.22, 36.43], "hp": 1.0, "honor": 250, "gold": 40, "season": "autumn", "ambience": "harbor",
+		"path": [[4, -1], [4, 2], [1, 2], [1, 5], [7, 5], [7, 8], [2, 8], [2, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 3, 2, 4, 5, 6, 7, 8], "bosses": {4: ["trebuchet"], 8: ["bossTower"]},
+		"nations": ["hospitaller", "hospitaller", "venice", "hospitaller", "spain", "hospitaller", "venice", "spain", "hospitaller"],
+		"ground": {"grass_a": Color(0.66, 0.64, 0.32), "grass_b": Color(0.47, 0.48, 0.2), "dirt": Color(0.9, 0.8, 0.58), "dirt_edge": Color(0.72, 0.6, 0.4)},
+		"text": "Ada kalesi Rodos. Şövalyeler ve denizden gelen Venedik, İspanya gemileri ağır zırhlı asker çıkarıyor."},
+	"mohac": {"name": "Mohaç", "year": 1526, "map": [18.68, 45.99], "hp": 1.0, "honor": 300, "gold": 60, "season": "summer", "ambience": "field",
+		"path": [[0, -1], [0, 1], [8, 1], [8, 4], [0, 4], [0, 7], [8, 7], [8, 9], [4, 9], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "bosses": {4: ["elephant"], 9: ["elephant", "trebuchet"]},
+		"nations": ["hungary", "hungary", "poland", "hungary", "habsburg", "hungary", "poland", "habsburg", "hungary", "hungary"],
+		"ground": {"grass_a": Color(0.5, 0.66, 0.22), "grass_b": Color(0.3, 0.48, 0.13)},
+		"text": "Mohaç ovası: uzun ve kıvrımlı yol, bol süvari. Kuleler için yer çok, düşman da çok."},
+	"viyana": {"name": "Viyana", "year": 1529, "map": [16.37, 48.21], "hp": 1.1, "honor": 400, "gold": 80, "season": "winter", "ambience": "field",
+		"path": [[2, -1], [2, 1], [6, 1], [6, 3], [1, 3], [1, 6], [7, 6], [7, 9], [3, 9], [3, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], "bosses": {3: ["trebuchet"], 7: ["elephant"], 11: ["bossTower", "trebuchet"]},
+		"nations": ["habsburg", "habsburg", "spain", "habsburg", "holyLeague", "habsburg", "spain", "habsburg", "poland", "holyLeague", "habsburg", "holyLeague"],
+		"ground": {"grass_a": Color(0.42, 0.56, 0.2), "grass_b": Color(0.24, 0.38, 0.12)},
+		"text": "Seferin sonu: Habsburg başkenti önünde Kutsal İttifak'ın bütün ordusu. 12 dalga, en güçlü düşman."},
+}
+const STAGE_ORDER := ["istanbul", "belgrad", "rodos", "mohac", "viyana"]
+# Hava: her dalga başında mevsime göre seçilir ve dalga boyunca sürer (baskınlar da o havada gelir).
+# range: kule menzili kaybı, rate: kule atış süresi uzar, musket: tüfeklerin atış süresi ayrıca uzar (ıslak barut),
+# slow: düşman yavaşlar, troop_slow: askerler yavaş yürür.
+const WEATHER := {
+	"clear": {"name": "Açık", "range": 0.0, "rate": 0.0, "musket": 0.0, "slow": 0.0, "troop_slow": 0.0},
+	"rain": {"name": "Yağmur", "range": 0.1, "rate": 0.0, "musket": 0.3, "slow": 0.12, "troop_slow": 0.1},
+	"snow": {"name": "Kar", "range": 0.05, "rate": 0.12, "musket": 0.1, "slow": 0.22, "troop_slow": 0.2},
+	"fog": {"name": "Sis", "range": 0.25, "rate": 0.0, "musket": 0.0, "slow": 0.0, "troop_slow": 0.0},
+}
+# Mevsim: havaların olasılıkları ve zeminin rengi. Kuşatmanın mevsimi STAGES'te; serbest savaşta her
+# season_waves dalgada bir sonraki mevsime geçilir.
+const SEASONS := {
+	"spring": {"name": "İlkbahar", "weather": {"clear": 5, "rain": 4, "fog": 2}, "tint": Color(1.0, 1.04, 0.95), "snow": 0.0},
+	"summer": {"name": "Yaz", "weather": {"clear": 8, "rain": 2, "fog": 1}, "tint": Color(1.06, 1.0, 0.86), "snow": 0.0},
+	"autumn": {"name": "Sonbahar", "weather": {"clear": 4, "rain": 4, "fog": 3}, "tint": Color(1.14, 0.93, 0.72), "snow": 0.0},
+	"winter": {"name": "Kış", "weather": {"clear": 3, "snow": 6, "fog": 2}, "tint": Color(0.9, 0.95, 1.0), "snow": 0.75},
+}
+const SEASON_ORDER := ["spring", "summer", "autumn", "winter"]
+const SEASON_WAVES := 3
+
+
+static func weather_text(w: String) -> String:
+	var d: Dictionary = WEATHER[w]
+	var parts := []
+	if d.range > 0.0:
+		parts.append("menzil -" + pct(d.range))
+	if d.rate > 0.0:
+		parts.append("kuleler yavaş atar")
+	if d.musket > 0.0:
+		parts.append("ıslak barut")
+	if d.slow > 0.0:
+		parts.append("düşman hızı -" + pct(d.slow))
+	return ", ".join(parts) if parts.size() else "etkisi yok"
+
+
+# Kuşatmada kalan sur oranına göre yıldız: en az 1, sur %50 ve üstü 2, %80 ve üstü 3
+const STAGE_STARS := [0.5, 0.8]
+
+
+static func stage_stars(wall: int, max_wall: int) -> int:
+	var k := float(wall) / maxf(1.0, max_wall)
+	var n := 1
+	for t in STAGE_STARS:
+		if k >= t:
+			n += 1
+	return n
+
 
 # Oyuncunun seçebileceği devletler. Her devletin bir hükümdarı vardır; hükümdar menüde "şeref" ile
 # geliştirilir ve her seviyede devletin üstünlüğü (bonus) artar. Seçilen devlet düşman dalgalarında
@@ -185,8 +315,32 @@ const BUILDINGS := {
 	"kitchen": {"slot": [6, 14], "costs": [70, 140, 220], "color": "#d9893b"},
 	"market": {"slot": [3, 13], "costs": [60, 130, 220], "color": "#e0a030"},
 	"workshop": {"slot": [8, 13], "costs": [80, 160, 240], "color": "#8a6a48"},
+	# Medrese: araştırma yapılır; seviyesi açılabilecek araştırma kademesidir (TECH)
+	"medrese": {"slot": [3, 15], "costs": [150, 250, 380], "requires": {"school": 1}, "color": "#4f8fc0"},
 }
-const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen", "workshop", "market"]
+const BUILDING_ORDER := ["palace", "school", "medrese", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen", "workshop", "market"]
+
+# Teknoloji ağacı: Medrese'de araştırılır, bir seferde bir araştırma. Her dalın üç kademesi vardır; kademe
+# Medrese seviyesi kadar açılır ve dalın bir önceki araştırmasını ister. Araştırmalar o savaş boyunca sürer.
+const TECH := {
+	"powder1": {"branch": "powder", "tier": 1, "cost": 110, "time": 10.0, "name": "Kara Barut", "text": "Top ve tüfek hasarı +%15"},
+	"powder2": {"branch": "powder", "tier": 2, "cost": 210, "time": 15.0, "name": "Dökme Top", "text": "Top güllesinin alanı +%30"},
+	"powder3": {"branch": "powder", "tier": 3, "cost": 340, "time": 20.0, "name": "Şahi Topu", "text": "Top ve tüfek menzili +0,4 kare"},
+	"arch1": {"branch": "arch", "tier": 1, "cost": 100, "time": 10.0, "name": "Kesme Taş", "text": "Sur +5 (en yüksek sur da artar)"},
+	"arch2": {"branch": "arch", "tier": 2, "cost": 200, "time": 15.0, "name": "Kemer ve Kubbe", "text": "Binalar ve kule yükseltmeleri %15 ucuz"},
+	"arch3": {"branch": "arch", "tier": 3, "cost": 320, "time": 20.0, "name": "Selimiye Usulü", "text": "Bütün kuleler +%10 hasar · dalga sonu Sur +2"},
+	"trade1": {"branch": "trade", "tier": 1, "cost": 90, "time": 10.0, "name": "Kervansaray", "text": "Çarşı geliri +%50"},
+	"trade2": {"branch": "trade", "tier": 2, "cost": 190, "time": 15.0, "name": "Lonca", "text": "Düşman ödülleri +%15"},
+	"trade3": {"branch": "trade", "tier": 3, "cost": 300, "time": 20.0, "name": "İpek ve Baharat Yolu", "text": "Dalga ödülü +%50 · dalga sonu +20 odun, +15 demir"},
+}
+const TECH_BRANCHES := {"powder": "Barut", "arch": "Mimari", "trade": "Ticaret"}
+const TECH_BRANCH_ORDER := ["powder", "arch", "trade"]
+const TECH_FX := {"powder_damage": 0.15, "powder_splash": 0.3, "powder_range": 0.4, "wall": 5, "discount": 0.15,
+	"arch_damage": 0.1, "arch_repair": 2, "market": 0.5, "reward": 0.15, "wave_bonus": 0.5, "wood": 20, "iron": 15}
+
+
+static func tech_of(branch: String, tier: int) -> String:
+	return "%s%d" % [branch, tier]
 # Saray yükseltmesi akçeye ek olarak odun ve demir ister (indeks = kurulacak seviye)
 const PALACE_RES := [{}, {}, {"wood": 60, "iron": 30}, {"wood": 120, "iron": 60}]
 # Binalar Saray'ın bir üst seviyesine kadar çıkar: Saray 1 iken en fazla 2, Saray 2 iken 3
@@ -238,6 +392,45 @@ const TROOPS := {
 		"hp": 90, "damage": 7, "rate": 0.8, "range": 0.6, "block": 1, "speed": 1.2, "heal": 3.0, "heal_range": 1.3},
 }
 const TROOP_ORDER := ["janissary", "archer", "sipahi", "sufi"]
+
+# Kahraman komutanlar: savaştan önce biri seçilir. Surların önünde en ön sırada savaşır (block kadar düşman
+# durdurur), düşerse respawn saniye sonra kapıdan yeniden çıkar. Özel yeteneği dalga sırasında kullanılır,
+# sonra cooldown saniye bekler. model: geçici gövde (kendi modeli gelene kadar), ring: ayağının altındaki halka.
+const HEROES := {
+	"barbaros": {"short": "Barbaros", "name": "Barbaros Hayreddin", "title": "Kaptan-ı Derya", "ability": "Top Yağmuru", "cooldown": 40.0,
+		"text": "Donanmanın topları en öndeki düşmanlara gülle yağdırır.",
+		"hp": 520, "damage": 34, "rate": 0.8, "range": 0.7, "block": 3, "speed": 1.5, "role": "melee",
+		"model": "sultan", "ring": "#e05a3c"},
+	"sinan": {"short": "Mimar Sinan", "name": "Mimar Sinan", "title": "Mimarbaşı", "ability": "Sur Onarımı", "cooldown": 55.0,
+		"text": "Surları onarır; bir süre surlar hiç hasar almaz.",
+		"hp": 640, "damage": 22, "rate": 0.9, "range": 0.7, "block": 3, "speed": 1.3, "role": "melee",
+		"model": "sufi", "ring": "#e0c070"},
+	"evliya": {"short": "Evliya Çelebi", "name": "Evliya Çelebi", "title": "Seyyah", "ability": "Moral", "cooldown": 45.0,
+		"text": "Hikâyeleriyle orduyu coşturur: kuleler ve askerler daha sert vurur, askerler iyileşir.",
+		"hp": 460, "damage": 26, "rate": 0.7, "range": 0.7, "block": 2, "speed": 1.6, "role": "melee",
+		"model": "miner", "ring": "#6fc0e0"},
+}
+const HERO_ORDER := ["barbaros", "sinan", "evliya"]
+const HERO := {
+	"respawn": 20.0,
+	# Top Yağmuru: barrage_count gülle, her biri barrage_splash yarıçapta barrage_damage × düşman canı çarpanı
+	"barrage_count": 8, "barrage_damage": 70.0, "barrage_splash": 0.9, "barrage_gap": 0.18, "barrage_fall": 0.6,
+	# Sur Onarımı: repair sur, fortify saniye surlar hasar almaz
+	"repair": 5, "fortify": 12.0,
+	# Moral: morale_time saniye hasar +morale, askerler saniyede morale_heal can
+	"morale": 0.4, "morale_time": 12.0, "morale_heal": 12.0,
+}
+
+
+static func hero_effect(id: String) -> String:
+	match id:
+		"barbaros":
+			return "%d gülle, her biri alan hasarı · %d sn bekleme" % [HERO.barrage_count, roundi(HEROES[id].cooldown)]
+		"sinan":
+			return "Sur +%d, %d sn surlar hasar almaz · %d sn bekleme" % [HERO.repair, roundi(HERO.fortify), roundi(HEROES[id].cooldown)]
+		"evliya":
+			return "%d sn hasar +%s, askerler iyileşir · %d sn bekleme" % [roundi(HERO.morale_time), pct(HERO.morale), roundi(HEROES[id].cooldown)]
+	return ""
 const RES_ORDER := ["wood", "iron", "food"]
 const RES_NAMES := {"wood": "odun", "iron": "demir", "food": "yemek"}
 
@@ -305,6 +498,7 @@ const TOWER_NAMES := {
 const ENEMY_NAMES := {
 	"infantry": "Piyade", "light": "Hafif Süvari", "knight": "Zırhlı Şövalye", "horseArcher": "Atlı Okçu",
 	"ram": "Koçbaşı", "siegeTower": "Kuşatma Kulesi", "commander": "Başkomutan",
+	"trebuchet": "Dev Mancınık", "elephant": "Savaş Fili", "bossTower": "Dev Kuşatma Kulesi",
 }
 const NATION_NAMES := {
 	"ottoman": "Osmanlı Devleti",
@@ -312,6 +506,7 @@ const NATION_NAMES := {
 	"venice": "Venedik Cumhuriyeti", "mamluk": "Memlük Sultanlığı", "safavid": "Safevî Devleti",
 	"poland": "Lehistan Krallığı", "habsburg": "Habsburg Monarşisi", "spain": "İspanya Krallığı",
 	"russia": "Rus Çarlığı", "france": "Fransa Krallığı", "holyLeague": "Kutsal İttifak",
+	"hospitaller": "Rodos Şövalyeleri",
 }
 const BUILDING_NAMES := {
 	"palace": ["Saray", "Padişahın sarayı"], "school": ["Mektep", "Okul"], "barracks": ["Kışla", "Yeniçeri Ocağı"],
@@ -320,9 +515,12 @@ const BUILDING_NAMES := {
 	"mosque": ["Cami", "Sofiler ve vakıf"], "kitchen": ["Yemekhane", "Ordunun aşı"],
 	"workshop": ["Odun-Demir Ocağı", "Oduncular ve madenciler"],
 	"market": ["Çarşı", "Esnaf ve tüccar"],
+	"medrese": ["Medrese", "İlim ve araştırma"],
 }
 const TROOP_NAMES := {"janissary": "Yeniçeri", "archer": "Okçu", "sipahi": "Sipahi", "sufi": "Sofi"}
-const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!"}
+const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!",
+	"trebuchet": "Dev mancınık geliyor! Kulelere taş atar", "elephant": "Savaş fili geliyor! Askerleri ezer",
+	"bossTower": "Dev kuşatma kulesi geliyor! İçinden asker çıkar"}
 
 
 static func num(v: float, digits := 1) -> String:
@@ -368,6 +566,8 @@ static func building_effect(id: String, l: int) -> String:
 			return "%d işçi: oduncular ağaçtan +%d odun, madenciler madenden +%d demir taşır" % [CITY.workers_per_level * l, CITY.wood_load, CITY.iron_load]
 		"kitchen":
 			return "Dalga sonu +%d yemek" % (CITY.kitchen_food * l)
+		"medrese":
+			return "Barut, mimari ve ticaret araştırmaları · %d. kademeye kadar" % l
 	return ""
 
 
@@ -394,12 +594,44 @@ static func wave_nation(i: int, country: String) -> String:
 	return "ottoman" if n == country else n
 
 
-static func describe_wave(i: int, country := "ottoman") -> String:
-	if i >= WAVES.size():
-		return ""
-	var w: Dictionary = WAVES[i]
-	var items := []
-	for g in w.groups:
-		items.append("%d %s" % [group_count(g[1], i + 1), ENEMY_NAMES[g[0]]])
-	var hard := " Düşman canı ×%s." % num(difficulty(i + 1)) if i > 0 else ""
-	return "Sıradaki sefer: %s — %s.%s" % [NATION_NAMES[wave_nation(i, country)], join_list(items), hard]
+# ---------------------------------------------------------------- görevler ve başarımlar
+
+# Savaşta sayılan şeyler (Game.stats, hesaba eklenir): kills düşman, boss_kills patron, towers kule kurma,
+# waves püskürtülen dalga, hero kahraman yeteneği, research araştırma, raids baskın, wins kuşatma zaferi,
+# free_wins serbest savaş zaferi, streak bir savaşta hasarsız üst üste dalga (en iyisi tutulur)
+const STAT_NAMES := {"kills": "düşman", "boss_kills": "patron", "towers": "kule", "waves": "dalga", "hero": "kahraman yeteneği",
+	"research": "araştırma", "raids": "baskın", "wins": "kuşatma zaferi", "duel_wins": "düello zaferi"}
+
+# Başarımlar: bir kez kazanılır. need: {istatistik: en az}; stars: kazanılmış yıldız toplamı; all_stages: bütün kuşatmalar
+const ACHIEVEMENTS := {
+	"novice": {"name": "Acemi Komutan", "text": "100 düşman yen", "need": {"kills": 100}, "honor": 40},
+	"veteran": {"name": "Kılıç Ustası", "text": "1000 düşman yen", "need": {"kills": 1000}, "honor": 150},
+	"boss1": {"name": "Patron Avcısı", "text": "Bir patron yen", "need": {"boss_kills": 1}, "honor": 60},
+	"boss10": {"name": "Dev Avcısı", "text": "10 patron yen", "need": {"boss_kills": 10}, "honor": 200},
+	"builder": {"name": "Mimarbaşı", "text": "50 kule kur", "need": {"towers": 50}, "honor": 80},
+	"scholar": {"name": "Âlim", "text": "9 araştırma tamamla", "need": {"research": 9}, "honor": 100},
+	"hero": {"name": "Komutanın Gücü", "text": "Kahraman yeteneğini 25 kez kullan", "need": {"hero": 25}, "honor": 80},
+	"wall": {"name": "Demir Sur", "text": "Bir savaşta 5 dalga üst üste sura hasar aldırma", "need": {"streak": 5}, "honor": 100},
+	"conqueror": {"name": "Fatih", "text": "İstanbul kuşatmasını kazan", "stage": "istanbul", "honor": 50},
+	"perfect": {"name": "Kusursuz Savunma", "text": "Bir kuşatmayı 3 yıldızla kazan", "three": true, "honor": 80},
+	"campaign": {"name": "Sefer-i Hümayun", "text": "Bütün kuşatmaları kazan", "all_stages": true, "honor": 300},
+	"free": {"name": "Serbest Muzaffer", "text": "Serbest savaşın 12 dalgasını püskürt", "need": {"free_wins": 1}, "honor": 150},
+	"duel1": {"name": "Meydan Okuyan", "text": "Bir düello kazan", "need": {"duel_wins": 1}, "honor": 80},
+	"duel10": {"name": "Pehlivan", "text": "10 düello kazan", "need": {"duel_wins": 10}, "honor": 250},
+}
+const ACHIEVEMENT_ORDER := ["novice", "boss1", "builder", "conqueror", "perfect", "hero", "wall", "scholar", "veteran", "boss10", "free", "campaign", "duel1", "duel10"]
+
+# Günlük görevler: her gün tarihe göre 3 tanesi seçilir, gün içindeki sayımla tamamlanır
+const QUESTS := {
+	"kills150": {"stat": "kills", "goal": 150, "honor": 60, "text": "150 düşman yen"},
+	"kills400": {"stat": "kills", "goal": 400, "honor": 120, "text": "400 düşman yen"},
+	"waves10": {"stat": "waves", "goal": 10, "honor": 70, "text": "10 dalga püskürt"},
+	"towers8": {"stat": "towers", "goal": 8, "honor": 50, "text": "8 kule kur"},
+	"hero3": {"stat": "hero", "goal": 3, "honor": 50, "text": "Kahraman yeteneğini 3 kez kullan"},
+	"boss1": {"stat": "boss_kills", "goal": 1, "honor": 80, "text": "Bir patron yen"},
+	"win1": {"stat": "wins", "goal": 1, "honor": 100, "text": "Bir kuşatma kazan"},
+	"research2": {"stat": "research", "goal": 2, "honor": 50, "text": "2 araştırma tamamla"},
+	"raids2": {"stat": "raids", "goal": 2, "honor": 50, "text": "2 ani baskını püskürt"},
+}
+const QUEST_ORDER := ["kills150", "kills400", "waves10", "towers8", "hero3", "boss1", "win1", "research2", "raids2"]
+const QUESTS_PER_DAY := 3

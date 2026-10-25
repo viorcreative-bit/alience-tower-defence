@@ -2,8 +2,9 @@ class_name MainMenu
 extends CanvasLayer
 
 # Oyundan önceki ana menü: önce giriş (ad ile, hesap cihazda saklanır), sonra devlet seçimi ve hükümdar.
-# Her devletin bir hükümdarı vardır; savaşlarda kazanılan şerefle geliştirilir. "Savaşa Başla" seçilen
-# devlet ve hükümdar seviyesiyle start sinyalini yollar. Arkada 3B kale görünmeye devam eder.
+# Her devletin bir hükümdarı vardır; savaşlarda kazanılan şerefle geliştirilir. "Sefere Çık" sefer haritasını
+# açar; oradan bir kuşatma ya da serbest savaş seçilince start sinyali devlet, hükümdar seviyesi ve
+# kuşatmayla ("" = serbest savaş) gelir. Arkada 3B kale görünmeye devam eder.
 
 const D := preload("res://scripts/data.gd")
 const C_TEXT := GameUI.C_TEXT
@@ -11,7 +12,9 @@ const C_DIM := GameUI.C_DIM
 const C_GOLD := GameUI.C_GOLD
 const C_COIN := GameUI.C_COIN
 
-signal start(country: String, king_level: int)
+signal start(country: String, king_level: int, stage: String)
+signal duel_join(code: String, creator: bool, mode: String, role: String)
+signal duel_cancel
 
 var ui: GameUI  # yazı tipleri, çerçeveler ve tema için
 var models: Models
@@ -21,12 +24,18 @@ var page: VBoxContainer
 var selected := "ottoman"
 var name_edit: LineEdit
 var cards := {}  # devlet → PanelContainer
+var stage := ""  # haritada seçili kuşatma
+var net: Net
+var duel_label: Label  # düello bekleme satırı (main yazar)
+var code_edit: LineEdit
+var duel_pick := "attack"  # odayı kurarken seçilen: attack | defend | duel
 
 
-func _init(u: GameUI, m: Models, p: Profiles) -> void:
+func _init(u: GameUI, m: Models, p: Profiles, n: Net) -> void:
 	ui = u
 	models = m
 	profiles = p
+	net = n
 	layer = 5
 
 
@@ -49,11 +58,13 @@ func _ready() -> void:
 	open()
 
 
-# Giriş yapılmışsa doğrudan devlet seçimine geçer
-func open() -> void:
+# Giriş yapılmışsa doğrudan devlet seçimine geçer; map true ise sefer haritasına
+func open(map := false) -> void:
 	visible = true
 	if profiles.current == "":
 		_show_login()
+	elif map:
+		_show_campaign()
 	else:
 		selected = profiles.country()
 		_show_countries()
@@ -203,10 +214,22 @@ func _show_countries() -> void:
 		grid.add_child(_country_card(c))
 
 	page.add_child(_king_panel())
-	var go := _button(page, "Savaşa Başla", func():
+	var day := profiles.daily()
+	var pb := _button(page, "Görevler, Başarımlar ve Sıralama  ·  bugün %d/%d görev" % [day.done.size(), day.ids.size()], _show_progress, false, 62)
+	pb.add_theme_color_override("font_color", C_COIN)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	page.add_child(row)
+	var go := _button(row, "Sefere Çık", func():
 		profiles.set_v("country", selected)
-		visible = false
-		start.emit(selected, profiles.king_level(selected)), true, 84)
+		_show_campaign(), true, 84)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var du := _button(row, "Çok Oyunculu", func():
+		profiles.set_v("country", selected)
+		show_duel(), false, 84)
+	du.custom_minimum_size.x = 190
+	du.add_theme_font_size_override("font_size", 24)
+	du.add_theme_color_override("font_color", C_GOLD)
 	go.icon = load("res://assets/ui/swords.png")
 	go.add_theme_constant_override("icon_max_width", 36)
 	go.add_theme_font_size_override("font_size", 32)
@@ -400,3 +423,391 @@ func _bounds(n: Node3D) -> AABB:
 		out = b if first else out.merge(b)
 		first = false
 	return out
+
+
+# ---------------------------------------------------------------- sefer haritası
+
+# Kuşatmalar sırayla açılır. Haritada kaleye dokununca altında bilgisi çıkar.
+func _show_campaign() -> void:
+	_clear()
+	selected = profiles.country()
+	if stage == "" or not profiles.stage_open(stage):
+		stage = D.STAGE_ORDER[0]
+		for id in D.STAGE_ORDER:
+			if profiles.stage_open(id):
+				stage = id
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	page.add_child(top)
+	var back := Button.new()
+	back.text = "Geri"
+	back.custom_minimum_size = Vector2(110, 58)
+	back.pressed.connect(_show_countries)
+	top.add_child(back)
+	var h := ui._label("SEFER HARİTASI", 32, C_GOLD, ui.font_title)
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top.add_child(h)
+	var fl := _flag_rect(selected, 64)
+	top.add_child(fl)
+
+	var map := CampaignMap.new(profiles, ui.font_bold, ui.font_title)
+	map.custom_minimum_size = Vector2(0, 560)
+	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	map.selected = stage
+	map.picked.connect(func(id):
+		stage = id
+		_show_campaign())
+	page.add_child(map)
+
+	var st: Dictionary = D.STAGES[stage]
+	var open := profiles.stage_open(stage)
+	var stars := profiles.stage_stars(stage)
+	var v := _panel()
+	var head := HBoxContainer.new()
+	head.add_child(ui._label("%s Kuşatması" % st.name, 30, C_TEXT, ui.font_title))
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(sp)
+	head.add_child(ui._label(str(st.year), 26, C_GOLD, ui.font_bold))
+	v.add_child(head)
+	var d := ui._label(st.text, 20, C_DIM)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(d)
+	var foes := []
+	for n in st.nations:
+		var nm: String = D.NATION_NAMES["ottoman" if n == selected else n]
+		if not nm in foes:
+			foes.append(nm)
+	var info := ui._label("%d dalga · %s · düşman canı ×%s" % [st.picks.size(), D.join_list(foes), D.num(st.hp, 2)], 20, C_TEXT, ui.font_bold)
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(info)
+	var rw := "Zafer ödülü: %d şeref" % st.honor if stars == 0 else "Kazanıldı · en iyi %d/3 yıldız" % stars
+	v.add_child(ui._label(rw, 20, C_COIN, ui.font_bold))
+	v.add_child(_hero_row(_show_campaign))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+	var go := _button(row, "Kuşatmaya Başla" if open else "Önce önceki kaleyi kazan", func(): _go(stage), true, 76)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	go.disabled = not open
+	if open:
+		go.icon = load("res://assets/ui/swords.png")
+		go.add_theme_constant_override("icon_max_width", 32)
+	var free := _button(row, "Serbest Savaş", func(): _go(""), false, 76)
+	free.custom_minimum_size.x = 200
+
+
+# Savaşa götürülecek kahraman komutan: üç düğme ve seçilenin yeteneği
+func _hero_row(refresh: Callable) -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	var l := ui._label("Komutan", 20, C_DIM, ui.font_bold)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(l)
+	var cur := profiles.hero()
+	for id in D.HERO_ORDER:
+		var b := Button.new()
+		b.text = D.HEROES[id].short
+		b.custom_minimum_size = Vector2(0, 54)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 20)
+		var on: bool = id == cur
+		b.add_theme_stylebox_override("normal", ui._frame("card_hot" if on else "card", 12, 8))
+		b.add_theme_color_override("font_color", Color(D.HEROES[id].ring) if on else C_TEXT)
+		b.pressed.connect(func():
+			profiles.set_v("hero", id)
+			refresh.call())
+		row.add_child(b)
+	var h: Dictionary = D.HEROES[cur]
+	var d := ui._label("%s, %s · %s: %s" % [h.name, h.title, h.ability, D.hero_effect(cur)], 18, C_TEXT)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(d)
+	return v
+
+
+func _go(id: String) -> void:
+	visible = false
+	start.emit(selected, profiles.king_level(selected), id)
+
+
+# ---------------------------------------------------------------- görevler, başarımlar, sıralama
+
+func _show_progress() -> void:
+	_clear()
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	page.add_child(top)
+	var back := Button.new()
+	back.text = "Geri"
+	back.custom_minimum_size = Vector2(110, 58)
+	back.pressed.connect(_show_countries)
+	top.add_child(back)
+	var h := ui._label("ŞEREF DEFTERİ", 32, C_GOLD, ui.font_title)
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top.add_child(h)
+	var hv := ui._label("%d şeref" % profiles.honor(), 24, C_COIN, ui.font_bold)
+	hv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(hv)
+	var sc := ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page.add_child(sc)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 14)
+	sc.add_child(col)
+
+	# günlük görevler
+	var day := profiles.daily()
+	var qv := _section(col, "GÜNLÜK GÖREVLER", "Her gün üç yeni görev. Tamamlayınca şeref kendiliğinden gelir.")
+	for q in day.ids:
+		var qd: Dictionary = D.QUESTS[q]
+		var done: bool = day.done.has(q)
+		_progress_row(qv, qd.text, mini(day.progress.get(qd.stat, 0), qd.goal), qd.goal, "+%d şeref" % qd.honor, done)
+
+	# başarımlar
+	var av := _section(col, "BAŞARIMLAR", "%d/%d rozet" % [profiles.get_v("ach", {}).size(), D.ACHIEVEMENT_ORDER.size()])
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	av.add_child(grid)
+	for a in D.ACHIEVEMENT_ORDER:
+		grid.add_child(_badge(a))
+
+	# çevrimiçi sıralama
+	var ov := _section(col, "ÇEVRİMİÇİ SIRALAMA", "Bütün komutanlar, kazanılan toplam şerefe göre.")
+	var wait := ui._label("Yükleniyor…" if Net.configured() else "Çevrimiçi sunucu henüz bağlanmadı.", 20, C_DIM)
+	ov.add_child(wait)
+	if Net.configured():
+		net.fetch_top(func(rows):
+			if not is_instance_valid(wait):
+				return
+			if rows == null:
+				wait.text = "Sunucuya ulaşılamadı. İnternetini kontrol et."
+				return
+			wait.queue_free()
+			if rows.is_empty():
+				ov.add_child(ui._label("Henüz kimse yok. İlk sen ol!", 20, C_DIM))
+			for i in rows.size():
+				var r: Dictionary = rows[i]
+				_rank_row(ov, i, str(r.get("name", "?")), "%d şeref · %d yıldız · %d düello" % [int(r.get("honor", 0)), int(r.get("stars", 0)), int(r.get("duel_wins", 0))],
+					str(r.get("name", "")) == profiles.current))
+
+	# sıralama
+	var lv := _section(col, "BU CİHAZ", "Bu cihazdaki komutanlar, kazanılan toplam şerefe göre.")
+	var rows := profiles.leaderboard()
+	for i in rows.size():
+		var r: Dictionary = rows[i]
+		_rank_row(lv, i, r.name, "%d şeref · %d yıldız · %d rozet · en iyi %d. dalga" % [r.honor, r.stars, r.ach, r.best], r.name == profiles.current)
+
+
+func _rank_row(parent: Control, i: int, name: String, info: String, me: bool) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var rk := ui._label("%d." % (i + 1), 24, C_COIN if i == 0 else C_DIM, ui.font_bold)
+	rk.custom_minimum_size = Vector2(44, 0)
+	row.add_child(rk)
+	var nm := ui._label(name, 24, C_GOLD if me else C_TEXT, ui.font_bold)
+	nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	row.add_child(nm)
+	row.add_child(ui._label(info, 19, C_DIM))
+	parent.add_child(row)
+
+
+func _section(parent: Control, title: String, sub: String) -> VBoxContainer:
+	var p := PanelContainer.new()
+	var sb := ui._frame("panel", 18, 20)
+	sb.content_margin_top = 16
+	sb.content_margin_bottom = 16
+	p.add_theme_stylebox_override("panel", sb)
+	parent.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	p.add_child(v)
+	v.add_child(ui._label(title, 26, C_GOLD, ui.font_title))
+	var s := ui._label(sub, 18, C_DIM)
+	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(s)
+	return v
+
+
+func _progress_row(parent: Control, text: String, now: int, goal: int, prize: String, done: bool) -> void:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	parent.add_child(v)
+	var h := HBoxContainer.new()
+	var t := ui._label(text, 21, C_TEXT if not done else Color("#a8d872"), ui.font_bold)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(t)
+	h.add_child(ui._label("Tamam" if done else "%d/%d · %s" % [now, goal, prize], 19, Color("#a8d872") if done else C_COIN, ui.font_bold))
+	v.add_child(h)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.45)
+	bg.custom_minimum_size = Vector2(0, 8)
+	v.add_child(bg)
+	var fill := ColorRect.new()
+	fill.color = Color("#a8d872") if done else C_COIN
+	fill.anchor_bottom = 1.0
+	fill.anchor_right = clampf(float(now) / maxf(1.0, goal), 0.0, 1.0)
+	bg.add_child(fill)
+
+
+func _badge(id: String) -> Control:
+	var a: Dictionary = D.ACHIEVEMENTS[id]
+	var got := profiles.has_ach(id)
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", ui._frame("card_hot" if got else "card", 12, 10))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.custom_minimum_size = Vector2(0, 112)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	p.add_child(v)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	var gem := Panel.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = C_COIN if got else Color(0, 0, 0, 0.35)
+	sb.border_color = C_COIN
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(10)
+	gem.add_theme_stylebox_override("panel", sb)
+	gem.custom_minimum_size = Vector2(20, 20)
+	gem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(gem)
+	var n := ui._label(a.name, 21, C_GOLD if got else C_TEXT, ui.font_bold)
+	n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(n)
+	v.add_child(h)
+	var t := ui._label(a.text, 17, C_DIM)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(t)
+	var pr := profiles.ach_progress(id)
+	v.add_child(ui._label("Kazanıldı · +%d şeref" % a.honor if got else "%d/%d · +%d şeref" % [pr[0], pr[1], a.honor], 17, Color("#a8d872") if got else C_COIN, ui.font_bold))
+	return p
+
+
+# ---------------------------------------------------------------- düello
+
+func show_duel() -> void:
+	visible = true
+	_clear()
+	duel_label = null
+	selected = profiles.country()
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	page.add_child(top)
+	var back := Button.new()
+	back.text = "Geri"
+	back.custom_minimum_size = Vector2(110, 58)
+	back.pressed.connect(func():
+		duel_cancel.emit()
+		_show_countries())
+	top.add_child(back)
+	var h := ui._label("ÇOK OYUNCULU", 32, C_GOLD, ui.font_title)
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top.add_child(h)
+	top.add_child(_flag_rect(selected, 64))
+	var v := _panel()
+	v.add_child(ui._label("Odayı kuran oyunu seçer", 26, C_TEXT, ui.font_title))
+	var picks := HBoxContainer.new()
+	picks.add_theme_constant_override("separation", 8)
+	v.add_child(picks)
+	for p in [["attack", "Saldıran"], ["defend", "Savunan"], ["duel", "Düello"]]:
+		var b := Button.new()
+		b.text = p[1]
+		b.custom_minimum_size = Vector2(0, 58)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 22)
+		var on: bool = p[0] == duel_pick
+		b.add_theme_stylebox_override("normal", ui._frame("card_hot" if on else "card", 12, 8))
+		b.add_theme_color_override("font_color", C_GOLD if on else C_TEXT)
+		b.pressed.connect(func():
+			duel_pick = p[0]
+			show_duel())
+		picks.add_child(b)
+	var texts := {
+		"attack": "Sen saldırırsın, arkadaşın kalesini savunur. Kalesini canlı izlersin; akçenle hangi birliği göndereceğini seçer, askerlerinin canını, gücünü ve hızını yükseltirsin. Askerlerin yol kenarındaki kulelere vurur; kule yıktıkça ve sura vurdukça ganimet kazanırsın. Suru yıkarsan kazanırsın.",
+		"defend": "Sen savunursun, arkadaşın saldırır. Düşmanları o seçip gönderir. Kulelerinin canı var, saldıranlar yıkabilir. %d dakika dayanırsan kazanırsın." % roundi(D.PVP.duration / 60.0),
+		"duel": "İkiniz de kendi kalenizi savunursunuz. Dalgalar kendiliğinden gelir ve bitmez; yendiğin düşmanlar rakibine ek asker olarak gider. Suru önce düşen kaybeder.",
+	}
+	var d := ui._label(texts[duel_pick] + " Katılan arkadaşın öteki rolü alır.", 19, C_DIM)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(d)
+	v.add_child(ui._label("Zafer %d, yenilgi %d şeref." % [D.PVP.honor_win, D.PVP.honor_lose], 19, C_COIN, ui.font_bold))
+	v.add_child(_hero_row(show_duel))
+	if not Net.configured():
+		var n := ui._label("Çevrimiçi sunucu henüz bağlanmadı; düello çok yakında açılacak.", 22, C_COIN, ui.font_bold)
+		n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(n)
+		return
+	var host := _button(v, "Oda Kur", func():
+		var r := RandomNumberGenerator.new()
+		r.randomize()
+		_wait_duel(DuelLink.make_code(r), true), true, 76)
+	host.icon = load("res://assets/ui/swords.png")
+	host.add_theme_constant_override("icon_max_width", 32)
+	v.add_child(ui._label("ya da arkadaşının oda koduyla katıl:", 20, C_DIM))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+	code_edit = LineEdit.new()
+	code_edit.placeholder_text = "ABCD"
+	code_edit.max_length = D.DUEL.code_len
+	code_edit.custom_minimum_size = Vector2(0, 70)
+	code_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	code_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	code_edit.add_theme_font_size_override("font_size", 34)
+	code_edit.add_theme_stylebox_override("normal", ui._box(Color("#120d0a"), Color("#6a4b30"), 10))
+	code_edit.add_theme_stylebox_override("focus", ui._box(Color("#120d0a"), C_GOLD, 10))
+	code_edit.add_theme_color_override("font_color", C_TEXT)
+	code_edit.text_changed.connect(func(t):
+		var c := code_edit.caret_column
+		code_edit.text = t.to_upper()
+		code_edit.caret_column = c)
+	code_edit.text_submitted.connect(func(t): _join_code(t))
+	row.add_child(code_edit)
+	var join := _button(row, "Katıl", func(): _join_code(code_edit.text), false, 70)
+	join.custom_minimum_size.x = 180
+
+
+func _join_code(t: String) -> void:
+	var c := t.strip_edges().to_upper()
+	if c.length() != D.DUEL.code_len:
+		code_edit.placeholder_text = "%d harf" % D.DUEL.code_len
+		code_edit.grab_focus()
+		return
+	_wait_duel(c, false)
+
+
+# Odaya girildi; rakip gelince main oyunu başlatır
+func _wait_duel(code: String, creator: bool) -> void:
+	_clear()
+	page.add_child(_spacer(120))
+	var v := _panel()
+	v.add_child(ui._label("ODA KODU", 24, C_DIM, ui.font_bold))
+	var c := ui._label(code, 84, C_GOLD, ui.font_title)
+	c.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(c)
+	duel_label = ui._label("Sunucuya bağlanılıyor…", 22, C_TEXT)
+	duel_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	duel_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(duel_label)
+	_button(v, "Vazgeç", func():
+		duel_cancel.emit()
+		show_duel(), false, 66)
+	var mode := "duel" if duel_pick == "duel" else "siege"
+	duel_join.emit(code, creator, mode, duel_pick if mode == "siege" else "")
+
+
+func duel_status(text: String) -> void:
+	if duel_label and is_instance_valid(duel_label):
+		duel_label.text = text

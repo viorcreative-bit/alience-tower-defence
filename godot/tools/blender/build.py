@@ -8,8 +8,10 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import kit
+import bosses
 import buildings
 import chars
+import city
 import towers
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "models", "ottoman")
@@ -29,6 +31,7 @@ ASSETS = {
 	"camp_tent_b": lambda: towers.camp_tent("iznik", "camp_tent_b"),
 }
 ASSETS.update(buildings.ALL)
+ASSETS.update(city.ALL)
 
 
 def _char(name):
@@ -41,6 +44,9 @@ def _char(name):
 for _n in chars.TYPES:
 	ASSETS["ch_" + _n] = (lambda n: lambda: _char(n))(_n)
 ASSETS["horse"] = chars.horse
+ASSETS["boss_trebuchet"] = bosses.trebuchet
+ASSETS["boss_elephant"] = bosses.elephant
+ASSETS["boss_tower"] = bosses.siege_ram
 
 
 def main(names):

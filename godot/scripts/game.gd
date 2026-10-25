@@ -30,6 +30,35 @@ var nation := "byzantium"
 var country := "ottoman"
 var king_level := 1
 var speed := 1
+# sefer haritasındaki kuşatma ("" = serbest savaş: klasik yol ve 12 dalga)
+var stage_id := ""
+var stage := {}
+# kahraman komutan ("" = yok): ölürse hero_timer sonra yeniden çıkar; yeteneği hero_cd bekler
+var hero_id := ""
+var hero_timer := 0.0
+var hero_cd := 0.0
+var fortify := 0.0  # Sur Onarımı: surlar hasar almaz
+var morale := 0.0  # Moral: hasar artar, askerler iyileşir
+var strikes: Array = []  # Top Yağmuru: düşmekte olan gülleler {x, y, t}
+# mevsim ve hava: sıradaki dalganın havası dalga bitince seçilir, oyuncu önceden görür
+var season := "spring"
+var weather := "clear"
+# Medrese araştırmaları: biten araştırmalar ve sürmekte olan {id, time}
+var research := {}
+var researching := {}
+var boulders: Array = []  # mancınık taşları {tower, t}
+# görev ve başarım sayımı (main hesaba aktarıp boşaltır); streak hasarsız üst üste dalga
+var stats := {}
+# düello: duel_state.build hazırlığın kalan süresi, pressure rakibe asker için biriken ödül,
+# out rakibe gidecek askerler (bağlantı boşaltır), pending sıradaki dalgaya eklenecek rakip askerleri
+var duel := false
+var duel_state := {}
+# Saldıran ve Savunan: pvp "defend" (bu oyun gerçek savaştır) ya da "attack" (bu oyun savunanın
+# görüntüsüdür, apply_snap ile dolar). pvp_state: kalan süre, ganimet, saldıranın akçesi ve yükseltmeleri.
+var pvp := ""
+var pvp_state := {}
+var streak := 0
+var wave_wall := 0
 var buildings := {}
 var towers: Array = []
 var enemies: Array = []
@@ -47,19 +76,91 @@ var events: Array = []
 
 
 func _init() -> void:
-	_build_path()
+	_build_path(D.MAP.path)
 	reset()
 
 
+# Kuşatmayı seçer: yolu ve dalga sayısını değiştirir. reset'ten önce çağrılır.
+func set_stage(id: String) -> void:
+	stage_id = id if D.STAGES.has(id) else ""
+	stage = D.STAGES[stage_id] if stage_id != "" else {}
+	_build_path(stage.get("path", D.MAP.path))
+	total_waves = stage.picks.size() if stage_id != "" else D.WAVES.size()
+
+
+# Düelloyu açar ya da kapatır (set_stage'den sonra, reset'ten önce): serbest savaş, bitmeyen dalgalar
+func set_duel(on: bool) -> void:
+	duel = on
+	if on:
+		set_stage("")
+		total_waves = 999
+
+
+# Saldıran ve Savunan oyununu açar (set_duel gibi, reset'ten önce)
+func set_pvp(role: String) -> void:
+	pvp = role
+	if role != "":
+		duel = false
+		set_stage("")
+		total_waves = 999
+
+
+# Serbest savaşta dalganın WAVES dizini; düelloda 12'den sonra son dört dalga döner
+func _wi(i: int) -> int:
+	var n: int = D.WAVES.size()
+	return i if i < n else n - 4 + (i - n) % 4
+
+
+# Zeminin nasıl kurulacağı: yol ve kuşatmanın zemin renkleri (değişirse dünya yeniden kurulur)
+func map_key() -> String:
+	return str(path_points) + str(stage.get("ground", {}))
+
+
+# i. dalgayı (0'dan) gönderen devlet; oyuncunun kendi devleti çıkarsa o seferi Osmanlı yapar
+func wave_nation(i: int) -> String:
+	if stage_id == "":
+		return D.wave_nation(_wi(i), country)
+	var n: String = stage.nations[mini(i, stage.nations.size() - 1)]
+	return "ottoman" if n == country else n
+
+
+func wave_groups(i: int) -> Array:
+	return D.WAVES[stage.picks[i] if stage_id != "" else _wi(i)].groups
+
+
+# n. dalgada (1'den) düşman canı çarpanı
+func difficulty(n: int) -> float:
+	if pvp != "":
+		return 1.0  # saldıranın askerleri yalnız yükseltmeyle güçlenir
+	return D.difficulty(n) * stage.get("hp", 1.0)
+
+
+func wave_bosses(i: int) -> Array:
+	return stage.bosses.get(i, []) if stage_id != "" else D.BOSS_WAVES.get(_wi(i), [])
+
+
+func describe_wave(i: int) -> String:
+	if i >= total_waves:
+		return ""
+	var items := []
+	for g in wave_groups(i):
+		items.append("%d %s" % [D.group_count(g[1], i + 1), D.ENEMY_NAMES[g[0]]])
+	for b in wave_bosses(i):
+		items.append("PATRON: " + D.ENEMY_NAMES[b])
+	var k := difficulty(i + 1)
+	var hard := " Düşman canı ×%s." % D.num(k) if absf(k - 1.0) > 0.01 else ""
+	return "Sıradaki sefer: %s — %s.%s" % [D.NATION_NAMES[wave_nation(i)], D.join_list(items), hard]
+
+
 func reset() -> void:
-	gold = D.RULES.start_gold + (D.KING.start_gold * king_level if king_bonus_kind() == "gold" else 0)
+	gold = D.RULES.start_gold + stage.get("gold", 0) + (D.KING.start_gold * king_level if king_bonus_kind() == "gold" else 0)
 	res = D.RULES.start_res.duplicate()
 	wall = D.RULES.start_wall + int(king_bonus("wall"))
 	max_wall = wall
 	wave = 0
 	phase = "build"
 	raid = false
-	nation = D.wave_nation(0, country)
+	nation = wave_nation(0)
 	speed = 1
 	buildings = {}
 	for id in D.BUILDINGS:
@@ -72,6 +173,22 @@ func reset() -> void:
 	spawn_queue = []
 	spawn_timer = 0.0
 	charge = {"active": 0.0, "cooldown": 0.0, "level": 0}
+	hero_timer = 0.5
+	hero_cd = 0.0
+	fortify = 0.0
+	morale = 0.0
+	strikes = []
+	_roll_weather(0)
+	research = {}
+	researching = {}
+	boulders = []
+	stats = {}
+	duel_state = {"build": D.DUEL.first_build, "pressure": 0, "out": [], "pending": [], "sent": 0, "got": 0,
+		"nation": duel_state.get("nation", ""), "result": ""}
+	pvp_state = {"time_left": D.PVP.duration, "loot": 0, "income": D.PVP.def_every, "attacks": 0, "sent": 0,
+		"spent": 0, "up": {"hp": 0, "dmg": 0, "spd": 0}, "out": [], "def_time": 0.0, "result": "",
+		"nation": pvp_state.get("nation", "")}
+	streak = 0
 	selected = null
 	time = 0.0
 	market_timer = 0.0
@@ -81,8 +198,12 @@ func reset() -> void:
 
 # ---------------------------------------------------------------- yol
 
-func _build_path() -> void:
-	for p in D.MAP.path:
+func _build_path(pts: Array) -> void:
+	path_points = []
+	path_segs = []
+	path_length = 0.0
+	path_tiles = {}
+	for p in pts:
 		path_points.append(Vector2(p[0] + 0.5, p[1] + 0.5))
 	for i in path_points.size() - 1:
 		var a := path_points[i]
@@ -90,7 +211,6 @@ func _build_path() -> void:
 		var l := a.distance_to(b)
 		path_segs.append({"a": a, "dir": (b - a) / l, "len": l, "start": path_length})
 		path_length += l
-	var pts: Array = D.MAP.path
 	for i in pts.size() - 1:
 		var c0: int = pts[i][0]
 		var r0: int = pts[i][1]
@@ -128,14 +248,14 @@ func _update_market(dt: float) -> void:
 	market_timer += dt
 	if market_timer >= D.CITY.market_interval:
 		market_timer -= D.CITY.market_interval
-		var n: int = D.CITY.market_gold * lv
+		var n: int = roundi(D.CITY.market_gold * lv * (1.0 + (D.TECH_FX.market if has_tech("trade1") else 0.0)))
 		gold += n
 		var s: Array = D.BUILDINGS.market.slot
 		text(s[0] + 0.5, s[1] + 0.1, "+%d akçe" % n, "#f2c94c")
 
 
 func reward(e: Dictionary) -> int:
-	return roundi(e.def.reward * D.RULES.reward_mult * (1.0 + king_bonus("gold")))
+	return roundi(e.def.reward * D.RULES.reward_mult * (1.0 + king_bonus("gold") + (D.TECH_FX.reward if has_tech("trade2") else 0.0)))
 
 
 # ---------------------------------------------------------------- hükümdar
@@ -251,12 +371,13 @@ func build_tower(type: String) -> void:
 	var cost: int = D.TOWERS[type].cost
 	gold -= cost
 	towers.append({"id": _id(), "type": type, "c": selected.c, "r": selected.r, "x": selected.c + 0.5, "y": selected.r + 0.5,
-		"level": 1, "spent": cost, "cooldown": 0.0, "angle": -PI / 2, "recoil": 0.0})
+		"level": 1, "spent": cost, "cooldown": 0.0, "angle": -PI / 2, "recoil": 0.0, "hp": D.tower_hp(type, 1), "max_hp": D.tower_hp(type, 1)})
+	stat("towers")
 	sound("build")
 
 
 func upgrade_discount() -> float:
-	return D.CITY.school_discount * buildings.school
+	return D.CITY.school_discount * buildings.school + (D.TECH_FX.discount if has_tech("arch2") else 0.0)
 
 
 func tower_upgrade_cost(t: Dictionary) -> int:
@@ -275,6 +396,8 @@ func upgrade_tower() -> void:
 	gold -= cost
 	t.spent += cost
 	t.level += 1
+	t.max_hp = D.tower_hp(t.type, t.level)
+	t.hp = t.max_hp
 	sound("build")
 
 
@@ -300,13 +423,153 @@ func tower_bonus(type: String) -> Dictionary:
 			out = {"slow": D.CITY.science_tar * b.science}
 	out.damage = out.get("damage", 0.0) + king_bonus("tower_damage")
 	out.range = out.get("range", 0.0) + king_bonus("range")
+	var gun := type == "cannon" or type == "musket"
+	if gun and has_tech("powder1"):
+		out.damage += D.TECH_FX.powder_damage
+	if gun and has_tech("powder3"):
+		out.range += D.TECH_FX.powder_range
+	if has_tech("arch3"):
+		out.damage += D.TECH_FX.arch_damage
 	return out
 
 
 func tower_stats(t: Dictionary) -> Dictionary:
 	var s := D.tower_stats(t.type, t.level, tower_bonus(t.type))
 	s.rate /= 1.0 + king_bonus("rate")
+	s.damage = roundi(s.damage * morale_mult())
+	if t.type == "cannon" and has_tech("powder2"):
+		s.splash *= 1.0 + D.TECH_FX.powder_splash
+	var w := wx()
+	s.range *= 1.0 - w.range
+	s.rate *= 1.0 + w.rate + (w.musket if t.type == "musket" or t.type == "cannon" else 0.0)
 	return s
+
+
+# ---------------------------------------------------------------- hava
+
+func season_of(i: int) -> String:
+	if stage_id != "":
+		return stage.get("season", "summer")
+	return D.SEASON_ORDER[(i / D.SEASON_WAVES) % D.SEASON_ORDER.size()]
+
+
+# i. dalganın (0'dan) mevsimini ve havasını seçer; ilk dalga hep açık havada başlar
+func _roll_weather(i: int) -> void:
+	season = season_of(i)
+	if i == 0:
+		weather = "snow" if season == "winter" else "clear"
+		return
+	var w: Dictionary = D.SEASONS[season].weather
+	var total := 0
+	for k in w:
+		total += w[k]
+	var r := randi() % total
+	for k in w:
+		r -= w[k]
+		if r < 0:
+			weather = k
+			return
+
+
+func wx() -> Dictionary:
+	return D.WEATHER[weather]
+
+
+func morale_mult() -> float:
+	return 1.0 + D.HERO.morale if morale > 0.0 else 1.0
+
+
+# ---------------------------------------------------------------- kahraman
+
+func hero_def() -> Dictionary:
+	return D.HEROES.get(hero_id, {})
+
+
+func hero_unit():
+	for u in units:
+		if u.kind == "hero":
+			return u
+	return null
+
+
+func can_hero() -> bool:
+	return hero_id != "" and hero_cd <= 0.0 and phase == "wave" and hero_unit() != null
+
+
+func use_hero() -> void:
+	if not can_hero():
+		return
+	var h: Dictionary = hero_unit()
+	hero_cd = hero_def().cooldown
+	stat("hero")
+	banner("%s!" % hero_def().ability, hero_def().ring, 2.0)
+	text(h.x, h.y - 0.5, hero_def().name, hero_def().ring)
+	match hero_id:
+		"barbaros":
+			var front := enemies.filter(func(e): return not e.dead and e.y < wall_row)
+			front.sort_custom(func(a, b): return a.dist > b.dist)
+			var n: int = D.HERO.barrage_count
+			for i in n:
+				var x: float
+				var y: float
+				if front.size():
+					var e: Dictionary = front[i % front.size()]
+					# aynı düşmana düşen ikinci gülle biraz ilerisine
+					var ahead := point_at(e.dist + e.speed * (D.HERO.barrage_fall + i * D.HERO.barrage_gap))
+					x = ahead.x
+					y = ahead.y
+				else:
+					var p := point_at(path_length * randf_range(0.3, 0.9))
+					x = p.x
+					y = p.y
+				var t: float = D.HERO.barrage_fall + i * D.HERO.barrage_gap
+				strikes.append({"x": x, "y": y, "t": t})
+				events.append({"kind": "fall", "x": x, "y": y, "time": t})
+			sound("hero_barbaros")
+		"sinan":
+			var n: int = mini(D.HERO.repair, max_wall - wall)
+			wall += n
+			fortify = D.HERO.fortify
+			var g := point_at(path_length)
+			text(g.x, g.y - 0.2, "Sur +%d" % n if n > 0 else "Surlar tahkim edildi", "#e0c070")
+			particles(g.x, g.y + 0.3, "#e8d6a8", 24, 1.6, 0.06, 0.8)
+			sound("hero_sinan")
+		"evliya":
+			morale = D.HERO.morale_time
+			for u in units:
+				particles(u.x, u.y - 0.2, "#6fc0e0", 5, 0.8, 0.05, 0.6)
+			sound("hero_evliya")
+			sound("chant", {"voices": 10, "loud": 1, "delay": 0.8})
+	ring(h.x, h.y, 1.2, hero_def().ring)
+
+
+func _update_hero(dt: float) -> void:
+	if hero_cd > 0.0:
+		hero_cd = maxf(0.0, hero_cd - dt)
+	if fortify > 0.0:
+		fortify = maxf(0.0, fortify - dt)
+	if morale > 0.0:
+		morale = maxf(0.0, morale - dt)
+	if hero_id != "" and hero_unit() == null:
+		hero_timer -= dt
+		if hero_timer <= 0.0:
+			_spawn_unit("hero")
+			var g := point_at(path_length)
+			text(g.x, g.y + 0.3, hero_def().name, hero_def().ring)
+	for s in strikes:
+		s.t -= dt
+		if s.t <= 0.0:
+			var dmg: float = D.HERO.barrage_damage * difficulty(maxi(1, wave))
+			for e in enemies:
+				if not e.dead and Vector2(e.x - s.x, e.y - s.y).length() <= D.HERO.barrage_splash:
+					damage_enemy(e, dmg, true)
+			ring(s.x, s.y, D.HERO.barrage_splash, "#ffb347")
+			particles(s.x, s.y, "#cbb48a", 16, 2.8, 0.07, 0.5)
+			particles(s.x, s.y, "#ffb347", 8, 2.0, 0.05, 0.3)
+			events.append({"kind": "shake", "time": 0.12})
+			events.append({"kind": "blast", "x": s.x, "y": s.y})
+			sound("boom")
+	strikes = strikes.filter(func(s): return s.t > 0.0)
 
 
 # ---------------------------------------------------------------- şehir
@@ -365,7 +628,62 @@ func building_block(id: String) -> Dictionary:
 func building_cost(id: String) -> int:
 	var costs: Array = D.BUILDINGS[id].costs
 	var l: int = buildings[id]
-	return costs[l] if l < costs.size() else 0
+	var c: int = costs[l] if l < costs.size() else 0
+	return roundi(c * (1.0 - D.TECH_FX.discount)) if has_tech("arch2") else c
+
+
+# ---------------------------------------------------------------- Medrese
+
+func has_tech(id: String) -> bool:
+	return research.has(id)
+
+
+# Araştırılamıyorsa nedeni, araştırılabiliyorsa "" (para ayrıca bakılır)
+func tech_block(id: String) -> String:
+	var t: Dictionary = D.TECH[id]
+	if has_tech(id):
+		return "done"
+	if researching.get("id", "") == id:
+		return "running"
+	if buildings.medrese < t.tier:
+		return "medrese"
+	if t.tier > 1 and not has_tech(D.tech_of(t.branch, t.tier - 1)):
+		return "prev"
+	if not researching.is_empty():
+		return "busy"
+	return ""
+
+
+func can_research(id: String) -> bool:
+	return is_active() and tech_block(id) == "" and gold >= D.TECH[id].cost
+
+
+func start_research(id: String) -> bool:
+	if not can_research(id):
+		return false
+	gold -= D.TECH[id].cost
+	researching = {"id": id, "time": D.TECH[id].time}
+	sound("build")
+	return true
+
+
+func _update_research(dt: float) -> void:
+	if researching.is_empty():
+		return
+	researching.time -= dt
+	if researching.time > 0.0:
+		return
+	var id: String = researching.id
+	researching = {}
+	research[id] = true
+	stat("research")
+	if id == "arch1":
+		max_wall += D.TECH_FX.wall
+		wall += D.TECH_FX.wall
+	var s: Array = D.BUILDINGS.medrese.slot
+	text(s[0] + 0.5, s[1], D.TECH[id].name, "#9fd0f0")
+	banner("%s tamamlandı" % D.TECH[id].name, "#9fd0f0", 1.8)
+	sound("research")
 
 
 func can_upgrade_building(id: String) -> bool:
@@ -412,17 +730,25 @@ func trigger_charge() -> void:
 # ---------------------------------------------------------------- dalgalar
 
 func start_wave() -> void:
-	if phase != "build" or wave >= total_waves:
+	if phase != "build" or wave >= total_waves or pvp != "":
 		return
 	wave += 1
 	phase = "wave"
 	raid = false
-	var w: Dictionary = D.WAVES[wave - 1]
-	nation = D.wave_nation(wave - 1, country)
+	wave_wall = wall
+	nation = wave_nation(wave - 1)
 	spawn_queue = []
-	for g in w.groups:
+	for g in wave_groups(wave - 1):
 		for i in D.group_count(g[1], wave):
 			spawn_queue.append({"type": g[0], "gap": g[2], "nation": nation})
+	var bosses := wave_bosses(wave - 1)
+	if bosses.size():
+		spawn_queue[-1].gap = D.BOSS_GAP
+		for b in bosses:
+			spawn_queue.append({"type": b, "gap": D.BOSS_GAP, "nation": nation})
+	if duel:
+		spawn_queue.append_array(duel_state.pending)
+		duel_state.pending = []
 	spawn_timer = D.RULES.first_spawn_delay + 1.2
 	banner("%s seferde!" % D.NATION_NAMES[nation], "#f3e6c8", 2.4)
 	sound("waveStart")
@@ -431,15 +757,17 @@ func start_wave() -> void:
 
 func _spawn_enemy(type: String, nat: String) -> void:
 	var def: Dictionary = D.ENEMIES[type]
-	var hp := roundi(def.hp * D.difficulty(wave))
+	# patronların canı dalgayla daha yavaş artar (zaten büyük)
+	var hp := roundi(def.hp * (pow(difficulty(wave), 0.75) if def.get("boss", false) else difficulty(wave)))
 	var spd: float = def.speed * (1.0 + D.RULES.speed_growth * max(0, wave - 1))
 	var p := point_at(0.0)
 	enemies.append({"id": _id(), "def": def, "type": type, "nation": nat, "hp": float(hp), "max_hp": float(hp),
 		"speed": spd, "armor": def.armor, "radius": def.radius, "dist": 0.0, "x": p.x, "y": p.y, "angle": p.z,
-		"slow": 0.0, "slow_time": 0.0, "flash": 0.0, "dead": false, "blocker": null, "attack_cd": 0.3, "swing": 0.0})
+		"slow": 0.0, "slow_time": 0.0, "flash": 0.0, "dead": false, "blocker": null, "attack_cd": 0.3, "swing": 0.0,
+		"boss_cd": 2.0, "act": 0.0})
 	if def.get("warning", false):
 		banner(D.WARNINGS[type], "#ff5b4d")
-		sound("horn")
+		sound("bossHorn" if def.get("boss", false) else "horn")
 
 
 func _update_spawner(dt: float) -> void:
@@ -449,33 +777,46 @@ func _update_spawner(dt: float) -> void:
 	while spawn_queue.size() and spawn_timer <= 0.0:
 		var n: Dictionary = spawn_queue.pop_front()
 		_spawn_enemy(n.type, n.nation)
+		if n.get("duel", false):
+			enemies[-1].from_duel = true
+		if n.has("up"):
+			_boost(enemies[-1], n.up)
 		spawn_timer += n.gap
 
 
 func _check_wave_end() -> bool:
 	if phase != "wave" or spawn_queue.size() or enemies.size():
 		return false
+	if pvp != "":
+		phase = "build"
+		return false
 	if raid:
 		raid = false
 		phase = "build"
 		gold += D.RAID.bonus
-		nation = D.wave_nation(wave, country)
+		stat("raids")
+		nation = wave_nation(wave)
 		_reset_raid_timer()
 		banner("Baskın püskürtüldü  +%d" % D.RAID.bonus, "#f2c94c")
 		return false
+	stat("waves")
+	streak = streak + 1 if wall >= wave_wall else 0
+	stats.streak = maxi(stats.get("streak", 0), streak)
 	if wave >= total_waves:
 		phase = "won"
 		sound("chant", {"voices": 16, "loud": 1})
 		return true
-	var bonus := D.wave_bonus(wave)
+	var bonus := roundi(D.wave_bonus(wave) * (1.0 + (D.TECH_FX.wave_bonus if has_tech("trade3") else 0.0)))
 	var income := city_income()
 	gold += bonus + income.tax + income.endowment + income.palace_tax
 	wall = mini(max_wall, wall + income.repair)
 	for k in D.RES_ORDER:
 		res[k] += income[k]
 	phase = "build"
-	nation = D.wave_nation(wave, country)
+	nation = wave_nation(wave)
+	duel_state.build = D.DUEL.build
 	charge.active = 0.0
+	_roll_weather(wave)
 	_reset_raid_timer()
 	banner("%d. sefer püskürtüldü  +%d" % [wave, bonus + income.tax + income.endowment + income.palace_tax], "#f2c94c")
 	sound("victory")
@@ -483,10 +824,16 @@ func _check_wave_end() -> bool:
 
 
 func city_income() -> Dictionary:
-	return {"tax": D.CITY.court_tax * buildings.court, "endowment": D.CITY.mosque_endowment * buildings.mosque,
+	var out := {"tax": D.CITY.court_tax * buildings.court, "endowment": D.CITY.mosque_endowment * buildings.mosque,
 		"repair": D.CITY.hospital_repair * buildings.hospital + (ceili(king_level / 2.0) if king_bonus_kind() == "wall" else 0), "palace_tax": D.CITY.palace_tax * buildings.palace,
 		"wood": D.CITY.palace_wood * buildings.palace, "iron": D.CITY.palace_iron * buildings.palace,
 		"food": D.CITY.kitchen_food * buildings.kitchen}
+	if has_tech("arch3"):
+		out.repair += D.TECH_FX.arch_repair
+	if has_tech("trade3"):
+		out.wood += D.TECH_FX.wood
+		out.iron += D.TECH_FX.iron
+	return out
 
 
 func _reset_raid_timer() -> void:
@@ -496,12 +843,12 @@ func _reset_raid_timer() -> void:
 
 
 func _update_raid(dt: float) -> void:
-	if phase != "build" or wave < D.RAID.first_wave or wave >= total_waves:
+	if duel or pvp != "" or phase != "build" or wave < D.RAID.first_wave or wave >= total_waves:
 		return
 	raid_timer -= dt
 	if raid_timer > 0.0:
 		return
-	var nat := D.wave_nation(wave, country)
+	var nat := wave_nation(wave)
 	var count := roundi(D.RAID.base_count + wave * D.RAID.count_per_wave)
 	phase = "wave"
 	raid = true
@@ -527,7 +874,7 @@ func _update_movement(dt: float) -> void:
 			if e.slow_time <= 0.0:
 				e.slow = 0.0
 		if e.blocker == null:
-			var nxt: float = e.dist + e.speed * (1.0 - e.slow) * dt
+			var nxt: float = e.dist + e.speed * (1.0 - e.slow) * (1.0 - wx().slow) * dt
 			var b = _find_blocker(e, nxt)
 			if b != null:
 				e.blocker = b
@@ -542,7 +889,13 @@ func _update_movement(dt: float) -> void:
 		if e.dist >= path_length:
 			e.dead = true
 			e.breached = true
-			wall = maxi(0, wall - e.def.damage)
+			if fortify > 0.0:
+				text(e.x, e.y - 0.4, "Sur sağlam!", "#e0c070")
+			else:
+				var dmg := roundi(e.def.damage * e.get("dmg_mult", 1.0))
+				if pvp != "":
+					pvp_state.loot += mini(wall, dmg) * D.PVP.loot_wall
+				wall = maxi(0, wall - dmg)
 			events.append({"kind": "shake", "time": D.RULES.shake_time})
 			sound("wallHit")
 			if wall <= 0:
@@ -573,6 +926,11 @@ func damage_enemy(e: Dictionary, amount: float, pierce: bool) -> void:
 	if e.hp <= 0.0:
 		e.dead = true
 		gold += reward(e)
+		stat("kills")
+		if e.def.get("boss", false):
+			stat("boss_kills")
+		if duel:
+			_duel_kill(e)
 		var color: String = "#a0703c" if e.def.get("siege", false) else D.NATIONS[e.nation].primary
 		var big: bool = e.def.get("warning", false)
 		particles(e.x, e.y, color, 36 if big else 10, 2.2, e.radius * 0.28, 0.6)
@@ -618,9 +976,84 @@ func _hit(p: Dictionary) -> void:
 		particles(p.x, p.y, "#d9c79c", 3, 1.2, 0.035, 0.2)
 
 
+# Patronların özel işleri: mancınık kuleye taş atar, fil askerleri ezer, dev kule içinden asker çıkarır
+func _update_bosses(dt: float) -> void:
+	var born := []
+	for e in enemies:
+		if e.dead or not e.def.get("boss", false):
+			continue
+		if e.act > 0.0:
+			e.act = maxf(0.0, e.act - dt)
+		e.boss_cd -= dt
+		if e.boss_cd > 0.0:
+			continue
+		if e.def.has("throw"):
+			var th: Dictionary = e.def.throw
+			var best = null
+			var bd: float = th.range
+			for t in towers:
+				var d := Vector2(t.x - e.x, t.y - e.y).length()
+				if d <= bd:
+					bd = d
+					best = t
+			e.boss_cd = th.rate if best != null else 0.5
+			if best != null:
+				e.act = 1.0
+				boulders.append({"tower": best, "t": th.flight, "stun": th.stun})
+				events.append({"kind": "boulder", "x0": e.x, "y0": e.y, "x1": best.x, "y1": best.y, "time": th.flight})
+				sound("throw")
+		elif e.def.has("trample"):
+			var tr: Dictionary = e.def.trample
+			e.boss_cd = tr.rate
+			for u in units:
+				if not u.dead and Vector2(u.x - e.x, u.y - e.y).length() <= tr.range + e.radius:
+					u.hp -= tr.damage
+					u.flash = 0.12
+					e.act = 1.0
+					particles(u.x, u.y, "#a0703c", 6, 1.5, 0.05, 0.4)
+					if u.hp <= 0.0:
+						_kill_unit(u)
+			if e.act > 0.0:
+				sound("trumpet" if randf() < 0.3 else "wallHit")
+		elif e.def.has("spawn"):
+			var sp: Dictionary = e.def.spawn
+			e.boss_cd = sp.rate
+			e.act = 1.0
+			sound("gate")
+			for i in sp.count:
+				born.append({"type": sp.type, "nation": e.nation, "dist": maxf(0.0, e.dist - 0.25 - i * 0.3)})
+	for b in born:
+		_spawn_enemy(b.type, b.nation)
+		var n: Dictionary = enemies[-1]
+		n.dist = b.dist
+		var p := point_at(n.dist)
+		n.x = p.x
+		n.y = p.y
+	for b in boulders:
+		b.t -= dt
+		if b.t <= 0.0:
+			var t: Dictionary = b.tower
+			t.stun = b.stun
+			particles(t.x, t.y, "#8a7a68", 14, 2.0, 0.07, 0.5)
+			text(t.x, t.y - 0.4, "Kule sustu!", "#ff5b4d")
+			events.append({"kind": "shake", "time": 0.1})
+			sound("crash")
+	boulders = boulders.filter(func(b): return b.t > 0.0)
+
+
+func first_boss():
+	for e in enemies:
+		if not e.dead and e.def.get("boss", false):
+			return e
+	return null
+
+
 func _update_towers(dt: float) -> void:
 	for t in towers:
 		var s := tower_stats(t)
+		if t.get("stun", 0.0) > 0.0:
+			t.stun -= dt
+			continue
 		t.cooldown -= dt
 		var target = _find_target(t, s.range)
 		if target != null:
@@ -678,11 +1111,15 @@ func training_of(kind: String) -> Dictionary:
 	return training[kind]
 
 
+func unit_def(kind: String) -> Dictionary:
+	return hero_def() if kind == "hero" else D.TROOPS[kind]
+
+
 func troop_stats(kind: String) -> Dictionary:
-	var d: Dictionary = D.TROOPS[kind]
-	var lv: int = max(1, buildings.get(d.building, 0))
+	var d := unit_def(kind)
+	var lv: int = 1 if kind == "hero" else max(1, buildings.get(d.building, 0))
 	var k: float = (1.0 + D.ARMY.level_bonus * (lv - 1)) * (1.0 + king_bonus("troops"))
-	return {"hp": float(roundi(d.hp * k)), "damage": d.damage * k}
+	return {"hp": float(roundi(d.hp * k)), "damage": d.damage * k * morale_mult()}
 
 
 func can_train(kind: String) -> bool:
@@ -710,7 +1147,7 @@ func troop_of(building: String):
 func _spawn_unit(kind: String) -> void:
 	var gate := point_at(path_length)
 	var hp: float = troop_stats(kind).hp
-	units.append({"id": _id(), "kind": kind, "def": D.TROOPS[kind], "hp": hp, "max_hp": hp, "x": gate.x, "y": gate.y + 0.6,
+	units.append({"id": _id(), "kind": kind, "def": unit_def(kind), "hp": hp, "max_hp": hp, "x": gate.x, "y": gate.y + 0.6,
 		"tx": gate.x, "ty": gate.y, "post": path_length, "ready": false, "engaged": 0, "cooldown": 0.0, "swing": 0.0,
 		"angle": -PI / 2, "moving": false, "dead": false, "flash": 0.0, "healing": false})
 	sound("chant", {"voices": 4})
@@ -719,7 +1156,7 @@ func _spawn_unit(kind: String) -> void:
 func _assign_posts() -> void:
 	var melee := units.filter(func(u): return u.def.role == "melee" and not u.healing)
 	# kapıya en yakın sırada Sofiler (arkadan can verir), en önde Yeniçeriler
-	var order := {"sufi": 0, "sipahi": 1, "janissary": 2}
+	var order := {"sufi": 0, "sipahi": 1, "janissary": 2, "hero": 3}
 	melee.sort_custom(func(a, b):
 		if a.kind == b.kind:
 			return a.id < b.id
@@ -768,7 +1205,7 @@ func _walk(u: Dictionary, dt: float) -> void:
 	var dx: float = tx - u.x
 	var dy: float = ty - u.y
 	var d := sqrt(dx * dx + dy * dy)
-	var step: float = u.def.speed * dt
+	var step: float = u.def.speed * (1.0 - wx().troop_slow) * dt
 	if d <= step:
 		u.x = tx
 		u.y = ty
@@ -824,7 +1261,11 @@ func _kill_unit(u: Dictionary) -> void:
 	u.dead = true
 	particles(u.x, u.y, "#b3202a", 10, 2.0, 0.06, 0.6)
 	particles(u.x, u.y, "#e8dcc0", 6, 1.4, 0.08, 0.7)
-	text(u.x, u.y - 0.3, "Şehit düştü", "#ff5b4d")
+	if u.kind == "hero":
+		hero_timer = D.HERO.respawn
+		text(u.x, u.y - 0.3, "%s yaralandı, %d sn sonra döner" % [hero_def().name, roundi(D.HERO.respawn)], "#ff5b4d")
+	else:
+		text(u.x, u.y - 0.3, "Şehit düştü", "#ff5b4d")
 	sound("fall")
 
 
@@ -868,6 +1309,9 @@ func _update_army(dt: float) -> void:
 
 	_send_wounded()
 	_assign_posts()
+	if morale > 0.0:
+		for u in units:
+			u.hp = minf(u.max_hp, u.hp + D.HERO.morale_heal * dt)
 	var regen: float = 0.0 if phase == "wave" else D.ARMY.regen_build
 	var ward := hospital_pos()
 	var ward_heal: float = D.CITY.ward_heal + D.CITY.ward_heal_level * buildings.hospital
@@ -941,6 +1385,10 @@ func _find_blocker(e: Dictionary, next_dist: float):
 
 # ---------------------------------------------------------------- ana adım
 
+func stat(key: String, n := 1) -> void:
+	stats[key] = stats.get(key, 0) + n
+
+
 func _id() -> int:
 	next_id += 1
 	return next_id
@@ -949,11 +1397,22 @@ func _id() -> int:
 # Bir sabit adım. Dalga ya da baskın bittiyse true döner (kayıt için).
 func step(dt: float) -> bool:
 	time += dt
+	if duel and phase == "build":
+		duel_state.build -= dt
+		if duel_state.build <= 0.0:
+			start_wave()
+	if pvp == "defend":
+		_update_pvp(dt)
+	if pvp != "attack":
+		_update_tower_damage(dt)
 	_update_raid(dt)
 	_update_market(dt)
+	_update_research(dt)
 	_update_spawner(dt)
+	_update_hero(dt)
 	_update_army(dt)
 	_update_movement(dt)
+	_update_bosses(dt)
 	_update_towers(dt)
 	_update_projectiles(dt)
 	enemies = enemies.filter(func(e): return not e.dead)
@@ -975,3 +1434,330 @@ func advance(elapsed: float) -> bool:
 			ended = true
 		remaining -= s
 	return ended
+
+
+# ---------------------------------------------------------------- düello
+
+# Yenilen düşmanın ödülü birikir; her cost'ta rakibe bir asker. Rakibin yolladıkları geri gitmez.
+func _duel_kill(e: Dictionary) -> void:
+	if e.get("from_duel", false):
+		return
+	if e.def.get("boss", false):
+		duel_state.out.append(D.DUEL.boss_send)
+	duel_state.pressure += reward(e)
+	while duel_state.pressure >= D.DUEL.cost:
+		duel_state.pressure -= D.DUEL.cost
+		var open := []
+		for s in D.DUEL.send:
+			if wave >= s[0]:
+				open.append(s[1])
+		duel_state.out.append(open[duel_state.sent % open.size()])
+		duel_state.sent += 1
+
+
+# Rakipten gelen askerler: dalga sürüyorsa hemen sıraya, değilse sıradaki dalgaya eklenir
+func duel_receive(types: Array) -> void:
+	if not duel or not is_active() or types.is_empty():
+		return
+	var nat: String = duel_state.nation if D.NATIONS.has(duel_state.nation) else nation
+	var list := []
+	for t in types:
+		if D.ENEMIES.has(t):
+			list.append({"type": t, "gap": D.DUEL.gap, "nation": nat, "duel": true})
+	duel_state.got += list.size()
+	if phase == "wave" and not raid:
+		spawn_queue.append_array(list)
+		banner("Rakipten %d asker geldi!" % list.size(), "#ff5b4d", 1.6)
+	else:
+		duel_state.pending.append_array(list)
+		banner("Rakip %d asker yolladı, sıradaki dalgaya katılacak" % list.size(), "#ff5b4d", 1.6)
+	sound("horn")
+
+
+# Düellonun sonu: rakip düştüyse ya da ayrıldıysa zafer
+func duel_end(win: bool, why: String) -> void:
+	if not duel or not is_active():
+		return
+	duel_state.result = "win" if win else "lose"
+	phase = "won" if win else "lost"
+	if win:
+		stat("duel_wins")
+		sound("chant", {"voices": 16, "loud": 1})
+	else:
+		sound("defeat")
+	banner(why, "#f2c94c" if win else "#ff5b4d", 3.0)
+
+
+# ---------------------------------------------------------------- saldıran ve savunan
+
+# Saldıranın yükseltmeleri askerin canını, gücünü (sura ve kuleye vuruşu) ve hızını artırır
+func _boost(e: Dictionary, up: Dictionary) -> void:
+	var k: float = 1.0 + D.PVP.up.hp * int(up.get("hp", 0))
+	e.hp *= k
+	e.max_hp *= k
+	e.speed *= 1.0 + D.PVP.up.spd * int(up.get("spd", 0))
+	e.dmg_mult = 1.0 + D.PVP.up.dmg * int(up.get("dmg", 0))
+	e.pvp = true
+
+
+func _update_pvp(dt: float) -> void:
+	pvp_state.time_left = maxf(0.0, pvp_state.time_left - dt)
+	if pvp_state.time_left <= 0.0 and is_active():
+		pvp_state.result = "win"
+		phase = "won"
+		stat("duel_wins")
+		banner("Kale dayandı! Zafer senin", "#f2c94c", 3.0)
+		sound("chant", {"voices": 16, "loud": 1})
+		return
+	# savunanın geliri: her def_every saniyede şehir vergisi ve onarım
+	pvp_state.income -= dt
+	if pvp_state.income <= 0.0:
+		pvp_state.income = D.PVP.def_every
+		var inc := city_income()
+		gold += D.PVP.def_gold + inc.tax + inc.endowment + inc.palace_tax
+		wall = mini(max_wall, wall + inc.repair)
+		for k in D.RES_ORDER:
+			res[k] += inc[k]
+
+
+# Düşmanlar yanından geçtikleri kuleye vurur, savaş yoksa kuleler kendini onarır (her oyunda;
+# Saldıran ve Savunan'da daha sert vurur ve yıkılan kule saldırana ganimet getirir)
+func _update_tower_damage(dt: float) -> void:
+	var dps: float = D.PVP.tower_dps if pvp != "" else D.PVP.tower_dps_solo
+	var down := []
+	for t in towers:
+		if not t.has("hp"):
+			continue
+		if enemies.is_empty():
+			t.hp = minf(t.max_hp, t.hp + t.max_hp * D.PVP.tower_regen * dt)
+	for e in enemies:
+		if e.dead or e.y >= wall_row:
+			continue
+		var reach: float = D.PVP.reach.get(e.type, D.PVP.tower_reach)
+		if reach <= 0.0:
+			continue
+		var best = null
+		var bd: float = reach + e.radius
+		for t in towers:
+			var d := Vector2(t.x - e.x, t.y - e.y).length()
+			if d <= bd and t.hp > 0.0:
+				bd = d
+				best = t
+		if best != null:
+			# tek kişilik oyunda iri düşmanlar da kuleyi en fazla solo_cap kadar hızlı döver
+			var hit: float = maxf(1.0, e.def.damage) if pvp != "" else clampf(e.def.damage, 1.0, D.PVP.solo_cap)
+			best.hp -= hit * dps * e.get("dmg_mult", 1.0) * dt
+			e.swing = maxf(e.swing, 0.7)
+			if best.hp <= 0.0 and not best in down:
+				down.append(best)
+	for t in down:
+		towers.erase(t)
+		if selected != null and selected.get("c") == t.c and selected.get("r") == t.r:
+			selected = null
+		if pvp != "":
+			pvp_state.loot += D.PVP.loot_tower * t.level
+		particles(t.x, t.y, "#8a7a68", 30, 2.4, 0.09, 0.7)
+		particles(t.x, t.y, "#e8dcc0", 16, 1.6, 0.12, 0.8)
+		text(t.x, t.y - 0.5, "Kule yıkıldı!", "#ff5b4d")
+		events.append({"kind": "shake", "time": 0.15})
+		sound("crash")
+
+
+# Saldırandan gelen birlikler hemen yola çıkar
+func pvp_receive(type: String, count: int, up: Dictionary) -> void:
+	if pvp != "defend" or not is_active() or not D.PVP.units.has(type):
+		return
+	count = clampi(count, 1, D.PVP.batch)
+	var nat: String = pvp_state.nation if D.NATIONS.has(pvp_state.nation) else nation
+	for i in count:
+		spawn_queue.append({"type": type, "gap": D.PVP.gap, "nation": nat, "up": up})
+	if phase == "build":
+		phase = "wave"
+		spawn_timer = 0.3
+		sound("waveStart")
+	pvp_state.attacks += 1
+	banner("%d %s geliyor!" % [count, D.ENEMY_NAMES[type]], "#ff5b4d", 1.4)
+
+
+# Saldıran ya da sürenin dolması dışında biten oyun (rakip yenildi/ayrıldı)
+func pvp_end(win: bool, why: String) -> void:
+	if pvp == "" or not is_active():
+		return
+	pvp_state.result = "win" if win else "lose"
+	phase = "won" if win else "lost"
+	if win:
+		stat("duel_wins")
+		sound("chant", {"voices": 16, "loud": 1})
+	else:
+		sound("defeat")
+	banner(why, "#f2c94c" if win else "#ff5b4d", 3.0)
+
+
+# ---- savunanın kalesinin görüntüsü (saldıranın tarafı)
+
+static func _r(v: float) -> float:
+	return snappedf(v, 0.01)
+
+
+# Savunanın durumundan kısa bir görüntü: kuleler, düşmanlar, askerler, mermiler
+func snapshot() -> Dictionary:
+	var tw := []
+	for t in towers:
+		tw.append([t.id, t.type, t.level, t.c, t.r, _r(t.angle), roundi(t.hp), roundi(t.max_hp), 1 if t.get("stun", 0.0) > 0.0 else 0])
+	var en := []
+	for e in enemies:
+		if not e.dead:
+			en.append([e.id, e.type, e.nation, _r(e.dist), roundi(e.hp), roundi(e.max_hp), _r(e.speed * (1.0 - e.slow) * (1.0 - wx().slow)),
+				1 if e.blocker != null else 0, _r(e.act)])
+	var un := []
+	for u in units:
+		if not u.dead:
+			un.append([u.id, u.kind, _r(u.x), _r(u.y), _r(u.angle), roundi(u.hp), roundi(u.max_hp), 1 if u.moving else 0, _r(u.swing)])
+	var pr := []
+	for p in projectiles.slice(0, 24):
+		pr.append([p.id, p.type, _r(p.x), _r(p.y), _r(p.tx), _r(p.ty), p.from])
+	return {"tw": tw, "en": en, "un": un, "pr": pr, "wall": wall, "max_wall": max_wall, "time": _r(time),
+		"left": _r(pvp_state.time_left), "loot": pvp_state.loot, "b": buildings.duplicate(), "season": season,
+		"weather": weather, "hero": hero_id, "phase": phase}
+
+
+# Saldıranın tarafında savunanın görüntüsünü kurar; kimliği aynı kalanlar yerinde güncellenir
+func apply_snap(m: Dictionary) -> void:
+	var old := {}
+	for list in [towers, enemies, units, projectiles]:
+		for o in list:
+			old[o.id] = o
+	towers = []
+	for a in m.get("tw", []):
+		var t: Dictionary = old.get(int(a[0]), {"id": int(a[0]), "recoil": 0.0, "cooldown": 0.0})
+		t.merge({"type": str(a[1]), "level": int(a[2]), "c": int(a[3]), "r": int(a[4]), "x": int(a[3]) + 0.5, "y": int(a[4]) + 0.5,
+			"angle": float(a[5]), "hp": float(a[6]), "max_hp": maxf(1.0, float(a[7])), "stun": 1.0 if int(a[8]) else 0.0}, true)
+		towers.append(t)
+	enemies = []
+	for a in m.get("en", []):
+		var type := str(a[1])
+		if not D.ENEMIES.has(type):
+			continue
+		var id := int(a[0])
+		var e: Dictionary = old.get(id, {})
+		if e.is_empty():
+			e = {"id": id, "def": D.ENEMIES[type], "type": type, "radius": D.ENEMIES[type].radius, "flash": 0.0, "swing": 0.0,
+				"slow": 0.0, "dead": false, "dist": float(a[3]), "armor": 0}
+		e.nation = str(a[2]) if D.NATIONS.has(str(a[2])) else "byzantium"
+		if float(a[4]) < e.get("hp", float(a[4])):
+			e.flash = D.RULES.hit_flash
+		e.hp = float(a[4])
+		e.max_hp = maxf(1.0, float(a[5]))
+		e.speed = float(a[6])
+		e.target_dist = float(a[3])
+		e.blocker = true if int(a[7]) else null
+		e.act = float(a[8])
+		enemies.append(e)
+	units = []
+	for a in m.get("un", []):
+		var kind := str(a[1])
+		var id := int(a[0])
+		var u: Dictionary = old.get(id, {"id": id, "kind": kind, "x": float(a[2]), "y": float(a[3]), "engaged": 0, "ready": true, "dead": false})
+		u.tx = float(a[2])
+		u.ty = float(a[3])
+		u.angle = float(a[4])
+		u.hp = float(a[5])
+		u.max_hp = maxf(1.0, float(a[6]))
+		u.moving = int(a[7]) == 1
+		u.swing = float(a[8])
+		units.append(u)
+	projectiles = []
+	for a in m.get("pr", []):
+		var id := int(a[0])
+		var p: Dictionary = old.get(id, {"id": id, "type": str(a[1]), "from": str(a[6])})
+		p.merge({"x": float(a[2]), "y": float(a[3]), "tx": float(a[4]), "ty": float(a[5])}, true)
+		projectiles.append(p)
+	wall = int(m.get("wall", wall))
+	max_wall = int(m.get("max_wall", max_wall))
+	pvp_state.def_time = float(m.get("time", 0.0))
+	pvp_state.time_left = float(m.get("left", pvp_state.time_left))
+	pvp_state.loot = int(m.get("loot", pvp_state.loot))
+	var b = m.get("b")
+	if b is Dictionary:
+		for k in b:
+			if buildings.has(k):
+				buildings[k] = int(b[k])
+	season = str(m.get("season", season)) if D.SEASONS.has(str(m.get("season", ""))) else season
+	weather = str(m.get("weather", weather)) if D.WEATHER.has(str(m.get("weather", ""))) else weather
+	hero_id = str(m.get("hero", "")) if D.HEROES.has(str(m.get("hero", ""))) else ""
+	var ph := str(m.get("phase", "build"))
+	if ph in ["build", "wave"] and is_active():
+		phase = ph
+
+
+# Görüntülerin arasında düşmanlar yolda yürümeye, askerler hedeflerine kaymaya devam eder
+func mirror_step(dt: float) -> void:
+	time += dt
+	for e in enemies:
+		var want: float = e.get("target_dist", e.dist)
+		if e.blocker == null:
+			e.dist += e.speed * dt
+		# görüntüden çok saparsa ona doğru çekilir
+		e.dist = lerpf(e.dist, want, minf(1.0, dt * 3.0)) if absf(e.dist - want) > 0.05 else e.dist
+		e.dist = minf(e.dist, path_length)
+		var p := point_at(e.dist)
+		e.x = p.x
+		e.y = p.y
+		e.angle = p.z
+		e.flash = maxf(0.0, e.flash - dt)
+		e.swing = maxf(0.0, e.swing - dt * 2.0)
+	for u in units:
+		u.x = lerpf(u.x, u.tx, minf(1.0, dt * 8.0))
+		u.y = lerpf(u.y, u.ty, minf(1.0, dt * 8.0))
+	for p in projectiles:
+		p.x = lerpf(p.x, p.tx, minf(1.0, dt * 4.0))
+		p.y = lerpf(p.y, p.ty, minf(1.0, dt * 4.0))
+
+
+# ---- saldıranın akçesi, birlikleri ve yükseltmeleri
+
+func atk_gold() -> int:
+	var t: float = pvp_state.def_time
+	var earned: float = D.PVP.atk_start + D.PVP.atk_income * t + D.PVP.atk_growth * t * t / 2.0 + pvp_state.loot
+	return int(earned) - int(pvp_state.spent)
+
+
+func atk_ready() -> bool:
+	return pvp == "attack" and is_active() and pvp_state.def_time >= D.PVP.prep
+
+
+func atk_cost(type: String, n := 1) -> int:
+	return D.PVP.units[type] * n
+
+
+func can_send(type: String, n := 1) -> bool:
+	return atk_ready() and atk_gold() >= atk_cost(type, n)
+
+
+func atk_send(type: String, n := 1) -> bool:
+	if not can_send(type, n):
+		return false
+	pvp_state.spent += atk_cost(type, n)
+	pvp_state.sent += n
+	pvp_state.out.append({"type": type, "n": n, "up": pvp_state.up.duplicate()})
+	sound("horn")
+	return true
+
+
+func up_cost(kind: String) -> int:
+	var lv: int = pvp_state.up[kind]
+	return D.PVP.up_cost[lv] if lv < D.PVP.up_max else -1
+
+
+func can_upgrade_army(kind: String) -> bool:
+	var c := up_cost(kind)
+	return pvp == "attack" and is_active() and c > 0 and atk_gold() >= c
+
+
+func upgrade_army(kind: String) -> bool:
+	if not can_upgrade_army(kind):
+		return false
+	pvp_state.spent += up_cost(kind)
+	pvp_state.up[kind] += 1
+	sound("build")
+	return true

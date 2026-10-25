@@ -782,3 +782,50 @@ def _k_mamluk(c):
 	king_sword(c, True)
 	gold_trim(c, 0.09)
 	c.b("head", "L5").cyl((0, 0, 0.94), 0.205, 0.205, 0.025, P["gold"], seg=14, mat=1)
+
+
+# ---------------------------------------------------------------- kahraman komutanlar
+
+@ctype("barbaros", "sword")
+def _barbaros(c):
+	"""Barbaros Hayreddin: kızıl sakal, büyük beyaz sarık, kırmızı-lacivert kaftan, pala."""
+	base_body(c, P["iznik"], P["white"], boots=P["red_dark"], coat_group="Gear", skirt=0.06, sash=P["red"])
+	c.b("spine").box((0, -0.12, 0.6), (0.06, 0.02, 0.26), P["red"])
+	head(c, beard=True, mustache=srgb("#b5491e"))
+	turban(c, P["white"], big=True, cap=P["red"])
+	cape(c, P["red"], "Gear", 0.55)
+	sword(c, curved=True)
+	# kemerde tabanca
+	c.b("hips").box((0.09, -0.11, 0.48), (0.03, 0.08, 0.025), P["wood_dark"])
+
+
+@ctype("sinan", "none")
+def _sinan(c):
+	"""Mimar Sinan: beyaz sarık, uzun koyu cübbe, elinde altın pergel, sakal."""
+	base_body(c, srgb("#3d4a6a"), srgb("#3d4a6a"), boots=P["wood_dark"], coat_group="Gear", skirt=0.11, sash=P["cream"])
+	c.b("spine").cyl((0, 0, 0.7), 0.14, 0.12, 0.05, srgb("#c9b58a"), seg=12)
+	head(c, beard=True, mustache=srgb("#e8e4da"))
+	turban(c, P["white"], cap=P["white"])
+	staff(c)
+	b = c.b("handslot_l")
+	for s in (-1, 1):
+		b.box((0.155 + s * 0.02, -0.03, 0.3), (0.008, 0.008, 0.16), P["gold"], rot=(0, s * 0.25, 0), mat=1)
+	b.sphere((0.155, -0.03, 0.38), 0.012, P["gold"], seg=6, rings=4, mat=1)
+
+
+@ctype("evliya", "none")
+def _evliya(c):
+	"""Evliya Çelebi: yolcu kaftanı, kavuk, omuz çantası, elinde defter ve kalem."""
+	base_body(c, srgb("#8a5a32"), srgb("#d9cfba"), boots=P["wood_dark"], coat_group="Gear", skirt=0.05, sash=P["green"])
+	head(c, mustache=P["dark"], beard=True)
+	h = c.b("head")
+	h.cyl((0, 0, 0.93), 0.13, 0.11, 0.18, P["white"], seg=12)
+	h.cyl((0, 0, 0.93), 0.145, 0.145, 0.05, P["green"], seg=12)
+	s = c.b("spine")
+	s.box((0.0, 0.0, 0.62), (0.03, 0.27, 0.02), P["wood"], rot=(0, 0.9, 0))
+	s.box((0.13, 0.03, 0.42), (0.05, 0.12, 0.1), P["wood_light"], bevel=0.01)
+	b = c.b("handslot_l")
+	b.box((0.155, -0.05, 0.36), (0.02, 0.1, 0.13), P["red_dark"], rot=(0.4, 0, 0), bevel=0.005)
+	b.box((0.145, -0.05, 0.36), (0.004, 0.09, 0.12), P["cream"], rot=(0.4, 0, 0))
+	r = c.b("handslot_r")
+	r.cyl((-0.155, -0.03, 0.34), 0.005, 0.003, 0.12, P["wood_dark"], seg=5, rot=(-0.5, 0, 0))

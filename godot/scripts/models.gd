@@ -442,7 +442,43 @@ func enemy(type: String, nation: String) -> Dictionary:
 		"siegeTower":
 			_build_siege_tower(root, p, nation)
 			info.rolls = true
+		"trebuchet", "elephant", "bossTower":
+			_build_boss(root, info, type, p, nation)
 	return info
+
+
+# Patron modelleri (Blender, boss_*.glb): "Primary" millet rengine boyanır. Mancınıkta "arm" atış kolu,
+# filde "leg0".."leg3" ve "trunk", dev kulede "bridge" iniş köprüsü ve "flag" sancak yeri vardır.
+func _build_boss(root: Node3D, info: Dictionary, type: String, p: Color, nation: String) -> void:
+	var name: String = {"trebuchet": "boss_trebuchet", "elephant": "boss_elephant", "bossTower": "boss_tower"}[type]
+	var m := ott_model(name)
+	m.scale = Vector3.ONE * {"trebuchet": 0.9, "elephant": 0.85, "bossTower": 0.8}[type]
+	root.add_child(m)
+	for prim in m.find_children("Primary*", "MeshInstance3D", true, false):
+		prim.material_override = _tinted(prim.mesh.surface_get_material(0), soft(p, 0.1))
+	var wheels := []
+	for i in 4:
+		var w := m.find_child("wheel%d" % i, true, false)
+		if w:
+			wheels.append(w)
+	if wheels.size():
+		root.set_meta("wheels", wheels)
+	match type:
+		"trebuchet":
+			info.arm = m.find_child("arm", true, false)
+		"elephant":
+			var legs := []
+			for i in 4:
+				legs.append(m.find_child("leg%d" % i, true, false))
+			info.horse = {"legs": legs, "phase": randf() * TAU}
+			info.trunk = m.find_child("trunk", true, false)
+		"bossTower":
+			info.bridge = m.find_child("bridge", true, false)
+			if info.bridge:
+				info.bridge.rotation.x = -1.45
+			var fl := m.find_child("flag", true, false)
+			if fl:
+				pole_flag(m, _local_pos(m, fl), 0.5, nation_flag(nation), 0.3)
 
 
 func _build_ram(root: Node3D, p: Color, sec: Color) -> void:
@@ -513,6 +549,28 @@ func troop(kind: String) -> Dictionary:
 	return info
 
 
+# Kahraman komutan: kendi modeli (ch_<id>.glb) varsa o, yoksa geçici gövde; ayağının altında renkli halka
+func hero(id: String) -> Dictionary:
+	var h: Dictionary = D.HEROES[id]
+	var root := Node3D.new()
+	var own: bool = ott.has("ch_" + id)
+	var ch := ott_char(id if own else h.model, {}, 0.44 if own else 0.47)
+	root.add_child(ch.root)
+	var t := TorusMesh.new()
+	t.inner_radius = 0.17
+	t.outer_radius = 0.21
+	t.rings = 24
+	t.ring_segments = 4
+	var ring := MeshInstance3D.new()
+	ring.mesh = t
+	ring.material_override = glow_mat(Color(h.ring) * 1.6)
+	ring.position.y = 0.02
+	ring.scale.y = 0.2
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(ring)
+	return {"root": root, "kind": "hero", "char": ch}
+
+
 func sultan() -> Dictionary:
 	return ott_char("sultan", {}, 0.42)
 
@@ -526,6 +584,30 @@ func king(country: String, level: int) -> Dictionary:
 		if nm.length() == 2 and nm.begins_with("L") and nm[1].is_valid_int():
 			n.visible = int(nm.substr(1)) <= level
 	return ch
+
+
+# Atlı hükümdar: beyaz at, devlet renginde örtü; sağ elinde sancak (oyuncunun sancak dokusu, Osmanlı'da
+# al sancak). Sancak direği "flag_holder" ile ele bağlıdır; Town her karede onu dik tutar.
+func king_rider(country: String, level: int) -> Dictionary:
+	var root := Node3D.new()
+	var cap: Color = OTTOMAN_RED if country == "ottoman" else Color(D.NATIONS[country].primary)
+	var hr := horse(Color("#f4f0e8"), cap, 0.42)
+	root.add_child(hr.root)
+	var ch := king(country, level)
+	mount(hr, ch, 0.5 * (1.0 + 0.03 * (level - 1)))
+	# sağ eldeki kılıç ya da asa sancağa yer açsın
+	var l4: Node3D = (ch.skeleton as Node).get_node_or_null("L4")
+	if l4:
+		l4.visible = false
+	var holder := attach(ch, "handslot_r")
+	var pole := Node3D.new()
+	holder.add_child(pole)
+	cyl(pole, 0.01, 0.012, 1.15, Vector3(0, 0.35, 0), mat(WOOD_DARK), 6)
+	sphere(pole, 0.025, Vector3(0, 0.94, 0), mat(GOLD, 0.3, 0.8), false, 8)
+	var f := flag(ottoman_flag(), 0.48, 0.32)
+	f.position = Vector3(0.01, 0.75, 0)
+	pole.add_child(f)
+	return {"root": root, "horse": hr, "char": ch, "pole": pole, "flag": f}
 
 
 # Surlardaki ve kulelerdeki sancaklar tek bir dokuyu paylaşır; oyuncu başka devlet seçince o dokunun resmi
@@ -610,13 +692,15 @@ func building(id: String, level: int) -> Node3D:
 	if level <= 0:
 		_empty_plot(root)
 		return root
-	# Blender modelleri arsanın ~%65'ini kaplar; 1.3 ile arsayı doldurur
-	var s: float = [0.0, 0.88, 1.0, 1.12][level] * 1.3
+	# Blender modelleri arsanın ~%65'ini kaplar; 1.45 ile arsayı doldurup biraz taşar (heybetli dursun)
+	var s: float = [0.0, 0.95, 1.05, 1.12][level] * 1.45
 	var g := Node3D.new()
-	g.scale = Vector3.ONE * s
+	# Saray, Cami ve Medrese Blender'da yüksek yapıldı; ötekiler biraz yukarı uzatılır ki şehir daha heybetli dursun
+	g.scale = Vector3(s, s * (1.0 if id in ["palace", "mosque", "medrese"] else 1.2), s)
 	root.add_child(g)
 	# Blender modeli: gövde + "L2", "L3" parçaları; Cami'de minareler "M1".."M4"
-	var m := ott_model("b_" + id)
+	# kendi modeli henüz yoksa (Medrese) Mektep'in gövdesi
+	var m := ott_model("b_" + id if ott.has("b_" + id) else "b_school")
 	g.add_child(m)
 	for c in m.find_children("*", "Node3D", true, false):
 		var n := String(c.name)
