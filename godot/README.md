@@ -7,6 +7,8 @@ Tarayıcı sürümünün (Vite + Three.js) Godot 4'e taşınmış hâli. Temel k
 - **Ana menü ve giriş:** oyun açılınca komutan adıyla giriş yapılır (hesap cihazda, `user://hesaplar.cfg`; sunucu yok). Aynı adla girince şeref ve hükümdar seviyeleri geri gelir. Oyun içindeki "Menü" düğmesi ana menüye döner.
 - **Devletler (6):** Osmanlı (Fatih Sultan Mehmed, kule hasarı), Bizans (XI. Konstantinos, sur), Venedik (Doç Francesco Foscari, akçe), Safevî (Şah İsmail, asker gücü), Habsburg (V. Karl, kule menzili), Memlük (Sultan Kayıtbay, atış hızı). Seçilen devletin sancakları surlarda dalgalanır, hükümdarı Saray'ın önünde durur; o devletin seferi sırası gelince Osmanlı ordusu saldırır.
 - **Hükümdar geliştirme:** her hükümdar 1'den 5'e kadar yükselir. Bedeli şereftir; şeref her püskürtülen dalgada (dalga × 10) ve zaferde (+250) kazanılır. Her seviye devletin üstünlüğünü artırır ve kral modelinde yeni bir süs (mücevher, pelerin, kılıç/asa, altın süsler) açar. Sayılar `data.gd` içinde `COUNTRIES` ve `KING`.
+- **Sefer haritası:** "Sefere Çık" parşömen haritayı açar. Beş kuşatma sırayla açılır: İstanbul 1453 (6 dalga), Belgrad 1521 (8), Rodos 1522 (9), Mohaç 1526 (10), Viyana 1529 (12). Her kalenin kendi yolu, düşman devletleri, can çarpanı ve zemin rengi vardır. Zaferde surda kalan sağlamlığa göre 1–3 yıldız, ilk zaferde kuşatmanın şerefi verilir. "Serbest Savaş" klasik yol ve 12 dalgadır. Sayılar `data.gd` içinde `STAGES`.
+- **Kahraman komutanlar:** haritada savaştan önce biri seçilir. Surların önünde en ön sırada savaşır, düşerse 20 sn sonra kapıdan döner. Yeteneği sol alttaki düğmeyle dalga sırasında kullanılır: Barbaros Hayreddin "Top Yağmuru" (en öndeki düşmanlara 8 gülle), Mimar Sinan "Sur Onarımı" (sur +5, 12 sn surlar hasar almaz), Evliya Çelebi "Moral" (12 sn kuleler ve askerler %40 sert vurur, askerler iyileşir). Sayılar `HEROES` ve `HERO`.
 - **Kuleler (4):** Okçu Kulesi, Zift Kazanı (yavaşlatır), Balyemez Topu (alan hasarı, Bilimhane gerekir), Tüfekçi Tabyası (Kışla gerekir). Her biri 3 seviyeye yükseltilir, satılınca harcamanın bir kısmı geri gelir.
 - **Düşmanlar (7):** piyade, şövalye, hafif süvari, atlı okçu, komutan, koçbaşı, kuşatma kulesi. 12 dalga, her dalga başka bir milletin sancağıyla gelir; her dalgada düşmanın canı, sayısı ve hızı artar. Dalga aralarında ani baskınlar olur.
 - **Şehir:** surların içinde Saray ve 10 bina (Mektep, Kışla, Okçu Ocağı, Darüşşifa, Sipahi Ocağı, Bilimhane, Meşihat, Kadı Mahkemesi, Cami, Yemekhane, Odun-Demir Ocağı, Çarşı). Her binanın 3 seviyesi ve kendi etkisi vardır; binalar 2. seviyeye serbestçe çıkar, 3. seviye için Saray'ın yükseltilmesi gerekir.
@@ -27,6 +29,8 @@ Web çıktısı: `GODOT=/yol/godot tools/export_web.sh` → `build/web/`. Motor 
 
 Oyun mantığı testi: `godot --headless --script tests/sim.gd` (12 dalgayı kendi kendine oynar, hata olursa söyler).
 
+Kuşatma ve kahraman: `-- --stage=rodos --hero=sinan`; haritayı görmek için `-- --user=Ad --stars=2 --map`; yeteneği denemek için `-- --demo --wave=5 --use-hero --hero-at=5`.
+
 Menüyü atlamak için `-- --country=venice --king=3`; menüyü denemek için `-- --user=Ad --honor=500 --kings=2 --pick=mamluk` ya da `-- --login`.
 
 Geliştirme için ekran görüntüsü: `godot --write-movie /tmp/kare.png --fixed-fps 10 --quit-after 80 -- --demo --wave=3 --light=1 --select=3,9`
@@ -39,7 +43,8 @@ Geliştirme için ekran görüntüsü: `godot --write-movie /tmp/kare.png --fixe
 - `scripts/models.gd`: kule, düşman, asker, at ve bina modelleri
 - `scripts/ui.gd`: üst şerit, alt panel, sancak yazıları, oyun sonu ekranı
 - `scripts/audio.gd`: ses efektleri ve mehter
-- `scripts/menu.gd`: giriş, devlet seçimi ve hükümdar geliştirme ekranı
+- `scripts/menu.gd`: giriş, devlet seçimi, hükümdar geliştirme, sefer haritası ve kahraman seçimi
+- `scripts/campaign.gd`: sefer haritasının çizimi (kıyılar, Tuna, kaleler, yıldızlar)
 - `scripts/profile.gd`: cihazda saklanan hesaplar (şeref, hükümdar seviyeleri, en iyi dalga)
 - `scripts/main.gd`: hepsini birbirine bağlar, efektleri ve kamerayı yönetir
 - `tools/blender/`: kuleleri, surları, kapıyı, binaları, çadırları, askerleri ve atı kodla kuran Blender betikleri (`assets/models/ottoman/*.glb`)

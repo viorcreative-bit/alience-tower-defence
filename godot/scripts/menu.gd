@@ -464,6 +464,7 @@ func _show_campaign() -> void:
 	v.add_child(info)
 	var rw := "Zafer ödülü: %d şeref" % st.honor if stars == 0 else "Kazanıldı · en iyi %d/3 yıldız" % stars
 	v.add_child(ui._label(rw, 20, C_COIN, ui.font_bold))
+	v.add_child(_hero_row())
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	v.add_child(row)
@@ -475,6 +476,37 @@ func _show_campaign() -> void:
 		go.add_theme_constant_override("icon_max_width", 32)
 	var free := _button(row, "Serbest Savaş", func(): _go(""), false, 76)
 	free.custom_minimum_size.x = 200
+
+
+# Savaşa götürülecek kahraman komutan: üç düğme ve seçilenin yeteneği
+func _hero_row() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	var l := ui._label("Komutan", 20, C_DIM, ui.font_bold)
+	l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(l)
+	var cur := profiles.hero()
+	for id in D.HERO_ORDER:
+		var b := Button.new()
+		b.text = D.HEROES[id].short
+		b.custom_minimum_size = Vector2(0, 54)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 20)
+		var on: bool = id == cur
+		b.add_theme_stylebox_override("normal", ui._frame("card_hot" if on else "card", 12, 8))
+		b.add_theme_color_override("font_color", Color(D.HEROES[id].ring) if on else C_TEXT)
+		b.pressed.connect(func():
+			profiles.set_v("hero", id)
+			_show_campaign())
+		row.add_child(b)
+	var h: Dictionary = D.HEROES[cur]
+	var d := ui._label("%s, %s · %s: %s" % [h.name, h.title, h.ability, D.hero_effect(cur)], 18, C_TEXT)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(d)
+	return v
 
 
 func _go(id: String) -> void:

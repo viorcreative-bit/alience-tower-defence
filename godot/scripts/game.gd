@@ -33,6 +33,13 @@ var speed := 1
 # sefer haritasındaki kuşatma ("" = serbest savaş: klasik yol ve 12 dalga)
 var stage_id := ""
 var stage := {}
+# kahraman komutan ("" = yok): ölürse hero_timer sonra yeniden çıkar; yeteneği hero_cd bekler
+var hero_id := ""
+var hero_timer := 0.0
+var hero_cd := 0.0
+var fortify := 0.0  # Sur Onarımı: surlar hasar almaz
+var morale := 0.0  # Moral: hasar artar, askerler iyileşir
+var strikes: Array = []  # Top Yağmuru: düşmekte olan gülleler {x, y, t}
 var buildings := {}
 var towers: Array = []
 var enemies: Array = []
@@ -116,6 +123,11 @@ func reset() -> void:
 	spawn_queue = []
 	spawn_timer = 0.0
 	charge = {"active": 0.0, "cooldown": 0.0, "level": 0}
+	hero_timer = 0.5
+	hero_cd = 0.0
+	fortify = 0.0
+	morale = 0.0
+	strikes = []
 	selected = null
 	time = 0.0
 	market_timer = 0.0
@@ -353,7 +365,103 @@ func tower_bonus(type: String) -> Dictionary:
 func tower_stats(t: Dictionary) -> Dictionary:
 	var s := D.tower_stats(t.type, t.level, tower_bonus(t.type))
 	s.rate /= 1.0 + king_bonus("rate")
+	s.damage = roundi(s.damage * morale_mult())
 	return s
+
+
+func morale_mult() -> float:
+	return 1.0 + D.HERO.morale if morale > 0.0 else 1.0
+
+
+# ---------------------------------------------------------------- kahraman
+
+func hero_def() -> Dictionary:
+	return D.HEROES.get(hero_id, {})
+
+
+func hero_unit():
+	for u in units:
+		if u.kind == "hero":
+			return u
+	return null
+
+
+func can_hero() -> bool:
+	return hero_id != "" and hero_cd <= 0.0 and phase == "wave" and hero_unit() != null
+
+
+func use_hero() -> void:
+	if not can_hero():
+		return
+	var h: Dictionary = hero_unit()
+	hero_cd = hero_def().cooldown
+	banner("%s!" % hero_def().ability, hero_def().ring, 2.0)
+	text(h.x, h.y - 0.5, hero_def().name, hero_def().ring)
+	match hero_id:
+		"barbaros":
+			var front := enemies.filter(func(e): return not e.dead and e.y < wall_row)
+			front.sort_custom(func(a, b): return a.dist > b.dist)
+			var n: int = D.HERO.barrage_count
+			for i in n:
+				var x: float
+				var y: float
+				if front.size():
+					var e: Dictionary = front[i % front.size()]
+					# aynı düşmana düşen ikinci gülle biraz ilerisine
+					var ahead := point_at(e.dist + e.speed * (D.HERO.barrage_fall + i * D.HERO.barrage_gap))
+					x = ahead.x
+					y = ahead.y
+				else:
+					var p := point_at(path_length * randf_range(0.3, 0.9))
+					x = p.x
+					y = p.y
+				var t: float = D.HERO.barrage_fall + i * D.HERO.barrage_gap
+				strikes.append({"x": x, "y": y, "t": t})
+				events.append({"kind": "fall", "x": x, "y": y, "time": t})
+			sound("horn")
+		"sinan":
+			var n: int = mini(D.HERO.repair, max_wall - wall)
+			wall += n
+			fortify = D.HERO.fortify
+			var g := point_at(path_length)
+			text(g.x, g.y - 0.2, "Sur +%d" % n if n > 0 else "Surlar tahkim edildi", "#e0c070")
+			particles(g.x, g.y + 0.3, "#e8d6a8", 24, 1.6, 0.06, 0.8)
+			sound("build")
+		"evliya":
+			morale = D.HERO.morale_time
+			for u in units:
+				particles(u.x, u.y - 0.2, "#6fc0e0", 5, 0.8, 0.05, 0.6)
+			sound("chant", {"voices": 10, "loud": 1})
+	ring(h.x, h.y, 1.2, hero_def().ring)
+
+
+func _update_hero(dt: float) -> void:
+	if hero_cd > 0.0:
+		hero_cd = maxf(0.0, hero_cd - dt)
+	if fortify > 0.0:
+		fortify = maxf(0.0, fortify - dt)
+	if morale > 0.0:
+		morale = maxf(0.0, morale - dt)
+	if hero_id != "" and hero_unit() == null:
+		hero_timer -= dt
+		if hero_timer <= 0.0:
+			_spawn_unit("hero")
+			var g := point_at(path_length)
+			text(g.x, g.y + 0.3, hero_def().name, hero_def().ring)
+	for s in strikes:
+		s.t -= dt
+		if s.t <= 0.0:
+			var dmg: float = D.HERO.barrage_damage * difficulty(maxi(1, wave))
+			for e in enemies:
+				if not e.dead and Vector2(e.x - s.x, e.y - s.y).length() <= D.HERO.barrage_splash:
+					damage_enemy(e, dmg, true)
+			ring(s.x, s.y, D.HERO.barrage_splash, "#ffb347")
+			particles(s.x, s.y, "#cbb48a", 16, 2.8, 0.07, 0.5)
+			particles(s.x, s.y, "#ffb347", 8, 2.0, 0.05, 0.3)
+			events.append({"kind": "shake", "time": 0.12})
+			events.append({"kind": "blast", "x": s.x, "y": s.y})
+			sound("boom")
+	strikes = strikes.filter(func(s): return s.t > 0.0)
 
 
 # ---------------------------------------------------------------- şehir
@@ -588,7 +696,10 @@ func _update_movement(dt: float) -> void:
 		if e.dist >= path_length:
 			e.dead = true
 			e.breached = true
-			wall = maxi(0, wall - e.def.damage)
+			if fortify > 0.0:
+				text(e.x, e.y - 0.4, "Sur sağlam!", "#e0c070")
+			else:
+				wall = maxi(0, wall - e.def.damage)
 			events.append({"kind": "shake", "time": D.RULES.shake_time})
 			sound("wallHit")
 			if wall <= 0:
@@ -724,11 +835,15 @@ func training_of(kind: String) -> Dictionary:
 	return training[kind]
 
 
+func unit_def(kind: String) -> Dictionary:
+	return hero_def() if kind == "hero" else D.TROOPS[kind]
+
+
 func troop_stats(kind: String) -> Dictionary:
-	var d: Dictionary = D.TROOPS[kind]
-	var lv: int = max(1, buildings.get(d.building, 0))
+	var d := unit_def(kind)
+	var lv: int = 1 if kind == "hero" else max(1, buildings.get(d.building, 0))
 	var k: float = (1.0 + D.ARMY.level_bonus * (lv - 1)) * (1.0 + king_bonus("troops"))
-	return {"hp": float(roundi(d.hp * k)), "damage": d.damage * k}
+	return {"hp": float(roundi(d.hp * k)), "damage": d.damage * k * morale_mult()}
 
 
 func can_train(kind: String) -> bool:
@@ -756,7 +871,7 @@ func troop_of(building: String):
 func _spawn_unit(kind: String) -> void:
 	var gate := point_at(path_length)
 	var hp: float = troop_stats(kind).hp
-	units.append({"id": _id(), "kind": kind, "def": D.TROOPS[kind], "hp": hp, "max_hp": hp, "x": gate.x, "y": gate.y + 0.6,
+	units.append({"id": _id(), "kind": kind, "def": unit_def(kind), "hp": hp, "max_hp": hp, "x": gate.x, "y": gate.y + 0.6,
 		"tx": gate.x, "ty": gate.y, "post": path_length, "ready": false, "engaged": 0, "cooldown": 0.0, "swing": 0.0,
 		"angle": -PI / 2, "moving": false, "dead": false, "flash": 0.0, "healing": false})
 	sound("chant", {"voices": 4})
@@ -765,7 +880,7 @@ func _spawn_unit(kind: String) -> void:
 func _assign_posts() -> void:
 	var melee := units.filter(func(u): return u.def.role == "melee" and not u.healing)
 	# kapıya en yakın sırada Sofiler (arkadan can verir), en önde Yeniçeriler
-	var order := {"sufi": 0, "sipahi": 1, "janissary": 2}
+	var order := {"sufi": 0, "sipahi": 1, "janissary": 2, "hero": 3}
 	melee.sort_custom(func(a, b):
 		if a.kind == b.kind:
 			return a.id < b.id
@@ -870,7 +985,11 @@ func _kill_unit(u: Dictionary) -> void:
 	u.dead = true
 	particles(u.x, u.y, "#b3202a", 10, 2.0, 0.06, 0.6)
 	particles(u.x, u.y, "#e8dcc0", 6, 1.4, 0.08, 0.7)
-	text(u.x, u.y - 0.3, "Şehit düştü", "#ff5b4d")
+	if u.kind == "hero":
+		hero_timer = D.HERO.respawn
+		text(u.x, u.y - 0.3, "%s yaralandı, %d sn sonra döner" % [hero_def().name, roundi(D.HERO.respawn)], "#ff5b4d")
+	else:
+		text(u.x, u.y - 0.3, "Şehit düştü", "#ff5b4d")
 	sound("fall")
 
 
@@ -914,6 +1033,9 @@ func _update_army(dt: float) -> void:
 
 	_send_wounded()
 	_assign_posts()
+	if morale > 0.0:
+		for u in units:
+			u.hp = minf(u.max_hp, u.hp + D.HERO.morale_heal * dt)
 	var regen: float = 0.0 if phase == "wave" else D.ARMY.regen_build
 	var ward := hospital_pos()
 	var ward_heal: float = D.CITY.ward_heal + D.CITY.ward_heal_level * buildings.hospital
@@ -998,6 +1120,7 @@ func step(dt: float) -> bool:
 	_update_raid(dt)
 	_update_market(dt)
 	_update_spawner(dt)
+	_update_hero(dt)
 	_update_army(dt)
 	_update_movement(dt)
 	_update_towers(dt)

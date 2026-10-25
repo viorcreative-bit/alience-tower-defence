@@ -288,6 +288,45 @@ const TROOPS := {
 		"hp": 90, "damage": 7, "rate": 0.8, "range": 0.6, "block": 1, "speed": 1.2, "heal": 3.0, "heal_range": 1.3},
 }
 const TROOP_ORDER := ["janissary", "archer", "sipahi", "sufi"]
+
+# Kahraman komutanlar: savaştan önce biri seçilir. Surların önünde en ön sırada savaşır (block kadar düşman
+# durdurur), düşerse respawn saniye sonra kapıdan yeniden çıkar. Özel yeteneği dalga sırasında kullanılır,
+# sonra cooldown saniye bekler. model: geçici gövde (kendi modeli gelene kadar), ring: ayağının altındaki halka.
+const HEROES := {
+	"barbaros": {"short": "Barbaros", "name": "Barbaros Hayreddin", "title": "Kaptan-ı Derya", "ability": "Top Yağmuru", "cooldown": 40.0,
+		"text": "Donanmanın topları en öndeki düşmanlara gülle yağdırır.",
+		"hp": 520, "damage": 34, "rate": 0.8, "range": 0.7, "block": 3, "speed": 1.5, "role": "melee",
+		"model": "sultan", "ring": "#e05a3c"},
+	"sinan": {"short": "Mimar Sinan", "name": "Mimar Sinan", "title": "Mimarbaşı", "ability": "Sur Onarımı", "cooldown": 55.0,
+		"text": "Surları onarır; bir süre surlar hiç hasar almaz.",
+		"hp": 640, "damage": 22, "rate": 0.9, "range": 0.7, "block": 3, "speed": 1.3, "role": "melee",
+		"model": "sufi", "ring": "#e0c070"},
+	"evliya": {"short": "Evliya Çelebi", "name": "Evliya Çelebi", "title": "Seyyah", "ability": "Moral", "cooldown": 45.0,
+		"text": "Hikâyeleriyle orduyu coşturur: kuleler ve askerler daha sert vurur, askerler iyileşir.",
+		"hp": 460, "damage": 26, "rate": 0.7, "range": 0.7, "block": 2, "speed": 1.6, "role": "melee",
+		"model": "miner", "ring": "#6fc0e0"},
+}
+const HERO_ORDER := ["barbaros", "sinan", "evliya"]
+const HERO := {
+	"respawn": 20.0,
+	# Top Yağmuru: barrage_count gülle, her biri barrage_splash yarıçapta barrage_damage × düşman canı çarpanı
+	"barrage_count": 8, "barrage_damage": 70.0, "barrage_splash": 0.9, "barrage_gap": 0.18, "barrage_fall": 0.6,
+	# Sur Onarımı: repair sur, fortify saniye surlar hasar almaz
+	"repair": 5, "fortify": 12.0,
+	# Moral: morale_time saniye hasar +morale, askerler saniyede morale_heal can
+	"morale": 0.4, "morale_time": 12.0, "morale_heal": 12.0,
+}
+
+
+static func hero_effect(id: String) -> String:
+	match id:
+		"barbaros":
+			return "%d gülle, her biri alan hasarı · %d sn bekleme" % [HERO.barrage_count, roundi(HEROES[id].cooldown)]
+		"sinan":
+			return "Sur +%d, %d sn surlar hasar almaz · %d sn bekleme" % [HERO.repair, roundi(HERO.fortify), roundi(HEROES[id].cooldown)]
+		"evliya":
+			return "%d sn hasar +%s, askerler iyileşir · %d sn bekleme" % [roundi(HERO.morale_time), pct(HERO.morale), roundi(HEROES[id].cooldown)]
+	return ""
 const RES_ORDER := ["wood", "iron", "food"]
 const RES_NAMES := {"wood": "odun", "iron": "demir", "food": "yemek"}
 

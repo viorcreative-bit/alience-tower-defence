@@ -47,7 +47,48 @@ func _init() -> void:
 	print("bitti: ", g.phase, " dalga ", g.wave, " sur ", g.wall, " akçe ", g.gold, " asker ", g.units.size(), " süre ", int(t), " hastanede geçen adım ", healed, " kaynak ", g.res)
 	_countries()
 	_stages()
+	_heroes()
 	quit()
+
+
+# Kahramanlar: kapıdan çıkar, yeteneği dalgada çalışır, düşünce yeniden gelir
+func _heroes() -> void:
+	var D := GameData
+	for id in D.HERO_ORDER:
+		var g := Game.new()
+		g.hero_id = id
+		g.reset()
+		for i in 40:
+			g.step(0.03)
+		var h = g.hero_unit()
+		assert(h != null, "kahraman çıkmadı: " + id)
+		assert(not g.can_hero(), "yetenek dalga dışında açık")
+		g.wave = 3
+		g.start_wave()
+		for i in 400:
+			g.step(0.03)
+		g.wall = 10
+		var hp_before := 0.0
+		for e in g.enemies:
+			hp_before += e.hp
+		assert(g.can_hero(), "yetenek kullanılamıyor: " + id)
+		g.use_hero()
+		assert(g.hero_cd > 0.0)
+		match id:
+			"barbaros":
+				assert(g.strikes.size() == D.HERO.barrage_count)
+				for i in 100:
+					g.step(0.03)
+				assert(g.strikes.is_empty(), "gülleler düşmedi")
+			"sinan":
+				assert(g.wall == 10 + D.HERO.repair and g.fortify > 0.0)
+			"evliya":
+				assert(g.morale > 0.0 and g.troop_stats("hero").damage > D.HEROES.evliya.damage)
+		h = g.hero_unit()
+		g._kill_unit(h)
+		g.step(0.03)
+		assert(g.hero_unit() == null and g.hero_timer > 0.0, "kahraman düşmedi")
+		print("kahraman %s tamam" % id)
 
 
 # Sefer haritası: her kuşatmanın yolu kapıda biter, işçi alanlarına ve okçu sırasına değmez, kendini kesmez.

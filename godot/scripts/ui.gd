@@ -37,6 +37,7 @@ var btn_charge: Button
 var btn_primary: Button
 var btn_view: Button
 var btn_menu: Button
+var btn_hero: Button
 var lbl_country: Label
 var lbl_stage: Label
 var top_flag: TextureRect
@@ -616,6 +617,16 @@ func _build_view_button() -> void:
 	btn_menu.add_theme_color_override("font_color", C_GOLD)
 	btn_menu.pressed.connect(func(): action.emit("menu", ""))
 	root.add_child(btn_menu)
+	# kahramanın yeteneği: haritanın sol altında, alt panelin hemen üstünde
+	btn_hero = Button.new()
+	btn_hero.custom_minimum_size = Vector2(230, 74)
+	btn_hero.add_theme_font_size_override("font_size", 21)
+	btn_hero.add_theme_stylebox_override("normal", _frame("red"))
+	btn_hero.add_theme_stylebox_override("hover", _frame("red_hot"))
+	btn_hero.add_theme_stylebox_override("pressed", _frame("red_hot"))
+	btn_hero.add_theme_stylebox_override("disabled", _frame("panel", 18, 14))
+	btn_hero.pressed.connect(func(): action.emit("hero", ""))
+	root.add_child(btn_hero)
 
 
 func set_country(c: String) -> void:
@@ -650,6 +661,7 @@ func _build_banner() -> void:
 func show_banner(text: String, color: Color, life := 2.2) -> void:
 	banner.text = text
 	banner.add_theme_color_override("font_color", color)
+	banner.add_theme_font_size_override("font_size", 40 if text.length() <= 24 else 30)
 	if banner_tween:
 		banner_tween.kill()
 	banner.modulate.a = 0.0
@@ -741,6 +753,20 @@ func refresh(sound_on: bool, light_name: String) -> void:
 		var p: float = tr.time / D.TROOPS[kind].train if tr.queue else 0.0
 		train_bar.position = Vector2(4, b.size.y - 8)
 		train_bar.size = Vector2((b.size.x - 8) * p, 5)
+
+	btn_hero.visible = game.hero_id != ""
+	if btn_hero.visible:
+		btn_hero.position = Vector2(14, panel_top() - btn_hero.size.y - 12)
+		var hd := game.hero_def()
+		var hstate: String = hd.ability
+		if game.hero_unit() == null:
+			hstate = "Yaralı · %d sn" % ceili(game.hero_timer)
+		elif game.hero_cd > 0.0:
+			hstate = "%s · %d sn" % [hd.ability, ceili(game.hero_cd)]
+		elif game.phase != "wave":
+			hstate = "%s (dalgada)" % hd.ability
+		btn_hero.text = "%s\n%s" % [hd.name, hstate]
+		btn_hero.disabled = not game.can_hero()
 
 	var ch: Dictionary = game.charge
 	var cstate := "none"

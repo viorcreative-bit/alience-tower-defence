@@ -513,6 +513,28 @@ func troop(kind: String) -> Dictionary:
 	return info
 
 
+# Kahraman komutan: kendi modeli (ch_<id>.glb) varsa o, yoksa geçici gövde; ayağının altında renkli halka
+func hero(id: String) -> Dictionary:
+	var h: Dictionary = D.HEROES[id]
+	var root := Node3D.new()
+	var own: bool = ott.has("ch_" + id)
+	var ch := ott_char(id if own else h.model, {}, 0.44 if own else 0.47)
+	root.add_child(ch.root)
+	var t := TorusMesh.new()
+	t.inner_radius = 0.17
+	t.outer_radius = 0.21
+	t.rings = 24
+	t.ring_segments = 4
+	var ring := MeshInstance3D.new()
+	ring.mesh = t
+	ring.material_override = glow_mat(Color(h.ring) * 1.6)
+	ring.position.y = 0.02
+	ring.scale.y = 0.2
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(ring)
+	return {"root": root, "kind": "hero", "char": ch}
+
+
 func sultan() -> Dictionary:
 	return ott_char("sultan", {}, 0.42)
 

@@ -75,6 +75,11 @@ func country() -> String:
 	return c if D.COUNTRIES.has(c) else "ottoman"
 
 
+func hero() -> String:
+	var h: String = get_v("hero", D.HERO_ORDER[0])
+	return h if D.HEROES.has(h) else D.HERO_ORDER[0]
+
+
 func honor() -> int:
 	return get_v("honor", 0)
 

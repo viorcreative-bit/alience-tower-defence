@@ -43,6 +43,7 @@ var profiles: Profiles
 var menu: MainMenu
 var in_menu := true
 var honored_wave := 0  # şerefi verilmiş son dalga
+var debug_hero := ""  # `--hero=sinan` (geliştirme)
 
 
 func _ready() -> void:
@@ -102,6 +103,7 @@ func _start_game(country: String, level: int, stage := "") -> void:
 	game.country = country
 	game.king_level = level
 	game.set_stage(stage)
+	game.hero_id = debug_hero if debug_hero != "" else profiles.hero()
 	if world.path_key != game.map_key():
 		_rebuild_world()
 	models.set_player_flag(country)
@@ -345,6 +347,8 @@ func _on_action(name: String, arg: String) -> void:
 			game.speed = list[(list.find(game.speed) + 1) % list.size()]
 		"charge":
 			game.trigger_charge()
+		"hero":
+			game.use_hero()
 		"sound":
 			audio.set_enabled(not audio.enabled)
 			save.set_value("settings", "sound", audio.enabled)
@@ -544,7 +548,7 @@ func _sync_units(dt: float) -> void:
 		seen[u.id] = true
 		var rec = unit_nodes.get(u.id)
 		if rec == null:
-			var info := models.troop(u.kind)
+			var info := models.hero(game.hero_id) if u.kind == "hero" else models.troop(u.kind)
 			add_child(info.root)
 			rec = {"info": info, "anim": ""}
 			unit_nodes[u.id] = rec
@@ -567,7 +571,7 @@ func _sync_units(dt: float) -> void:
 		if rec.anim != want:
 			rec.anim = want
 			ch.anim.play(want, 0.12)
-		_bar(u.id, root.position + Vector3(0, 0.72, 0), u.hp / u.max_hp, Color("#f2c94c"), u.hp < u.max_hp)
+		_bar(u.id, root.position + Vector3(0, 0.72, 0), u.hp / u.max_hp, Color("#f2c94c"), u.hp < u.max_hp or u.kind == "hero")
 	for id in unit_nodes.keys():
 		if not seen.has(id):
 			unit_nodes[id].info.root.queue_free()
@@ -803,6 +807,21 @@ func _handle_events() -> void:
 				_float_text(world.to_world(ev.x, ev.y, 0.6), ev.text, Color(ev.color))
 			"banner":
 				ui.show_banner(ev.text, Color(ev.color), ev.life)
+			"fall":
+				_cannonball(world.to_world(ev.x, ev.y), ev.time)
+			"blast":
+				var bp := world.to_world(ev.x, ev.y, 0.2)
+				_burst(bp, Color(2.4, 1.5, 0.6, 1.0), 26, 2.6, 0.14, 0.35, 0.0, true)
+				_burst(bp, Color(0.5, 0.45, 0.4, 0.8), 14, 1.2, 0.35, 1.1, 0.6)
+				var l := OmniLight3D.new()
+				l.light_color = Color(1.0, 0.7, 0.35)
+				l.omni_range = 2.6
+				l.light_energy = 5.0
+				l.position = bp + Vector3(0, 0.3, 0)
+				add_child(l)
+				var tw := create_tween()
+				tw.tween_property(l, "light_energy", 0.0, 0.3)
+				tw.tween_callback(l.queue_free)
 			"shake":
 				if shake <= 0.0:
 					cam_base = camera.transform
@@ -842,6 +861,19 @@ func _burst(pos: Vector3, color: Color, count := 16, speed := 1.4, size := 0.1, 
 	add_child(p)
 	p.emitting = true
 	get_tree().create_timer(life + 0.4).timeout.connect(p.queue_free)
+
+
+# Top Yağmuru güllesi: denizden (sağ üstten) yay çizerek düşer
+func _cannonball(target: Vector3, time: float) -> void:
+	var n := _projectile_node("cannon")
+	n.scale = Vector3.ONE * 2.2
+	add_child(n)
+	var from := target + Vector3(2.5, 6.0, -3.0)
+	n.position = from
+	var tw := create_tween()
+	tw.tween_method(func(k: float):
+		n.position = from.lerp(target, k) + Vector3(0, sin(k * PI) * 1.2, 0), 0.0, 1.0, time)
+	tw.tween_callback(n.queue_free)
 
 
 func _smoke(parent: Node3D, pos: Vector3) -> void:
@@ -932,6 +964,7 @@ func _float_text(pos: Vector3, text: String, color: Color) -> void:
 func _debug_hooks() -> void:
 	var args := OS.get_cmdline_user_args()
 	# `--country=venice --king=3` ya da `--demo`/`--city` menüyü atlayıp doğrudan oyunu açar
+	debug_hero = _arg(args, "--hero=", "")
 	var cn := _arg(args, "--country=", "")
 	if cn != "" or "--demo" in args or "--city" in args or "--play" in args or _arg(args, "--stage=", "") != "":
 		menu.visible = false
@@ -991,6 +1024,8 @@ func _debug_hooks() -> void:
 		if _arg(args, "--wave=", "") != "":
 			game.wave = int(_arg(args, "--wave=", "0"))
 			game.start_wave()
+	if "--use-hero" in args:
+		get_tree().create_timer(float(_arg(args, "--hero-at=", "3"))).timeout.connect(game.use_hero)
 	var sel := _arg(args, "--select=", "")
 	if sel != "":
 		var p := sel.split(",")
