@@ -380,8 +380,58 @@ def mosque():
 	return ob
 
 
+def medrese():
+	"""Medrese: ortada şadırvanlı avlu, üç yanda revak ve kubbeli talebe hücreleri, arkada büyük kubbeli dershane.
+	2: sol kanat ve kütüphane kubbesi. 3: sağ arkada rasathane kulesi."""
+	b, l2, l3 = _parts("medrese", 251)
+	paving(b, 0.74, 0.74)
+	# arka: dershane
+	top = arch.body(b, 0, 0.22, 0.34, 0.22, 0.22)
+	arch.dome(b, 0, 0.22, top, 0.11, drum=0.04)
+	arch.window(b, -0.09, 0.11, 0.15, tile=True)
+	arch.window(b, 0.09, 0.11, 0.15, tile=True)
+	arch.door(b, 0, 0.11, w=0.07, h=0.11)
+	# sağ kanat: hücre sırası
+	t = arch.body(b, 0.27, -0.02, 0.16, 0.38, 0.15, plinth=False)
+	for y in (-0.14, 0.0, 0.12):
+		arch.dome(b, 0.27, y, t, 0.045, drum=0.0)
+	# avlu revakı (sağ kanadın önünde, avluya bakar)
+	for i in range(4):
+		y = -0.17 + i * 0.1
+		b.cyl((0.17, y, 0.04), 0.011, 0.01, 0.1, P["white"], seg=8)
+	b.box((0.17, -0.02, 0.15), (0.05, 0.36, 0.02), P["lead"], mat=1)
+	# avlu: şadırvan ve servi
+	b.cyl((0, -0.05, 0.012), 0.06, 0.065, 0.04, P["stone_light"], seg=12)
+	b.cyl((0, -0.05, 0.05), 0.05, 0.05, 0.004, P["iznik"], seg=12, mat=2)
+	b.cyl((0, -0.05, 0.05), 0.008, 0.008, 0.05, P["stone"], seg=6)
+	for x in (-0.1, 0.1):
+		b.cyl((x, -0.26, 0.012), 0.025, 0.0, 0.14, P["green"], seg=8)
+	# ön: kapı kemeri ve alçak duvar
+	b.box((0, -0.32, 0.06), (0.62, 0.04, 0.1), P["stone"], bevel=0.006)
+	b.box((0, -0.32, 0.12), (0.14, 0.06, 0.16), P["stone_light"], bevel=0.006)
+	b.box((0, -0.35, 0.09), (0.07, 0.01, 0.1), P["dark"])
+	b.box((0, -0.35, 0.18), (0.12, 0.012, 0.025), P["iznik"], mat=2)
+	# 2: sol kanat ve kütüphane kubbesi
+	t2 = arch.body(l2, -0.27, -0.02, 0.16, 0.38, 0.15, plinth=False)
+	for y in (-0.14, 0.12):
+		arch.dome(l2, -0.27, y, t2, 0.045, drum=0.0)
+	arch.dome(l2, -0.27, 0.0, t2, 0.07, drum=0.03)
+	for i in range(4):
+		l2.cyl((-0.17, -0.17 + i * 0.1, 0.04), 0.011, 0.01, 0.1, P["white"], seg=8)
+	l2.box((-0.17, -0.02, 0.15), (0.05, 0.36, 0.02), P["lead"], mat=1)
+	# 3: rasathane kulesi
+	l3.stone_ring((0.27, 0.27, 0), 0.07, 0.48, course=0.05, stone_w=0.07, depth=0.025, bevel=0.004, palette=[P["stone_light"], P["stone"]])
+	l3.cyl((0.27, 0.27, 0.48), 0.085, 0.085, 0.02, P["iznik"], seg=14, mat=2)
+	arch.dome(l3, 0.27, 0.27, 0.5, 0.07, drum=0.0)
+	l3.cyl((0.31, 0.24, 0.52), 0.012, 0.016, 0.12, P["bronze"], seg=8, mat=1, rot=(0.7, 0.3, 0))
+	ob = _done(b, l2, l3)
+	empty("flag", (-0.13, 0.3, top), ob)
+	return ob
+
+
 ALL = {
 	"b_palace": palace, "b_school": school, "b_barracks": barracks, "b_archery": archery,
 	"b_hospital": hospital, "b_cavalry": cavalry, "b_science": science, "b_religion": religion,
 	"b_court": court, "b_market": market, "b_workshop": workshop, "b_kitchen": kitchen, "b_mosque": mosque,
+	"b_medrese": medrese,
 }
