@@ -21,7 +21,7 @@ Tarayıcı sürümünün (Vite + Three.js) Godot 4'e taşınmış hâli. Temel k
 - **Şehir görünüşü:** "Şehre Bak" düğmesi kamerayı surların içine yaklaştırır (parmakla sağa sola kaydırılır). Sokaklarda halk gezer; şadırvan, çarşı, bahçeler, cumbalı evler, fenerler ve Cami önünde semazenler vardır.
 - **Askerler:** Kışla Yeniçeri (en güçlü asker, en önde durur), Okçu Ocağı okçu, Sipahi Ocağı süvari, Cami Sofi yetiştirir. Sofiler arka sırada savaşır ve yanındaki askerlere can verir. Askerler surların önünde nöbet tutar; canı azalan asker Darüşşifa'ya yürür, iyileşince yerine döner.
 - **"Allah Allah!" hücumu:** Meşihat kurulunca açılır, bir süre bütün kulelerin atış hızını artırır.
-- Mehter müziği ve savaş sesleri koddan üretilir (dosya yok). Ses, ışık (Öğle · İkindi · Gece) ve en iyi dalga cihazda saklanır.
+- **Ses ve müzik:** bütün sesler koddan üretilir (dosya yok). Dalgada tam mehter takımı çalar (kös, davul, nakkare, zil, iki oktav zurna, boru ve son ölçüde kös gürlemesi); hazırlıkta ve menüde ağır bir ney ezgisi. Patron sahadayken marş hızlanır. Toplar keskin patlayıp yankılanır; mancınık, fil, kuşatma kulesi, üç kahramanın yetenekleri, Medrese araştırması ve görev/başarım duyuruları kendi sesleriyle gelir. Arka planda kuşatmaya göre şehir sesi çalar: İstanbul'da çarşı uğultusu, şadırvan, kuşlar ve örs; Rodos'ta dalgalar, martılar ve gemi çanı; kara kuşatmalarında ordugâh, kuşlar ve uzak davul. Yağmurda yağmur, kar ve siste rüzgâr sesi eklenir. Ses düğmesi üç kipe geçer: Ses · Müziksiz · Sessiz. Ses kipi, ışık (Öğle · İkindi · Gece) ve en iyi dalga cihazda saklanır.
 
 ## Çalıştırma
 
@@ -46,7 +46,7 @@ Geliştirme için ekran görüntüsü: `godot --write-movie /tmp/kare.png --fixe
 - `scripts/world.gd`: zemin, surlar, şehir süsleri, ordugâh, ışık ve ateşler
 - `scripts/models.gd`: kule, düşman, asker, at ve bina modelleri
 - `scripts/ui.gd`: üst şerit, alt panel, sancak yazıları, oyun sonu ekranı
-- `scripts/audio.gd`: ses efektleri ve mehter
+- `scripts/audio.gd`: ses efektleri, mehter ve ney, şehir ve hava döngüleri (uzun döngüler her karede birkaç ms ayrılarak hazırlanır)
 - `scripts/menu.gd`: giriş, devlet seçimi, hükümdar geliştirme, sefer haritası ve kahraman seçimi
 - `scripts/campaign.gd`: sefer haritasının çizimi (kıyılar, Tuna, kaleler, yıldızlar)
 - `scripts/profile.gd`: cihazda saklanan hesaplar (şeref, hükümdar seviyeleri, en iyi dalga)

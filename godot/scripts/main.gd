@@ -61,7 +61,8 @@ func _ready() -> void:
 	add_child(camera)
 	audio = GameAudio.new()
 	add_child(audio)
-	audio.set_enabled(save.get_value("settings", "sound", true))
+	# eski kayıtlarda yalnız açık/kapalı vardı
+	audio.set_mode(save.get_value("settings", "sound_mode", 0 if save.get_value("settings", "sound", true) else 2))
 	_build_tilt()
 	ui = GameUI.new(game)
 	ui.best_wave = save.get_value("game", "best_wave", 0)
@@ -138,6 +139,7 @@ func _flush_stats() -> void:
 		return
 	for msg in profiles.record(game.stats):
 		ui.toast(msg)
+		audio.play("chime")
 	game.stats = {}
 
 
@@ -368,8 +370,7 @@ func _on_action(name: String, arg: String) -> void:
 		"research":
 			game.start_research(arg)
 		"sound":
-			audio.set_enabled(not audio.enabled)
-			save.set_value("settings", "sound", audio.enabled)
+			save.set_value("settings", "sound_mode", audio.cycle_mode())
 			save.save(SAVE_PATH)
 		"light":
 			world.cycle_light()
@@ -403,7 +404,10 @@ func _restart() -> void:
 func _process(delta: float) -> void:
 	if in_menu:
 		town.update(delta)
-		audio.set_music("off")
+		# menüde şehir sesi ve ağır ney ezgisi
+		audio.set_music("build")
+		audio.set_boss(false)
+		audio.set_ambience("city", "", false)
 		return
 	if game.advance(delta) or game.phase == "lost":
 		_save_best()
@@ -419,7 +423,10 @@ func _process(delta: float) -> void:
 	if world.weather_key != game.season + "|" + game.weather:
 		world.set_weather(game.season, game.weather, world.weather_key == "")
 	audio.set_music("wave" if game.phase == "wave" else ("build" if game.phase == "build" else "off"))
-	ui.refresh(audio.enabled, world.light_name())
+	audio.set_boss(game.first_boss() != null)
+	var wx := {"rain": "rain", "snow": "wind", "fog": "wind"}
+	audio.set_ambience(game.stage.get("ambience", "city"), wx.get(game.weather, ""), game.phase == "wave")
+	ui.refresh(audio.mode_name(), world.light_name())
 	if shake > 0.0 and not (cam_tween and cam_tween.is_running()):
 		shake = maxf(0.0, shake - delta)
 		camera.transform = cam_base

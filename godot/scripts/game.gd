@@ -485,7 +485,7 @@ func use_hero() -> void:
 				var t: float = D.HERO.barrage_fall + i * D.HERO.barrage_gap
 				strikes.append({"x": x, "y": y, "t": t})
 				events.append({"kind": "fall", "x": x, "y": y, "time": t})
-			sound("horn")
+			sound("hero_barbaros")
 		"sinan":
 			var n: int = mini(D.HERO.repair, max_wall - wall)
 			wall += n
@@ -493,12 +493,13 @@ func use_hero() -> void:
 			var g := point_at(path_length)
 			text(g.x, g.y - 0.2, "Sur +%d" % n if n > 0 else "Surlar tahkim edildi", "#e0c070")
 			particles(g.x, g.y + 0.3, "#e8d6a8", 24, 1.6, 0.06, 0.8)
-			sound("build")
+			sound("hero_sinan")
 		"evliya":
 			morale = D.HERO.morale_time
 			for u in units:
 				particles(u.x, u.y - 0.2, "#6fc0e0", 5, 0.8, 0.05, 0.6)
-			sound("chant", {"voices": 10, "loud": 1})
+			sound("hero_evliya")
+			sound("chant", {"voices": 10, "loud": 1, "delay": 0.8})
 	ring(h.x, h.y, 1.2, hero_def().ring)
 
 
@@ -642,7 +643,7 @@ func _update_research(dt: float) -> void:
 	var s: Array = D.BUILDINGS.medrese.slot
 	text(s[0] + 0.5, s[1], D.TECH[id].name, "#9fd0f0")
 	banner("%s tamamlandı" % D.TECH[id].name, "#9fd0f0", 1.8)
-	sound("victory")
+	sound("research")
 
 
 func can_upgrade_building(id: String) -> bool:
@@ -723,7 +724,7 @@ func _spawn_enemy(type: String, nat: String) -> void:
 		"boss_cd": 2.0, "act": 0.0})
 	if def.get("warning", false):
 		banner(D.WARNINGS[type], "#ff5b4d")
-		sound("horn")
+		sound("bossHorn" if def.get("boss", false) else "horn")
 
 
 func _update_spawner(dt: float) -> void:
@@ -944,7 +945,7 @@ func _update_bosses(dt: float) -> void:
 				e.act = 1.0
 				boulders.append({"tower": best, "t": th.flight, "stun": th.stun})
 				events.append({"kind": "boulder", "x0": e.x, "y0": e.y, "x1": best.x, "y1": best.y, "time": th.flight})
-				sound("cannon")
+				sound("throw")
 		elif e.def.has("trample"):
 			var tr: Dictionary = e.def.trample
 			e.boss_cd = tr.rate
@@ -957,11 +958,12 @@ func _update_bosses(dt: float) -> void:
 					if u.hp <= 0.0:
 						_kill_unit(u)
 			if e.act > 0.0:
-				sound("wallHit")
+				sound("trumpet" if randf() < 0.3 else "wallHit")
 		elif e.def.has("spawn"):
 			var sp: Dictionary = e.def.spawn
 			e.boss_cd = sp.rate
 			e.act = 1.0
+			sound("gate")
 			for i in sp.count:
 				born.append({"type": sp.type, "nation": e.nation, "dist": maxf(0.0, e.dist - 0.25 - i * 0.3)})
 	for b in born:

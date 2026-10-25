@@ -931,7 +931,7 @@ func _build_overlay() -> void:
 
 # ---------------------------------------------------------------- her kare
 
-func refresh(sound_on: bool, light_name: String) -> void:
+func refresh(sound_label: String, light_name: String) -> void:
 	btn_view.position = Vector2(root.size.x - btn_view.size.x - 14, top_bottom() + 12)
 	btn_menu.position = Vector2(btn_view.position.x - btn_menu.size.x - 10, btn_view.position.y)
 	lbl_gold.text = str(game.gold)
@@ -1001,10 +1001,10 @@ func refresh(sound_on: bool, light_name: String) -> void:
 	var cstate := "none"
 	if ch.level:
 		cstate = str(ceili(ch.cooldown)) if ch.cooldown > 0.0 else ("ready" if game.can_charge() else "idle")
-	var ckey := "|".join([game.speed, game.phase, game.raid, game.wave, sound_on, cstate, ch.active > 0.0, light_name])
+	var ckey := "|".join([game.speed, game.phase, game.raid, game.wave, sound_label, cstate, ch.active > 0.0, light_name])
 	if ckey != last_controls:
 		last_controls = ckey
-		btn_sound.text = "Ses" if sound_on else "Sessiz"
+		btn_sound.text = sound_label
 		btn_speed.text = "%d×" % game.speed
 		btn_light.text = light_name
 		btn_charge.visible = ch.level > 0
