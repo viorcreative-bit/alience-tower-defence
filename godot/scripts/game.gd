@@ -38,6 +38,7 @@ var spawn_timer := 0.0
 var charge := {"active": 0.0, "cooldown": 0.0, "level": 0}
 var selected = null  # {c, r} ya da {c, r, building}
 var time := 0.0
+var market_timer := 0.0
 var next_id := 1
 var events: Array = []
 
@@ -70,6 +71,7 @@ func reset() -> void:
 	charge = {"active": 0.0, "cooldown": 0.0, "level": 0}
 	selected = null
 	time = 0.0
+	market_timer = 0.0
 	events = []
 	_reset_raid_timer()
 
@@ -113,6 +115,24 @@ func point_at(d: float) -> Vector3:
 
 func is_path_tile(c: int, r: int) -> bool:
 	return path_tiles.has(Vector2i(c, r))
+
+
+# Çarşı oyun sürdükçe akçe getirir
+func _update_market(dt: float) -> void:
+	var lv: int = buildings.market
+	if lv <= 0:
+		return
+	market_timer += dt
+	if market_timer >= D.CITY.market_interval:
+		market_timer -= D.CITY.market_interval
+		var n: int = D.CITY.market_gold * lv
+		gold += n
+		var s: Array = D.BUILDINGS.market.slot
+		text(s[0] + 0.5, s[1] + 0.1, "+%d akçe" % n, "#f2c94c")
+
+
+func reward(e: Dictionary) -> int:
+	return roundi(e.def.reward * D.RULES.reward_mult)
 
 
 func is_work_site(c: int, r: int) -> bool:
@@ -428,7 +448,7 @@ func _check_wave_end() -> bool:
 		return true
 	var bonus := D.wave_bonus(wave)
 	var income := city_income()
-	gold += bonus + income.tax + income.endowment
+	gold += bonus + income.tax + income.endowment + income.palace_tax
 	wall = mini(max_wall, wall + income.repair)
 	for k in D.RES_ORDER:
 		res[k] += income[k]
@@ -436,14 +456,14 @@ func _check_wave_end() -> bool:
 	nation = D.WAVES[wave].nation
 	charge.active = 0.0
 	_reset_raid_timer()
-	banner("%d. sefer püskürtüldü  +%d" % [wave, bonus + income.tax + income.endowment], "#f2c94c")
+	banner("%d. sefer püskürtüldü  +%d" % [wave, bonus + income.tax + income.endowment + income.palace_tax], "#f2c94c")
 	sound("victory")
 	return true
 
 
 func city_income() -> Dictionary:
 	return {"tax": D.CITY.court_tax * buildings.court, "endowment": D.CITY.mosque_endowment * buildings.mosque,
-		"repair": D.CITY.hospital_repair * buildings.hospital,
+		"repair": D.CITY.hospital_repair * buildings.hospital, "palace_tax": D.CITY.palace_tax * buildings.palace,
 		"wood": D.CITY.palace_wood * buildings.palace, "iron": D.CITY.palace_iron * buildings.palace,
 		"food": D.CITY.kitchen_food * buildings.kitchen}
 
@@ -531,12 +551,12 @@ func damage_enemy(e: Dictionary, amount: float, pierce: bool) -> void:
 	e.flash = D.RULES.hit_flash
 	if e.hp <= 0.0:
 		e.dead = true
-		gold += e.def.reward
+		gold += reward(e)
 		var color: String = "#a0703c" if e.def.get("siege", false) else D.NATIONS[e.nation].primary
 		var big: bool = e.def.get("warning", false)
 		particles(e.x, e.y, color, 36 if big else 10, 2.2, e.radius * 0.28, 0.6)
 		particles(e.x, e.y, "#e8dcc0", 20 if big else 6, 1.4, e.radius * 0.35, 0.7)
-		text(e.x, e.y - e.radius, "+%d" % e.def.reward, "#f2c94c")
+		text(e.x, e.y - e.radius, "+%d" % reward(e), "#f2c94c")
 		sound("crash" if e.def.get("siege", false) else "fall")
 
 
@@ -909,6 +929,7 @@ func _id() -> int:
 func step(dt: float) -> bool:
 	time += dt
 	_update_raid(dt)
+	_update_market(dt)
 	_update_spawner(dt)
 	_update_army(dt)
 	_update_movement(dt)

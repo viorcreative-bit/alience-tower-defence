@@ -669,6 +669,23 @@ func building(id: String, level: int) -> Node3D:
 			if level >= 3:
 				cyl(g, 0.08, 0.09, 0.5, Vector3(-0.3, 0.45, -0.18), mat(WHITEWASH), 10)
 				cyl(g, 0.0, 0.1, 0.2, Vector3(-0.3, 0.8, -0.18), mat(LEAD, 0.5, 0.3), 10)
+		"market":
+			# Çarşı: kubbeli bedesten, önünde tenteli tezgâhlar; seviyeyle tezgâh ve mal artar
+			add_prop(g, "building_market", Vector3(0, 0, -0.1), 0.4, PI)
+			var tents := [[OTTOMAN_RED, Vector3(-0.22, 0, 0.26)]]
+			if level >= 2:
+				tents.append([IZNIK, Vector3(0.05, 0, 0.3)])
+			if level >= 3:
+				tents.append([Color("#3d7a3a"), Vector3(0.28, 0, 0.26)])
+				dome(g, Vector3(0.0, 0.42, -0.1), 0.1, 0.03)
+			for t in tents:
+				var tp: Vector3 = t[1]
+				for c in [Vector3(-0.08, 0, -0.06), Vector3(0.08, 0, -0.06), Vector3(-0.08, 0, 0.06), Vector3(0.08, 0, 0.06)]:
+					cyl(g, 0.008, 0.008, 0.22, tp + c + Vector3(0, 0.11, 0), mat(WOOD), 5)
+				box(g, Vector3(0.2, 0.015, 0.16), tp + Vector3(0, 0.23, 0), mat(t[0]))
+				box(g, Vector3(0.17, 0.05, 0.08), tp + Vector3(0, 0.07, 0.03), mat(WOOD_DARK))
+				sphere(g, 0.025, tp + Vector3(-0.04, 0.11, 0.03), mat(GOLD, 0.3, 0.8), false, 6)
+				sphere(g, 0.025, tp + Vector3(0.04, 0.11, 0.03), mat(Color("#b3202a")), false, 6)
 		"workshop":
 			# Odun-Demir Ocağı: demirhane, odun yığını, örs; seviyeyle kereste atölyesi ve ocak eklenir
 			add_prop(g, "building_blacksmith", Vector3(0.08, 0, -0.06), 0.36, PI)

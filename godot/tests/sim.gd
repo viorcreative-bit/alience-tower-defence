@@ -6,7 +6,7 @@ func _init() -> void:
 	var g := Game.new()
 	g.gold = 99999
 	var spots := [[3, 3], [5, 4], [3, 9], [5, 9], [0, 1], [8, 6], [4, 7], [1, 10], [6, 11], [3, 1]]
-	for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "kitchen"]:
+	for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "kitchen", "market"]:
 		g.select_tile(GameData.BUILDINGS[id].slot[0], GameData.BUILDINGS[id].slot[1])
 		assert(g.upgrade_building(id), "kurulamadı: " + id)
 	for id in ["cavalry", "science", "religion"]:

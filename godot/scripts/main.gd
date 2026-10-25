@@ -811,7 +811,7 @@ func _debug_hooks() -> void:
 	if "--demo" in args:
 		game.gold = 5000
 		game.res = {"wood": 500, "iron": 500, "food": 500}
-		for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion", "kitchen", "workshop"]:
+		for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion", "kitchen", "workshop", "market"]:
 			game.upgrade_building(id)
 		game.upgrade_building("palace")
 		game.upgrade_building("mosque")

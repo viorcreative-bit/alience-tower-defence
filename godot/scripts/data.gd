@@ -19,15 +19,17 @@ const MAP := {
 }
 
 const RULES := {
-	"start_gold": 220,
+	"start_gold": 400,
 	"start_wall": 20,
 	# kaynaklar: askerler akçenin yanında odun, demir ve yemekle yetişir
 	"start_res": {"wood": 60, "iron": 40, "food": 80},
 	# her dalgada düşman canı hp_growth ile, kalabalık birliklerin sayısı count_growth ile, hızı speed_growth ile artar
 	"count_growth": 0.06,
 	"speed_growth": 0.015,
-	"wave_bonus_base": 20,
-	"wave_bonus_per_wave": 5,
+	"wave_bonus_base": 40,
+	"wave_bonus_per_wave": 10,
+	# düşman ödülleri bu çarpanla verilir (tarayıcı sürümünden bol)
+	"reward_mult": 1.5,
 	"sell_ratio": 0.7,
 	"hp_growth": 1.2,
 	"first_spawn_delay": 0.3,
@@ -47,7 +49,7 @@ const RAID := {
 	"count_per_wave": 0.5,
 	"unit": "light",
 	"gap": 0.45,
-	"bonus": 10,
+	"bonus": 25,
 }
 
 const TOWERS := {
@@ -117,9 +119,10 @@ const BUILDINGS := {
 	"court": {"slot": [5, 13], "costs": [100, 200, 300], "color": "#9b7bd1"},
 	"mosque": {"slot": [7, 15], "costs": [120, 240, 360], "color": "#7fc8c0"},
 	"kitchen": {"slot": [6, 14], "costs": [70, 140, 220], "color": "#d9893b"},
+	"market": {"slot": [3, 13], "costs": [60, 130, 220], "color": "#e0a030"},
 	"workshop": {"slot": [8, 13], "costs": [80, 160, 240], "color": "#8a6a48"},
 }
-const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen", "workshop"]
+const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen", "workshop", "market"]
 # Saray yükseltmesi akçeye ek olarak odun ve demir ister (indeks = kurulacak seviye)
 const PALACE_RES := [{}, {}, {"wood": 60, "iron": 30}, {"wood": 120, "iron": 60}]
 # Binalar Saray'ın bir üst seviyesine kadar çıkar: Saray 1 iken en fazla 2, Saray 2 iken 3
@@ -140,6 +143,10 @@ const CITY := {
 	"palace_wood": 25,
 	"palace_iron": 15,
 	"kitchen_food": 40,
+	# Çarşı: her market_interval saniyede seviye başına market_gold akçe; Saray dalga sonu seviye başına vergi
+	"market_interval": 5.0,
+	"market_gold": 4,
+	"palace_tax": 20,
 	# Odun-Demir Ocağı: seviye başına işçi; her işçi bir yük getirir (oduncu odun, madenci demir)
 	"workers_per_level": 2,
 	"wood_load": 3,
@@ -247,6 +254,7 @@ const BUILDING_NAMES := {
 	"science": ["Bilimhane", "Bilim"], "religion": ["Meşihat", "Din işleri"], "court": ["Kadı Mahkemesi", "Adalet"],
 	"mosque": ["Cami", "Sofiler ve vakıf"], "kitchen": ["Yemekhane", "Ordunun aşı"],
 	"workshop": ["Odun-Demir Ocağı", "Oduncular ve madenciler"],
+	"market": ["Çarşı", "Esnaf ve tüccar"],
 }
 const TROOP_NAMES := {"janissary": "Yeniçeri", "archer": "Okçu", "sipahi": "Sipahi", "sufi": "Sofi"}
 const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!"}
@@ -270,7 +278,7 @@ static func troop_boost(l: int) -> String:
 static func building_effect(id: String, l: int) -> String:
 	match id:
 		"palace":
-			return "Binalar en fazla %d. seviye · dalga sonu +%d odun, +%d demir" % [mini(MAX_BUILDING_LEVEL, l + FREE_LEVELS), CITY.palace_wood * l, CITY.palace_iron * l]
+			return "Binalar en fazla %d. seviye · dalga sonu +%d akçe vergi, +%d odun, +%d demir" % [mini(MAX_BUILDING_LEVEL, l + FREE_LEVELS), CITY.palace_tax * l, CITY.palace_wood * l, CITY.palace_iron * l]
 		"school":
 			return "Kule yükseltmeleri %s ucuz" % pct(CITY.school_discount * l)
 		"barracks":
@@ -289,6 +297,8 @@ static func building_effect(id: String, l: int) -> String:
 			return "Dalga sonu +%d akçe vergi, baskınlar seyrek" % (CITY.court_tax * l)
 		"mosque":
 			return "En fazla %d Sofi (yanındakilere can verir) · dalga sonu +%d akçe vakıf" % [TROOPS.sufi.per_level * l, CITY.mosque_endowment * l]
+		"market":
+			return "Her %d sn'de +%d akçe" % [roundi(CITY.market_interval), CITY.market_gold * l]
 		"workshop":
 			return "%d işçi: oduncular ağaçtan +%d odun, madenciler madenden +%d demir taşır" % [CITY.workers_per_level * l, CITY.wood_load, CITY.iron_load]
 		"kitchen":
