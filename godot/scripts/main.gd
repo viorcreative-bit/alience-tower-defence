@@ -39,6 +39,10 @@ var spark_mat: StandardMaterial3D
 var sultan: Dictionary
 var town: Town
 var save := ConfigFile.new()
+var profiles: Profiles
+var menu: MainMenu
+var in_menu := true
+var honored_wave := 0  # şerefi verilmiş son dalga
 
 
 func _ready() -> void:
@@ -67,10 +71,12 @@ func _ready() -> void:
 	spark_mat = world.fire_mat
 	_build_markers()
 	_sync_buildings()
-	sultan = models.sultan()
-	sultan.root.position = world.to_world(4.5, 13.55)
-	sultan.anim.play("Idle")
-	add_child(sultan.root)
+	_place_king("ottoman", 1)
+	profiles = Profiles.new()
+	menu = MainMenu.new(ui, models, profiles)
+	menu.start.connect(_start_game)
+	add_child(menu)
+	ui.visible = false
 	town = Town.new()
 	town.setup(models, game, world)
 	add_child(town)
@@ -78,6 +84,56 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_fit_camera()
 	_debug_hooks()
+
+
+# ---------------------------------------------------------------- menü ve hükümdar
+
+# Saray önünde duran hükümdar: seçilen devletin kralı, seviyesine göre süslü
+func _place_king(country: String, level: int) -> void:
+	if sultan:
+		sultan.root.queue_free()
+	sultan = models.king(country, level)
+	sultan.root.position = world.to_world(4.5, 13.55)
+	sultan.anim.play("Idle")
+	add_child(sultan.root)
+
+
+func _start_game(country: String, level: int) -> void:
+	game.country = country
+	game.king_level = level
+	models.set_player_flag(country)
+	_place_king(country, level)
+	ui.set_country(country)
+	ui.best_wave = profiles.get_v("best_wave", 0) if profiles.current != "" else ui.best_wave
+	_restart()
+	in_menu = false
+	ui.visible = true
+	set_city_view(false)
+	game.banner(D.ruler_name(country), "#e0b24a", 2.4)
+
+
+func _open_menu() -> void:
+	in_menu = true
+	ui.visible = false
+	ui.overlay.visible = false
+	game.selected = null
+	menu.open()
+
+
+# Her püskürtülen dalga için dalga × honor_per_wave şeref, zaferde ayrıca honor_win
+func _award_honor() -> void:
+	var n := 0
+	var cleared: int = game.wave if game.phase == "build" or game.phase == "won" else game.wave - 1
+	while honored_wave < cleared:
+		honored_wave += 1
+		n += honored_wave * D.KING.honor_per_wave
+	if game.phase == "won" and honored_wave <= game.total_waves:
+		n += D.KING.honor_win
+		honored_wave = game.total_waves + 1
+	if n > 0:
+		profiles.add_honor(n)
+		ui.honor_note = "Toplam şeref: %d (hükümdarını menüden geliştir)" % profiles.honor()
+		game.text(4.5, 12.6, "+%d şeref" % n, "#e0b24a")
 
 
 # ---------------------------------------------------------------- kamera
@@ -201,6 +257,8 @@ func _center(target: Vector3, dir: Vector3, d: float, corners: Array[Vector3], w
 # ---------------------------------------------------------------- dokunma
 
 func _unhandled_input(event: InputEvent) -> void:
+	if in_menu:
+		return
 	if event is InputEventMouseMotion:
 		var t := _tile_under(event.position)
 		var ok := t.y >= 0 and t.y < game.wall_row and t.x >= 0 and t.x < game.cols and not game.is_path_tile(t.x, t.y) and not game.is_work_site(t.x, t.y)
@@ -269,6 +327,8 @@ func _on_action(name: String, arg: String) -> void:
 			save.save(SAVE_PATH)
 		"restart":
 			_restart()
+		"menu":
+			_open_menu()
 
 
 func _restart() -> void:
@@ -280,14 +340,21 @@ func _restart() -> void:
 		bars[id][0].queue_free()
 	bars.clear()
 	game.reset()
+	honored_wave = 0
+	ui.honor_note = ""
 	_sync_buildings()
 
 
 # ---------------------------------------------------------------- ana döngü
 
 func _process(delta: float) -> void:
+	if in_menu:
+		town.update(delta)
+		audio.set_music("off")
+		return
 	if game.advance(delta) or game.phase == "lost":
 		_save_best()
+		_award_honor()
 	_handle_events()
 	_sync_towers(delta)
 	_sync_enemies(delta)
@@ -311,6 +378,8 @@ func _save_best() -> void:
 		ui.best_wave = game.wave
 		save.set_value("game", "best_wave", game.wave)
 		save.save(SAVE_PATH)
+		if profiles.current != "":
+			profiles.set_v("best_wave", game.wave)
 
 
 # ---------------------------------------------------------------- eşleme
@@ -832,6 +901,25 @@ func _float_text(pos: Vector3, text: String, color: Color) -> void:
 # `--light=0|1|2` ışığı seçer, `--select=c,r` bir kareyi seçer.
 func _debug_hooks() -> void:
 	var args := OS.get_cmdline_user_args()
+	# `--country=venice --king=3` ya da `--demo`/`--city` menüyü atlayıp doğrudan oyunu açar
+	var cn := _arg(args, "--country=", "")
+	if cn != "" or "--demo" in args or "--city" in args or "--play" in args:
+		menu.visible = false
+		_start_game(cn if cn != "" else "ottoman", int(_arg(args, "--king=", "1")))
+	elif "--login" in args:
+		profiles.logout()
+		menu.open()
+	elif _arg(args, "--user=", "") != "":
+		profiles.login(_arg(args, "--user=", ""))
+		if _arg(args, "--honor=", "") != "":
+			profiles.set_v("honor", int(_arg(args, "--honor=", "0")))
+		if _arg(args, "--kings=", "") != "":
+			var k := {}
+			for c in D.COUNTRY_ORDER:
+				k[c] = int(_arg(args, "--kings=", "1"))
+			profiles.set_v("kings", k)
+		menu.selected = _arg(args, "--pick=", profiles.country())
+		menu._show_countries()
 	for a in args:
 		if a.begins_with("--light="):
 			world.time_of_day = int(a.substr(8))

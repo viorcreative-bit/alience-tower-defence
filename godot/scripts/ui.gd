@@ -36,6 +36,10 @@ var btn_light: Button
 var btn_charge: Button
 var btn_primary: Button
 var btn_view: Button
+var btn_menu: Button
+var lbl_country: Label
+var top_flag: TextureRect
+var honor_note := ""  # oyun sonu ekranına eklenen şeref satırı
 var banner: Label
 var banner_tween: Tween
 var overlay: Control
@@ -204,6 +208,7 @@ func _build_top() -> void:
 	var title := VBoxContainer.new()
 	title.add_theme_constant_override("separation", -8)
 	var t1 := _label("OSMANLI", 38, C_GOLD, font_title)
+	lbl_country = t1
 	t1.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
 	t1.add_theme_constant_override("shadow_offset_y", 2)
 	title.add_child(t1)
@@ -237,6 +242,7 @@ func _build_top() -> void:
 		lbl_res[k] = v
 	# şeridin solundan sarkan sancak
 	var flag := _icon("banner", 0)
+	top_flag = flag
 	flag.custom_minimum_size = Vector2(46, 100)
 	flag.position = Vector2(14, 40)
 	root.add_child(flag)
@@ -382,7 +388,7 @@ func _render_idle() -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	context.add_child(l)
 	if game.phase == "build" and game.wave < game.total_waves:
-		var n := _label(D.describe_wave(game.wave), 23, C_TEXT, font_bold)
+		var n := _label(D.describe_wave(game.wave, game.country), 23, C_TEXT, font_bold)
 		n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		context.add_child(n)
 
@@ -597,6 +603,23 @@ func _build_view_button() -> void:
 	btn_view.pressed.connect(func(): action.emit("view", ""))
 	root.add_child(btn_view)
 	set_view_label(false)
+	# ana menüye dönüş (oyun durur; menüden "Savaşa Başla" yeni oyun açar)
+	btn_menu = Button.new()
+	btn_menu.text = "Menü"
+	btn_menu.custom_minimum_size = Vector2(110, 58)
+	btn_menu.add_theme_font_size_override("font_size", 23)
+	btn_menu.add_theme_stylebox_override("normal", _frame("panel", 18, 14))
+	btn_menu.add_theme_stylebox_override("hover", _frame("button_hot", 16, 14))
+	btn_menu.add_theme_stylebox_override("pressed", _frame("button_hot", 16, 14))
+	btn_menu.add_theme_color_override("font_color", C_GOLD)
+	btn_menu.pressed.connect(func(): action.emit("menu", ""))
+	root.add_child(btn_menu)
+
+
+func set_country(c: String) -> void:
+	lbl_country.text = D.COUNTRIES[c].short
+	top_flag.texture = load("res://assets/ui/%s.png" % Models.banner_name(c))
+	last_key = ""
 
 
 func set_view_label(city: bool) -> void:
@@ -663,12 +686,19 @@ func _build_overlay() -> void:
 	again.add_theme_stylebox_override("hover", _box(Color("#bf2a33"), C_GOLD, 10))
 	again.pressed.connect(func(): action.emit("restart", ""))
 	v.add_child(again)
+	var menu := Button.new()
+	menu.text = "Ana Menü"
+	menu.custom_minimum_size = Vector2(300, 64)
+	menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	menu.pressed.connect(func(): action.emit("menu", ""))
+	v.add_child(menu)
 
 
 # ---------------------------------------------------------------- her kare
 
 func refresh(sound_on: bool, light_name: String) -> void:
 	btn_view.position = Vector2(root.size.x - btn_view.size.x - 14, top_bottom() + 12)
+	btn_menu.position = Vector2(btn_view.position.x - btn_menu.size.x - 10, btn_view.position.y)
 	lbl_gold.text = str(game.gold)
 	lbl_wall.text = str(game.wall)
 	lbl_wave.text = "%d/%d" % [game.wave, game.total_waves]
@@ -731,9 +761,11 @@ func refresh(sound_on: bool, light_name: String) -> void:
 	var ended := game.phase == "won" or game.phase == "lost"
 	if ended and not overlay.visible:
 		if game.phase == "won":
-			overlay_title.text = "Devlet-i Aliyye Muzaffer!"
+			overlay_title.text = "Devlet-i Aliyye Muzaffer!" if game.country == "ottoman" else "%s Muzaffer!" % D.NATION_NAMES[game.country]
 			overlay_text.text = "%d seferin hepsini püskürttün. Surda %d sağlamlık kaldı." % [game.total_waves, game.wall]
 		else:
 			overlay_title.text = "Kale Düştü"
 			overlay_text.text = "%d. dalgada surlar yıkıldı.\nEn yüksek dalga: %d" % [game.wave, best_wave]
+		if honor_note != "":
+			overlay_text.text += "\n" + honor_note
 	overlay.visible = ended

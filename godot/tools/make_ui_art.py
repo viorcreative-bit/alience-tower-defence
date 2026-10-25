@@ -155,6 +155,29 @@ def banner():
     save(shadowed(im, 2, 3), "banner", w, h)
 
 
+# Diğer devletlerin sancakları: aynı biçim, devletin ana rengi, ortada süs renginde daire (data.gd NATIONS)
+COUNTRY_COLORS = {
+    "byzantium": ("#6b2d8f", "#e8c547"), "venice": ("#8e1b24", "#e3b341"), "safavid": ("#2f8f4e", "#c0392b"),
+    "habsburg": ("#2b2b2b", "#e3b341"), "mamluk": ("#e2b33c", "#7a4a24"),
+}
+
+
+def hexc(h):
+    return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def country_banner(cid):
+    w, h = 44, 96
+    a, b = (hexc(c) for c in COUNTRY_COLORS[cid])
+    im = canvas(w, h); d = ImageDraw.Draw(im)
+    d.polygon(P((2, 0), (42, 0), (42, 92), (22, 78), (2, 92)), fill=a)
+    d.polygon(P((2, 0), (6, 0), (6, 89), (2, 92)), fill=tuple(int(v * 0.75) for v in a))
+    d.line(P((2, 2), (42, 2)), fill=(226, 180, 74), width=3 * S)
+    ell(d, 23, 36, 10, 10, fill=b)
+    d.line(P((8, 60), (38, 60)), fill=b, width=3 * S)
+    save(shadowed(im, 2, 3), "banner_" + cid, w, h)
+
+
 # ------------------------------------------------------------------ çerçeveler (9 parça)
 
 def frame(name, top, bottom, edge=(214, 168, 72), inner=(120, 84, 34), size=64, r=10, deco=True):
@@ -219,6 +242,8 @@ def skyline():
 
 for f in (coin, castle, swords, logs, iron, bread, speaker, palace, banner, skyline):
     f()
+for cid in COUNTRY_COLORS:
+    country_banner(cid)
 frame("panel", (40, 30, 22), (22, 16, 12))
 frame("button", (58, 44, 32), (34, 25, 18), edge=(180, 140, 66), inner=(90, 64, 30), deco=False)
 frame("button_hot", (78, 60, 40), (44, 32, 22), edge=(240, 196, 96), inner=(120, 88, 40), deco=False)

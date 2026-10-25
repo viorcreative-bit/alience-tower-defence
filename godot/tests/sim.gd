@@ -45,4 +45,34 @@ func _init() -> void:
 				break
 		t += 0.03
 	print("bitti: ", g.phase, " dalga ", g.wave, " sur ", g.wall, " akçe ", g.gold, " asker ", g.units.size(), " süre ", int(t), " hastanede geçen adım ", healed, " kaynak ", g.res)
+	_countries()
 	quit()
+
+
+# Devlet ve hükümdar üstünlükleri: her devlet kendi bonusunu alır, kendi adı dalgalarda düşman olarak çıkmaz
+func _countries() -> void:
+	var D := GameData
+	for c in D.COUNTRY_ORDER:
+		var g := Game.new()
+		g.country = c
+		g.king_level = 3
+		g.reset()
+		for i in D.WAVES.size():
+			assert(D.wave_nation(i, c) != c, "kendi devletine saldırıyor: " + c)
+		var t := {"type": "archer", "level": 1}
+		var base := D.tower_stats("archer", 1, g.tower_bonus("archer"))
+		match D.COUNTRIES[c].bonus:
+			"wall":
+				assert(g.wall == D.RULES.start_wall + 9, "sur bonusu")
+			"gold":
+				assert(g.gold == D.RULES.start_gold + D.KING.start_gold * 3, "akçe bonusu")
+			"rate":
+				assert(g.tower_stats(t).rate < base.rate, "atış hızı bonusu")
+			"tower_damage":
+				assert(base.damage > D.TOWERS.archer.damage, "hasar bonusu")
+			"range":
+				assert(base.range > D.TOWERS.archer.range, "menzil bonusu")
+			"troops":
+				assert(g.troop_stats("janissary").hp > D.TROOPS.janissary.hp, "asker bonusu")
+		assert(D.king_text(c, 3) != "", "kral metni")
+	print("devletler tamam")

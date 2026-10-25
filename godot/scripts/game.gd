@@ -26,6 +26,9 @@ var phase := "build"  # build | wave | won | lost
 var raid := false
 var raid_timer := 0.0
 var nation := "byzantium"
+# oyuncunun devleti ve hükümdarının seviyesi (menüde seçilir, reset'ten önce atanır)
+var country := "ottoman"
+var king_level := 1
 var speed := 1
 var buildings := {}
 var towers: Array = []
@@ -49,14 +52,14 @@ func _init() -> void:
 
 
 func reset() -> void:
-	gold = D.RULES.start_gold
+	gold = D.RULES.start_gold + (D.KING.start_gold * king_level if king_bonus_kind() == "gold" else 0)
 	res = D.RULES.start_res.duplicate()
-	wall = D.RULES.start_wall
+	wall = D.RULES.start_wall + int(king_bonus("wall"))
 	max_wall = wall
 	wave = 0
 	phase = "build"
 	raid = false
-	nation = D.WAVES[0].nation
+	nation = D.wave_nation(0, country)
 	speed = 1
 	buildings = {}
 	for id in D.BUILDINGS:
@@ -132,7 +135,20 @@ func _update_market(dt: float) -> void:
 
 
 func reward(e: Dictionary) -> int:
-	return roundi(e.def.reward * D.RULES.reward_mult)
+	return roundi(e.def.reward * D.RULES.reward_mult * (1.0 + king_bonus("gold")))
+
+
+# ---------------------------------------------------------------- hükümdar
+
+func king_bonus_kind() -> String:
+	return D.COUNTRIES[country].bonus
+
+
+# devletin üstünlüğü bu türdeyse seviyeye göre artış, değilse 0
+func king_bonus(kind: String) -> float:
+	if king_bonus_kind() != kind:
+		return 0.0
+	return D.KING.per_level[kind] * king_level
 
 
 func is_work_site(c: int, r: int) -> bool:
@@ -274,18 +290,23 @@ func sell_tower() -> void:
 
 func tower_bonus(type: String) -> Dictionary:
 	var b := buildings
+	var out := {}
 	match type:
 		"archer":
-			return {"damage": D.CITY.archery_damage * b.archery, "range": D.CITY.archery_range * b.archery}
+			out = {"damage": D.CITY.archery_damage * b.archery, "range": D.CITY.archery_range * b.archery}
 		"cannon":
-			return {"damage": D.CITY.science_cannon * b.science}
+			out = {"damage": D.CITY.science_cannon * b.science}
 		"tar":
-			return {"slow": D.CITY.science_tar * b.science}
-	return {}
+			out = {"slow": D.CITY.science_tar * b.science}
+	out.damage = out.get("damage", 0.0) + king_bonus("tower_damage")
+	out.range = out.get("range", 0.0) + king_bonus("range")
+	return out
 
 
 func tower_stats(t: Dictionary) -> Dictionary:
-	return D.tower_stats(t.type, t.level, tower_bonus(t.type))
+	var s := D.tower_stats(t.type, t.level, tower_bonus(t.type))
+	s.rate /= 1.0 + king_bonus("rate")
+	return s
 
 
 # ---------------------------------------------------------------- şehir
@@ -397,13 +418,13 @@ func start_wave() -> void:
 	phase = "wave"
 	raid = false
 	var w: Dictionary = D.WAVES[wave - 1]
-	nation = w.nation
+	nation = D.wave_nation(wave - 1, country)
 	spawn_queue = []
 	for g in w.groups:
 		for i in D.group_count(g[1], wave):
-			spawn_queue.append({"type": g[0], "gap": g[2], "nation": w.nation})
+			spawn_queue.append({"type": g[0], "gap": g[2], "nation": nation})
 	spawn_timer = D.RULES.first_spawn_delay + 1.2
-	banner("%s seferde!" % D.NATION_NAMES[w.nation], "#f3e6c8", 2.4)
+	banner("%s seferde!" % D.NATION_NAMES[nation], "#f3e6c8", 2.4)
 	sound("waveStart")
 	sound("chant", {"voices": 12 if units.size() else 8, "delay": 0.9})
 
@@ -438,7 +459,7 @@ func _check_wave_end() -> bool:
 		raid = false
 		phase = "build"
 		gold += D.RAID.bonus
-		nation = D.WAVES[wave].nation
+		nation = D.wave_nation(wave, country)
 		_reset_raid_timer()
 		banner("Baskın püskürtüldü  +%d" % D.RAID.bonus, "#f2c94c")
 		return false
@@ -453,7 +474,7 @@ func _check_wave_end() -> bool:
 	for k in D.RES_ORDER:
 		res[k] += income[k]
 	phase = "build"
-	nation = D.WAVES[wave].nation
+	nation = D.wave_nation(wave, country)
 	charge.active = 0.0
 	_reset_raid_timer()
 	banner("%d. sefer püskürtüldü  +%d" % [wave, bonus + income.tax + income.endowment + income.palace_tax], "#f2c94c")
@@ -463,7 +484,7 @@ func _check_wave_end() -> bool:
 
 func city_income() -> Dictionary:
 	return {"tax": D.CITY.court_tax * buildings.court, "endowment": D.CITY.mosque_endowment * buildings.mosque,
-		"repair": D.CITY.hospital_repair * buildings.hospital, "palace_tax": D.CITY.palace_tax * buildings.palace,
+		"repair": D.CITY.hospital_repair * buildings.hospital + (ceili(king_level / 2.0) if king_bonus_kind() == "wall" else 0), "palace_tax": D.CITY.palace_tax * buildings.palace,
 		"wood": D.CITY.palace_wood * buildings.palace, "iron": D.CITY.palace_iron * buildings.palace,
 		"food": D.CITY.kitchen_food * buildings.kitchen}
 
@@ -480,7 +501,7 @@ func _update_raid(dt: float) -> void:
 	raid_timer -= dt
 	if raid_timer > 0.0:
 		return
-	var nat: String = D.WAVES[wave].nation
+	var nat := D.wave_nation(wave, country)
 	var count := roundi(D.RAID.base_count + wave * D.RAID.count_per_wave)
 	phase = "wave"
 	raid = true
@@ -660,7 +681,7 @@ func training_of(kind: String) -> Dictionary:
 func troop_stats(kind: String) -> Dictionary:
 	var d: Dictionary = D.TROOPS[kind]
 	var lv: int = max(1, buildings.get(d.building, 0))
-	var k: float = 1.0 + D.ARMY.level_bonus * (lv - 1)
+	var k: float = (1.0 + D.ARMY.level_bonus * (lv - 1)) * (1.0 + king_bonus("troops"))
 	return {"hp": float(roundi(d.hp * k)), "damage": d.damage * k}
 
 

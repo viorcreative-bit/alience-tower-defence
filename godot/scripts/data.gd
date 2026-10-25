@@ -75,6 +75,7 @@ const ENEMIES := {
 const ENEMY_MELEE := {"rate": 1.0, "growth": 0.08}
 
 const NATIONS := {
+	"ottoman": {"primary": "#c41e2a", "secondary": "#f4f1e8", "metal": "#c9a86a"},
 	"byzantium": {"primary": "#6b2d8f", "secondary": "#e8c547", "metal": "#c9b26a"},
 	"serbia": {"primary": "#b8323a", "secondary": "#2f5fa8", "metal": "#a9adb8"},
 	"hungary": {"primary": "#c0392b", "secondary": "#f4f1e8", "metal": "#a9adb8"},
@@ -104,6 +105,69 @@ const WAVES := [
 	{"nation": "france", "groups": [["infantry", 24, 0.3], ["knight", 14, 0.7], ["siegeTower", 2, 2.5]]},
 	{"nation": "holyLeague", "groups": [["knight", 10, 0.9], ["siegeTower", 2, 2.5], ["commander", 1, 2.0], ["light", 16, 0.35], ["ram", 5, 1.2]]},
 ]
+
+# Oyuncunun seçebileceği devletler. Her devletin bir hükümdarı vardır; hükümdar menüde "şeref" ile
+# geliştirilir ve her seviyede devletin üstünlüğü (bonus) artar. Seçilen devlet düşman dalgalarında
+# görünürse o seferi Osmanlı yapar. bonus: tower_damage | wall | gold | troops | range | rate
+const COUNTRIES := {
+	"ottoman": {"short": "OSMANLI", "ruler": "Fatih Sultan Mehmed", "title": "Padişah", "bonus": "tower_damage",
+		"text": "Kuleler daha sert vurur"},
+	"byzantium": {"short": "BİZANS", "ruler": "XI. Konstantinos", "title": "İmparator", "bonus": "wall",
+		"text": "Surlar daha sağlam, dalga sonu onarım"},
+	"venice": {"short": "VENEDİK", "ruler": "Francesco Foscari", "title": "Doç", "bonus": "gold",
+		"text": "Bol akçe: başlangıç akçesi ve düşman ödülü artar"},
+	"safavid": {"short": "SAFEVÎ", "ruler": "Şah İsmail", "title": "Şah", "bonus": "troops",
+		"text": "Askerler daha güçlü ve dayanıklı"},
+	"habsburg": {"short": "HABSBURG", "ruler": "V. Karl", "title": "İmparator", "bonus": "range",
+		"text": "Kulelerin menzili uzun"},
+	"mamluk": {"short": "MEMLÜK", "ruler": "Kayıtbay", "title": "Sultan", "bonus": "rate",
+		"text": "Kuleler daha hızlı atar"},
+}
+const COUNTRY_ORDER := ["ottoman", "byzantium", "venice", "safavid", "habsburg", "mamluk"]
+
+# Hükümdar: 1. seviyeden başlar. Bir üst seviyenin bedeli cost_per_level × şimdiki seviye şereftir.
+# Şeref her püskürtülen dalgada dalga × honor_per_wave, zaferde ayrıca honor_win kazanılır.
+# per_level: bonus türüne göre seviye başına artış (1. seviyede de bir kez uygulanır).
+const KING := {
+	"max_level": 5,
+	"cost_per_level": 120,
+	"honor_per_wave": 10,
+	"honor_win": 250,
+	"per_level": {"tower_damage": 0.06, "wall": 3, "gold": 0.07, "troops": 0.08, "range": 0.08, "rate": 0.05},
+	"start_gold": 40,  # gold bonusunda seviye başına ek başlangıç akçesi
+}
+
+
+static func king_text(country: String, level: int) -> String:
+	if level <= 0:
+		return ""
+	var b: String = COUNTRIES[country].bonus
+	var v = KING.per_level[b] * level
+	match b:
+		"tower_damage":
+			return "Kule hasarı +%s" % pct(v)
+		"wall":
+			return "Sur +%d · dalga sonu Sur +%d" % [v, ceili(level / 2.0)]
+		"gold":
+			return "Başlangıç +%d akçe · ödül +%s" % [KING.start_gold * level, pct(v)]
+		"troops":
+			return "Asker canı ve hasarı +%s" % pct(v)
+		"range":
+			return "Kule menzili +%s kare" % num(v, 2)
+		"rate":
+			return "Kule atış hızı +%s" % pct(v)
+	return ""
+
+
+# "Doç Francesco Foscari", "Şah İsmail" (unvan adın içindeyse tekrarlanmaz)
+static func ruler_name(country: String) -> String:
+	var c: Dictionary = COUNTRIES[country]
+	return c.ruler if c.ruler.begins_with(c.title) else "%s %s" % [c.title, c.ruler]
+
+
+static func king_cost(level: int) -> int:
+	return KING.cost_per_level * level
+
 
 # Şehir binaları. slot: surların içindeki arsa [sütun, satır]. costs: seviye 1/2/3 maliyeti.
 const BUILDINGS := {
@@ -243,6 +307,7 @@ const ENEMY_NAMES := {
 	"ram": "Koçbaşı", "siegeTower": "Kuşatma Kulesi", "commander": "Başkomutan",
 }
 const NATION_NAMES := {
+	"ottoman": "Osmanlı Devleti",
 	"byzantium": "Bizans İmparatorluğu", "serbia": "Sırp Despotluğu", "hungary": "Macar Krallığı",
 	"venice": "Venedik Cumhuriyeti", "mamluk": "Memlük Sultanlığı", "safavid": "Safevî Devleti",
 	"poland": "Lehistan Krallığı", "habsburg": "Habsburg Monarşisi", "spain": "İspanya Krallığı",
@@ -323,7 +388,13 @@ static func join_list(items: Array) -> String:
 	return ", ".join(items.slice(0, -1)) + " ve " + items[-1]
 
 
-static func describe_wave(i: int) -> String:
+# Oyuncunun devleti dalgada düşman olarak çıkıyorsa o seferi Osmanlı yapar
+static func wave_nation(i: int, country: String) -> String:
+	var n: String = WAVES[i].nation
+	return "ottoman" if n == country else n
+
+
+static func describe_wave(i: int, country := "ottoman") -> String:
 	if i >= WAVES.size():
 		return ""
 	var w: Dictionary = WAVES[i]
@@ -331,4 +402,4 @@ static func describe_wave(i: int) -> String:
 	for g in w.groups:
 		items.append("%d %s" % [group_count(g[1], i + 1), ENEMY_NAMES[g[0]]])
 	var hard := " Düşman canı ×%s." % num(difficulty(i + 1)) if i > 0 else ""
-	return "Sıradaki sefer: %s — %s.%s" % [NATION_NAMES[w.nation], join_list(items), hard]
+	return "Sıradaki sefer: %s — %s.%s" % [NATION_NAMES[wave_nation(i, country)], join_list(items), hard]

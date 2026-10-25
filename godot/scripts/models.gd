@@ -517,6 +517,34 @@ func sultan() -> Dictionary:
 	return ott_char("sultan", {}, 0.42)
 
 
+# Oyuncunun hükümdarı (assets/models/ottoman/ch_king_*.glb). Seviye parçaları "L2".."L5" iskeletin altındadır:
+# L2 başlıkta mücevher, L3 pelerin, L4 kılıç ya da asa, L5 altın süsler. Seviyeyle biraz da büyür.
+func king(country: String, level: int) -> Dictionary:
+	var ch := ott_char("king_" + country, {}, 0.42 * (1.0 + 0.03 * (level - 1)))
+	for n in ch.skeleton.get_children():
+		var nm := String(n.name)
+		if nm.length() == 2 and nm.begins_with("L") and nm[1].is_valid_int():
+			n.visible = int(nm.substr(1)) <= level
+	return ch
+
+
+# Surlardaki ve kulelerdeki sancaklar tek bir dokuyu paylaşır; oyuncu başka devlet seçince o dokunun resmi
+# değiştirilir, böylece bütün sancaklar yerinde güncellenir.
+func set_player_flag(country: String) -> void:
+	var tex: ImageTexture = ottoman_flag()
+	if not tex_cache.has("ottoman_img"):
+		tex_cache.ottoman_img = tex.get_image()
+	var img: Image = tex_cache.ottoman_img if country == "ottoman" else nation_flag(country).get_image()
+	tex.set_image(img)
+	# surlarda asılı sancaklar (assets/ui/banner*.png)
+	if mats.has("banner_mat"):
+		mats.banner_mat.albedo_texture = load("res://assets/ui/%s.png" % banner_name(country))
+
+
+static func banner_name(country: String) -> String:
+	return "banner" if country == "ottoman" else "banner_" + country
+
+
 # ---------------------------------------------------------------- kuleler
 
 # Kule: kaide, gövde, seviye düğmeleri. Döner parça "head" ile döner.
