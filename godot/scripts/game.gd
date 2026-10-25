@@ -43,6 +43,9 @@ var strikes: Array = []  # Top Yağmuru: düşmekte olan gülleler {x, y, t}
 # mevsim ve hava: sıradaki dalganın havası dalga bitince seçilir, oyuncu önceden görür
 var season := "spring"
 var weather := "clear"
+# Medrese araştırmaları: biten araştırmalar ve sürmekte olan {id, time}
+var research := {}
+var researching := {}
 var buildings := {}
 var towers: Array = []
 var enemies: Array = []
@@ -132,6 +135,8 @@ func reset() -> void:
 	morale = 0.0
 	strikes = []
 	_roll_weather(0)
+	research = {}
+	researching = {}
 	selected = null
 	time = 0.0
 	market_timer = 0.0
@@ -191,14 +196,14 @@ func _update_market(dt: float) -> void:
 	market_timer += dt
 	if market_timer >= D.CITY.market_interval:
 		market_timer -= D.CITY.market_interval
-		var n: int = D.CITY.market_gold * lv
+		var n: int = roundi(D.CITY.market_gold * lv * (1.0 + (D.TECH_FX.market if has_tech("trade1") else 0.0)))
 		gold += n
 		var s: Array = D.BUILDINGS.market.slot
 		text(s[0] + 0.5, s[1] + 0.1, "+%d akçe" % n, "#f2c94c")
 
 
 func reward(e: Dictionary) -> int:
-	return roundi(e.def.reward * D.RULES.reward_mult * (1.0 + king_bonus("gold")))
+	return roundi(e.def.reward * D.RULES.reward_mult * (1.0 + king_bonus("gold") + (D.TECH_FX.reward if has_tech("trade2") else 0.0)))
 
 
 # ---------------------------------------------------------------- hükümdar
@@ -319,7 +324,7 @@ func build_tower(type: String) -> void:
 
 
 func upgrade_discount() -> float:
-	return D.CITY.school_discount * buildings.school
+	return D.CITY.school_discount * buildings.school + (D.TECH_FX.discount if has_tech("arch2") else 0.0)
 
 
 func tower_upgrade_cost(t: Dictionary) -> int:
@@ -363,6 +368,13 @@ func tower_bonus(type: String) -> Dictionary:
 			out = {"slow": D.CITY.science_tar * b.science}
 	out.damage = out.get("damage", 0.0) + king_bonus("tower_damage")
 	out.range = out.get("range", 0.0) + king_bonus("range")
+	var gun := type == "cannon" or type == "musket"
+	if gun and has_tech("powder1"):
+		out.damage += D.TECH_FX.powder_damage
+	if gun and has_tech("powder3"):
+		out.range += D.TECH_FX.powder_range
+	if has_tech("arch3"):
+		out.damage += D.TECH_FX.arch_damage
 	return out
 
 
@@ -370,6 +382,8 @@ func tower_stats(t: Dictionary) -> Dictionary:
 	var s := D.tower_stats(t.type, t.level, tower_bonus(t.type))
 	s.rate /= 1.0 + king_bonus("rate")
 	s.damage = roundi(s.damage * morale_mult())
+	if t.type == "cannon" and has_tech("powder2"):
+		s.splash *= 1.0 + D.TECH_FX.powder_splash
 	var w := wx()
 	s.range *= 1.0 - w.range
 	s.rate *= 1.0 + w.rate + (w.musket if t.type == "musket" or t.type == "cannon" else 0.0)
@@ -557,7 +571,61 @@ func building_block(id: String) -> Dictionary:
 func building_cost(id: String) -> int:
 	var costs: Array = D.BUILDINGS[id].costs
 	var l: int = buildings[id]
-	return costs[l] if l < costs.size() else 0
+	var c: int = costs[l] if l < costs.size() else 0
+	return roundi(c * (1.0 - D.TECH_FX.discount)) if has_tech("arch2") else c
+
+
+# ---------------------------------------------------------------- Medrese
+
+func has_tech(id: String) -> bool:
+	return research.has(id)
+
+
+# Araştırılamıyorsa nedeni, araştırılabiliyorsa "" (para ayrıca bakılır)
+func tech_block(id: String) -> String:
+	var t: Dictionary = D.TECH[id]
+	if has_tech(id):
+		return "done"
+	if researching.get("id", "") == id:
+		return "running"
+	if buildings.medrese < t.tier:
+		return "medrese"
+	if t.tier > 1 and not has_tech(D.tech_of(t.branch, t.tier - 1)):
+		return "prev"
+	if not researching.is_empty():
+		return "busy"
+	return ""
+
+
+func can_research(id: String) -> bool:
+	return is_active() and tech_block(id) == "" and gold >= D.TECH[id].cost
+
+
+func start_research(id: String) -> bool:
+	if not can_research(id):
+		return false
+	gold -= D.TECH[id].cost
+	researching = {"id": id, "time": D.TECH[id].time}
+	sound("build")
+	return true
+
+
+func _update_research(dt: float) -> void:
+	if researching.is_empty():
+		return
+	researching.time -= dt
+	if researching.time > 0.0:
+		return
+	var id: String = researching.id
+	researching = {}
+	research[id] = true
+	if id == "arch1":
+		max_wall += D.TECH_FX.wall
+		wall += D.TECH_FX.wall
+	var s: Array = D.BUILDINGS.medrese.slot
+	text(s[0] + 0.5, s[1], D.TECH[id].name, "#9fd0f0")
+	banner("%s tamamlandı" % D.TECH[id].name, "#9fd0f0", 1.8)
+	sound("victory")
 
 
 func can_upgrade_building(id: String) -> bool:
@@ -658,7 +726,7 @@ func _check_wave_end() -> bool:
 		phase = "won"
 		sound("chant", {"voices": 16, "loud": 1})
 		return true
-	var bonus := D.wave_bonus(wave)
+	var bonus := roundi(D.wave_bonus(wave) * (1.0 + (D.TECH_FX.wave_bonus if has_tech("trade3") else 0.0)))
 	var income := city_income()
 	gold += bonus + income.tax + income.endowment + income.palace_tax
 	wall = mini(max_wall, wall + income.repair)
@@ -675,10 +743,16 @@ func _check_wave_end() -> bool:
 
 
 func city_income() -> Dictionary:
-	return {"tax": D.CITY.court_tax * buildings.court, "endowment": D.CITY.mosque_endowment * buildings.mosque,
+	var out := {"tax": D.CITY.court_tax * buildings.court, "endowment": D.CITY.mosque_endowment * buildings.mosque,
 		"repair": D.CITY.hospital_repair * buildings.hospital + (ceili(king_level / 2.0) if king_bonus_kind() == "wall" else 0), "palace_tax": D.CITY.palace_tax * buildings.palace,
 		"wood": D.CITY.palace_wood * buildings.palace, "iron": D.CITY.palace_iron * buildings.palace,
 		"food": D.CITY.kitchen_food * buildings.kitchen}
+	if has_tech("arch3"):
+		out.repair += D.TECH_FX.arch_repair
+	if has_tech("trade3"):
+		out.wood += D.TECH_FX.wood
+		out.iron += D.TECH_FX.iron
+	return out
 
 
 func _reset_raid_timer() -> void:
@@ -1157,6 +1231,7 @@ func step(dt: float) -> bool:
 	time += dt
 	_update_raid(dt)
 	_update_market(dt)
+	_update_research(dt)
 	_update_spawner(dt)
 	_update_hero(dt)
 	_update_army(dt)

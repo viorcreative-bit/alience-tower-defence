@@ -136,6 +136,7 @@ func _open_menu(map := false) -> void:
 	in_menu = true
 	ui.visible = false
 	ui.overlay.visible = false
+	ui.tech.visible = false
 	game.selected = null
 	menu.open(map)
 
@@ -349,6 +350,10 @@ func _on_action(name: String, arg: String) -> void:
 			game.trigger_charge()
 		"hero":
 			game.use_hero()
+		"tech":
+			ui.toggle_tech()
+		"research":
+			game.start_research(arg)
 		"sound":
 			audio.set_enabled(not audio.enabled)
 			save.set_value("settings", "sound", audio.enabled)
@@ -1006,7 +1011,7 @@ func _debug_hooks() -> void:
 	if "--demo" in args:
 		game.gold = 5000
 		game.res = {"wood": 500, "iron": 500, "food": 500}
-		for id in ["school", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion", "kitchen", "workshop", "market"]:
+		for id in ["school", "medrese", "barracks", "archery", "hospital", "mosque", "court", "cavalry", "science", "religion", "kitchen", "workshop", "market"]:
 			game.upgrade_building(id)
 		game.upgrade_building("palace")
 		game.upgrade_building("mosque")
@@ -1029,6 +1034,12 @@ func _debug_hooks() -> void:
 	if _arg(args, "--weather=", "") != "":
 		game.weather = _arg(args, "--weather=", "")
 		game.season = _arg(args, "--season=", game.season)
+	if "--tech" in args:
+		game.upgrade_building("medrese")
+		game.research = {"powder1": true, "arch1": true}
+		game.gold = 400
+		game.start_research("powder2")
+		ui.toggle_tech()
 	if "--use-hero" in args:
 		get_tree().create_timer(float(_arg(args, "--hero-at=", "3"))).timeout.connect(game.use_hero)
 	var sel := _arg(args, "--select=", "")

@@ -39,6 +39,11 @@ var btn_view: Button
 var btn_menu: Button
 var btn_hero: Button
 var weather_chip: PanelContainer
+var tech: ColorRect  # Medrese'nin teknoloji ağacı (açılır pencere)
+var tech_grid: HBoxContainer
+var tech_status: Label
+var tech_bar: ColorRect
+var tech_key := ""
 var lbl_weather: Label
 var lbl_country: Label
 var lbl_stage: Label
@@ -91,6 +96,7 @@ func _ready() -> void:
 	_build_panel()
 	_build_view_button()
 	_build_banner()
+	_build_tech()
 	_build_overlay()
 
 
@@ -559,6 +565,16 @@ func _render_building(id: String) -> void:
 	if not block.is_empty():
 		up.icon = null
 	row.add_child(up)
+	if id == "medrese" and level > 0:
+		var tb := Button.new()
+		tb.text = "Teknoloji Ağacı"
+		if not game.researching.is_empty():
+			tb.text = "%s araştırılıyor" % D.TECH[game.researching.id].name
+		tb.custom_minimum_size = Vector2(0, 60)
+		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tb.add_theme_color_override("font_color", Color("#9fd0f0"))
+		tb.pressed.connect(func(): action.emit("tech", ""))
+		row.add_child(tb)
 	var kind = game.troop_of(id)
 	if kind != null and level > 0:
 		var cap := game.troop_cap(kind)
@@ -657,6 +673,147 @@ func set_view_label(city: bool) -> void:
 	last_key = ""
 
 
+# ---------------------------------------------------------------- teknoloji ağacı
+
+func _build_tech() -> void:
+	tech = ColorRect.new()
+	tech.color = Color(0.06, 0.04, 0.03, 0.9)
+	tech.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tech.visible = false
+	root.add_child(tech)
+	var m := MarginContainer.new()
+	m.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right"]:
+		m.add_theme_constant_override("margin_" + side, 18)
+	m.add_theme_constant_override("margin_top", 60)
+	m.add_theme_constant_override("margin_bottom", 40)
+	tech.add_child(m)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	m.add_child(v)
+	var t := _label("MEDRESE", 40, C_GOLD, font_title)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var st := _label("Teknoloji Ağacı", 24, C_DIM, font_bold)
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(st)
+	tech_status = _label("", 21, Color("#9fd0f0"), font_bold)
+	tech_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tech_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(tech_status)
+	var bar_bg := ColorRect.new()
+	bar_bg.color = Color(0, 0, 0, 0.5)
+	bar_bg.custom_minimum_size = Vector2(0, 8)
+	v.add_child(bar_bg)
+	tech_bar = ColorRect.new()
+	tech_bar.color = Color("#9fd0f0")
+	tech_bar.size = Vector2(0, 8)
+	bar_bg.add_child(tech_bar)
+	tech_grid = HBoxContainer.new()
+	tech_grid.add_theme_constant_override("separation", 10)
+	tech_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(tech_grid)
+	var close := Button.new()
+	close.text = "Kapat"
+	close.custom_minimum_size = Vector2(260, 70)
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(func(): action.emit("tech", ""))
+	v.add_child(close)
+
+
+func _render_tech() -> void:
+	for c in tech_grid.get_children():
+		c.queue_free()
+	for br in D.TECH_BRANCH_ORDER:
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", 0)
+		tech_grid.add_child(col)
+		var h := _label(String(D.TECH_BRANCHES[br]).to_upper(), 24, C_GOLD, font_title)
+		h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(h)
+		for tier in [1, 2, 3]:
+			var id := D.tech_of(br, tier)
+			var td: Dictionary = D.TECH[id]
+			var block := game.tech_block(id)
+			# kademeler arasında bağlantı çizgisi
+			var link := ColorRect.new()
+			link.color = Color("#9fd0f0") if block == "done" or block == "running" else Color(C_EDGE, 0.9)
+			link.custom_minimum_size = Vector2(4, 22)
+			link.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			col.add_child(link)
+			var b := Button.new()
+			b.custom_minimum_size = Vector2(0, 250)
+			b.disabled = not game.can_research(id) and block != "done"
+			var hot := block == "done" or block == "running"
+			b.add_theme_stylebox_override("normal", _frame("card_hot" if hot else "card", 12, 8))
+			b.add_theme_stylebox_override("hover", _frame("card_hot", 12, 8))
+			b.add_theme_stylebox_override("pressed", _frame("card_hot", 12, 8))
+			b.add_theme_stylebox_override("disabled", _frame("card", 12, 8))
+			b.pressed.connect(func(): action.emit("research", id))
+			col.add_child(b)
+			var v := VBoxContainer.new()
+			v.set_anchors_preset(Control.PRESET_FULL_RECT)
+			v.offset_left = 10
+			v.offset_right = -10
+			v.offset_top = 10
+			v.offset_bottom = -10
+			v.add_theme_constant_override("separation", 4)
+			v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(v)
+			var tl := _label("%d. kademe" % tier, 16, C_DIM, font_bold)
+			var nm := _label(td.name, 22, C_TEXT if block != "medrese" else C_DIM, font_bold)
+			nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			var tx := _label(td.text, 18, C_DIM)
+			tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			tx.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			var state := ""
+			var sc := C_COIN
+			match block:
+				"done":
+					state = "Tamamlandı"
+					sc = Color("#9fd0f0")
+				"running":
+					state = "Araştırılıyor"
+					sc = Color("#9fd0f0")
+				"medrese":
+					state = "Medrese %d. seviye" % tier
+					sc = C_DIM
+				"prev":
+					state = "Önce %s" % D.TECH[D.tech_of(br, tier - 1)].name
+					sc = C_DIM
+				_:
+					state = "%d akçe · %d sn" % [td.cost, roundi(td.time)]
+					sc = C_COIN if game.gold >= td.cost else C_DANGER
+			var sl := _label(state, 17, sc, font_bold)
+			sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			for l in [tl, nm, tx, sl]:
+				l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				v.add_child(l)
+
+
+func _refresh_tech() -> void:
+	if not tech.visible:
+		return
+	var r: Dictionary = game.researching
+	var key := "|".join([game.gold, str(game.research.keys()), r.get("id", ""), game.buildings.medrese, game.phase])
+	if key != tech_key:
+		tech_key = key
+		_render_tech()
+	if r.is_empty():
+		tech_status.text = "Bir araştırma seç. Aynı anda tek araştırma yapılır; kademeler Medrese seviyesiyle açılır."
+		tech_bar.size.x = 0
+	else:
+		var td: Dictionary = D.TECH[r.id]
+		tech_status.text = "%s araştırılıyor · %d sn kaldı" % [td.name, ceili(r.time)]
+		tech_bar.size.x = tech_bar.get_parent().size.x * (1.0 - r.time / td.time)
+
+
+func toggle_tech() -> void:
+	tech.visible = not tech.visible
+	tech_key = ""
+
+
 # ---------------------------------------------------------------- duyuru ve bitiş ekranı
 
 func _build_banner() -> void:
@@ -748,7 +905,7 @@ func refresh(sound_on: bool, light_name: String) -> void:
 			var tr := game.training_of(kind)
 			tkey = "%d,%d" % [game.troop_count(kind), tr.queue]
 	var key := "|".join([mode, game.phase, game.raid, game.wave, game.gold, str(game.res.values()), sel.c if sel else -1, sel.r if sel else -1,
-		tower.level if tower else 0, str(game.buildings.values()), tkey])
+		tower.level if tower else 0, str(game.buildings.values()), tkey, game.researching.get("id", ""), game.research.size()])
 	if key != last_key:
 		last_key = key
 		_clear_context()
@@ -805,6 +962,7 @@ func refresh(sound_on: bool, light_name: String) -> void:
 		else:
 			btn_primary.text = "%d. Dalgayı Başlat" % mini(game.wave + 1, game.total_waves)
 
+	_refresh_tech()
 	var ended := game.phase == "won" or game.phase == "lost"
 	if ended and not overlay.visible:
 		if game.phase == "won":

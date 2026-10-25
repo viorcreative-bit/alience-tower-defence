@@ -270,8 +270,32 @@ const BUILDINGS := {
 	"kitchen": {"slot": [6, 14], "costs": [70, 140, 220], "color": "#d9893b"},
 	"market": {"slot": [3, 13], "costs": [60, 130, 220], "color": "#e0a030"},
 	"workshop": {"slot": [8, 13], "costs": [80, 160, 240], "color": "#8a6a48"},
+	# Medrese: araştırma yapılır; seviyesi açılabilecek araştırma kademesidir (TECH)
+	"medrese": {"slot": [3, 15], "costs": [150, 250, 380], "requires": {"school": 1}, "color": "#4f8fc0"},
 }
-const BUILDING_ORDER := ["palace", "school", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen", "workshop", "market"]
+const BUILDING_ORDER := ["palace", "school", "medrese", "barracks", "archery", "hospital", "cavalry", "science", "religion", "court", "mosque", "kitchen", "workshop", "market"]
+
+# Teknoloji ağacı: Medrese'de araştırılır, bir seferde bir araştırma. Her dalın üç kademesi vardır; kademe
+# Medrese seviyesi kadar açılır ve dalın bir önceki araştırmasını ister. Araştırmalar o savaş boyunca sürer.
+const TECH := {
+	"powder1": {"branch": "powder", "tier": 1, "cost": 110, "time": 10.0, "name": "Kara Barut", "text": "Top ve tüfek hasarı +%15"},
+	"powder2": {"branch": "powder", "tier": 2, "cost": 210, "time": 15.0, "name": "Dökme Top", "text": "Top güllesinin alanı +%30"},
+	"powder3": {"branch": "powder", "tier": 3, "cost": 340, "time": 20.0, "name": "Şahi Topu", "text": "Top ve tüfek menzili +0,4 kare"},
+	"arch1": {"branch": "arch", "tier": 1, "cost": 100, "time": 10.0, "name": "Kesme Taş", "text": "Sur +5 (en yüksek sur da artar)"},
+	"arch2": {"branch": "arch", "tier": 2, "cost": 200, "time": 15.0, "name": "Kemer ve Kubbe", "text": "Binalar ve kule yükseltmeleri %15 ucuz"},
+	"arch3": {"branch": "arch", "tier": 3, "cost": 320, "time": 20.0, "name": "Selimiye Usulü", "text": "Bütün kuleler +%10 hasar · dalga sonu Sur +2"},
+	"trade1": {"branch": "trade", "tier": 1, "cost": 90, "time": 10.0, "name": "Kervansaray", "text": "Çarşı geliri +%50"},
+	"trade2": {"branch": "trade", "tier": 2, "cost": 190, "time": 15.0, "name": "Lonca", "text": "Düşman ödülleri +%15"},
+	"trade3": {"branch": "trade", "tier": 3, "cost": 300, "time": 20.0, "name": "İpek ve Baharat Yolu", "text": "Dalga ödülü +%50 · dalga sonu +20 odun, +15 demir"},
+}
+const TECH_BRANCHES := {"powder": "Barut", "arch": "Mimari", "trade": "Ticaret"}
+const TECH_BRANCH_ORDER := ["powder", "arch", "trade"]
+const TECH_FX := {"powder_damage": 0.15, "powder_splash": 0.3, "powder_range": 0.4, "wall": 5, "discount": 0.15,
+	"arch_damage": 0.1, "arch_repair": 2, "market": 0.5, "reward": 0.15, "wave_bonus": 0.5, "wood": 20, "iron": 15}
+
+
+static func tech_of(branch: String, tier: int) -> String:
+	return "%s%d" % [branch, tier]
 # Saray yükseltmesi akçeye ek olarak odun ve demir ister (indeks = kurulacak seviye)
 const PALACE_RES := [{}, {}, {"wood": 60, "iron": 30}, {"wood": 120, "iron": 60}]
 # Binalar Saray'ın bir üst seviyesine kadar çıkar: Saray 1 iken en fazla 2, Saray 2 iken 3
@@ -445,6 +469,7 @@ const BUILDING_NAMES := {
 	"mosque": ["Cami", "Sofiler ve vakıf"], "kitchen": ["Yemekhane", "Ordunun aşı"],
 	"workshop": ["Odun-Demir Ocağı", "Oduncular ve madenciler"],
 	"market": ["Çarşı", "Esnaf ve tüccar"],
+	"medrese": ["Medrese", "İlim ve araştırma"],
 }
 const TROOP_NAMES := {"janissary": "Yeniçeri", "archer": "Okçu", "sipahi": "Sipahi", "sufi": "Sofi"}
 const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!"}
@@ -493,6 +518,8 @@ static func building_effect(id: String, l: int) -> String:
 			return "%d işçi: oduncular ağaçtan +%d odun, madenciler madenden +%d demir taşır" % [CITY.workers_per_level * l, CITY.wood_load, CITY.iron_load]
 		"kitchen":
 			return "Dalga sonu +%d yemek" % (CITY.kitchen_food * l)
+		"medrese":
+			return "Barut, mimari ve ticaret araştırmaları · %d. kademeye kadar" % l
 	return ""
 
 

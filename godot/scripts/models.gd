@@ -638,7 +638,8 @@ func building(id: String, level: int) -> Node3D:
 	g.scale = Vector3.ONE * s
 	root.add_child(g)
 	# Blender modeli: gövde + "L2", "L3" parçaları; Cami'de minareler "M1".."M4"
-	var m := ott_model("b_" + id)
+	# kendi modeli henüz yoksa (Medrese) Mektep'in gövdesi
+	var m := ott_model("b_" + id if ott.has("b_" + id) else "b_school")
 	g.add_child(m)
 	for c in m.find_children("*", "Node3D", true, false):
 		var n := String(c.name)

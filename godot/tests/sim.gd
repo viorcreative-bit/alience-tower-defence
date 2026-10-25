@@ -49,7 +49,38 @@ func _init() -> void:
 	_stages()
 	_heroes()
 	_weather()
+	_tech()
 	quit()
+
+
+# Medrese: kademe sırası, tek araştırma, etkiler
+func _tech() -> void:
+	var D := GameData
+	var g := Game.new()
+	g.gold = 99999
+	assert(not g.can_research("powder1"), "Medrese'siz araştırma")
+	assert(not g.upgrade_building("medrese"), "Mektep'siz Medrese")
+	g.upgrade_building("school")
+	assert(g.upgrade_building("medrese"))
+	assert(not g.can_research("powder2"), "1. kademesiz 2. kademe")
+	var t := {"type": "cannon", "level": 1}
+	var before := g.tower_stats(t)
+	assert(g.start_research("powder1"))
+	assert(not g.can_research("arch1"), "aynı anda iki araştırma")
+	for i in 400:
+		g.step(0.03)
+	assert(g.has_tech("powder1") and g.tower_stats(t).damage > before.damage, "Kara Barut")
+	assert(g.tech_block("powder2") == "medrese", "2. kademe Medrese 2 ister")
+	var w := g.max_wall
+	g.research["arch1"] = true
+	g.researching = {"id": "arch1", "time": 0.0}
+	g.research.erase("arch1")
+	g.step(0.03)
+	assert(g.max_wall == w + D.TECH_FX.wall, "Kesme Taş")
+	var c := g.building_cost("barracks")
+	g.research["arch2"] = true
+	assert(g.building_cost("barracks") < c, "Kemer ve Kubbe")
+	print("medrese tamam")
 
 
 # Hava: yağmur menzili kısar ve tüfeği yavaşlatır, kar düşmanı yavaşlatır; mevsimler dalgayla döner
