@@ -57,6 +57,65 @@ func mat(color: Color, rough := 0.8, metal := 0.0) -> StandardMaterial3D:
 	return mats[key]
 
 
+# Yontma taş (shaders/stone.gdshader); renge göre önbellekte tutulur
+func stone_mat(color := Color("#cdbb98"), brick := Vector2(0.16, 0.075)) -> ShaderMaterial:
+	var key := "stone|%s|%s" % [color.to_html(), brick]
+	if not mats.has(key):
+		var m := ShaderMaterial.new()
+		m.shader = preload("res://shaders/stone.gdshader")
+		m.set_shader_parameter("base", color)
+		m.set_shader_parameter("mortar", color.darkened(0.38))
+		m.set_shader_parameter("brick", brick)
+		mats[key] = m
+	return mats[key]
+
+
+# Yuvarlak taş burç: gövde, mazgallı taç, isteğe bağlı kurşun kubbe ve sancak
+func round_tower(parent: Node3D, pos: Vector3, r: float, h: float, domed := true, flag_tex: Texture2D = null) -> float:
+	var st := stone_mat()
+	cyl(parent, r, r * 1.08, h, pos + Vector3(0, h / 2.0, 0), st, 18)
+	# taç: biraz taşan halka ve mazgallar
+	cyl(parent, r * 1.14, r * 1.06, 0.07, pos + Vector3(0, h + 0.035, 0), st, 18)
+	var n := maxi(8, int(r * 26.0))
+	for i in n:
+		var a := i * TAU / n
+		if i % 2 == 0:
+			var mb := box(parent, Vector3(r * 0.32, 0.09, 0.06), pos + Vector3(cos(a) * r * 1.08, h + 0.115, sin(a) * r * 1.08), st)
+			mb.rotation.y = -a + PI / 2
+	# mazgal pencereleri
+	for a in [0.4, 2.5, 4.6]:
+		var w := box(parent, Vector3(0.05, 0.12, 0.02), pos + Vector3(cos(a) * r * 1.03, h * 0.6, sin(a) * r * 1.03), mat(Color("#2a1e16")))
+		w.rotation.y = -a + PI / 2
+	var top := h + 0.07
+	if domed:
+		cyl(parent, r * 0.8, r * 0.8, 0.1, pos + Vector3(0, top + 0.05, 0), st, 16)
+		var d := sphere(parent, r * 0.82, pos + Vector3(0, top + 0.1, 0), mat(Color("#8a9bb2"), 0.4, 0.3), true, 18)
+		d.scale.y = 1.15
+		sphere(parent, 0.035, pos + Vector3(0, top + 0.1 + r * 0.95, 0), mat(GOLD, 0.3, 0.8), false, 8)
+		top += 0.1 + r * 0.95
+	if flag_tex:
+		pole_flag(parent, pos + Vector3(0, top, 0), 0.5, flag_tex, 0.4)
+	return top
+
+
+# Duvara asılı kırmızı sancak (hilalli, kırlangıç kuyruklu)
+func hang_banner(parent: Node3D, pos: Vector3, h: float, rot_y := 0.0) -> MeshInstance3D:
+	var key := "banner_mat"
+	if not mats.has(key):
+		var m := StandardMaterial3D.new()
+		m.albedo_texture = preload("res://assets/ui/banner.png")
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		m.alpha_scissor_threshold = 0.4
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.roughness = 0.85
+		mats[key] = m
+	var q := QuadMesh.new()
+	q.size = Vector2(h * 0.46, h)
+	var mi := _mi(parent, q, pos, mats[key])
+	mi.rotation.y = rot_y
+	return mi
+
+
 func glow_mat(color: Color) -> StandardMaterial3D:
 	var key := "glow|" + color.to_html()
 	if not mats.has(key):
@@ -527,11 +586,21 @@ func tower(type: String, level: int) -> Dictionary:
 	root.add_child(body)
 	match type:
 		"archer":
-			add_prop(body, "building_tower_A", Vector3.ZERO, 0.42, PI * 0.25)
+			# yuvarlak taş kule, mazgallı taç, tepede okçu
+			var top := round_tower(body, Vector3.ZERO, 0.27, 0.66, false)
+			var head := Node3D.new()
+			head.position = Vector3(0, top, 0)
+			body.add_child(head)
+			var ch := character("rogue_hooded", ["Rogue_Cape"], {"Body": Color("#b3202a"), "Cape": Color("#7a1a20"), "Head_Hooded": Color("#e8e0cc")}, 0.22)
+			add_bow(ch)
+			head.add_child(ch.root)
+			info.head = head
+			info.char = ch
+			cyl(body, 0.3, 0.33, 0.06, Vector3(0, 0.03, 0), stone_mat(Color("#a89878")), 18)
 			if level >= 2:
-				add_prop(body, "bucket_arrows", Vector3(0.28, 0, 0.22), 1.2)
+				add_prop(body, "bucket_arrows", Vector3(0.3, 0, 0.22), 1.1)
 		"tar":
-			cyl(body, 0.32, 0.36, 0.22, Vector3(0, 0.11, 0), mat(STONE), 10)
+			cyl(body, 0.32, 0.36, 0.22, Vector3(0, 0.11, 0), stone_mat(), 16)
 			cyl(body, 0.26, 0.2, 0.22, Vector3(0, 0.33, 0), mat(Color("#b8743a"), 0.35, 0.7), 14)
 			cyl(body, 0.25, 0.25, 0.02, Vector3(0, 0.44, 0), mat(Color("#141016"), 0.2), 14)
 			for a in [0.0, 2.1, 4.2]:
@@ -539,7 +608,7 @@ func tower(type: String, level: int) -> Dictionary:
 			info.smoke = Vector3(0, 0.5, 0)
 			info.fire = Vector3(0, 0.18, 0.2)
 		"cannon":
-			box(body, Vector3(0.62, 0.12, 0.62), Vector3(0, 0.06, 0), mat(STONE))
+			box(body, Vector3(0.62, 0.12, 0.62), Vector3(0, 0.06, 0), stone_mat())
 			var head := Node3D.new()
 			head.position = Vector3(0, 0.12, 0)
 			body.add_child(head)
@@ -557,8 +626,8 @@ func tower(type: String, level: int) -> Dictionary:
 			info.barrel = barrel
 			info.muzzle = Vector3(0, 0.38, 0.45)
 		"musket":
-			cyl(body, 0.36, 0.42, 0.26, Vector3(0, 0.13, 0), mat(Color("#9c7a52")), 14)
-			cyl(body, 0.37, 0.37, 0.05, Vector3(0, 0.27, 0), mat(STONE), 14)
+			cyl(body, 0.36, 0.42, 0.26, Vector3(0, 0.13, 0), stone_mat(Color("#bfa982")), 16)
+			cyl(body, 0.37, 0.37, 0.05, Vector3(0, 0.27, 0), stone_mat(), 16)
 			for i in 8:
 				var a := i * TAU / 8.0
 				sphere(body, 0.07, Vector3(cos(a) * 0.33, 0.31, sin(a) * 0.33), mat(Color("#c9b38a")), false, 8)
@@ -576,10 +645,10 @@ func tower(type: String, level: int) -> Dictionary:
 	for i in level:
 		sphere(root, 0.03, Vector3(-0.12 + i * 0.12, 0.03, 0.42), mat(GOLD, 0.3, 0.8), false, 8)
 	if level >= 3:
-		var top := 1.12 if type == "archer" else 0.6
-		pole_flag(root, Vector3(0.22 if type != "archer" else 0, top, 0.0), 0.35, ottoman_flag(), 0.22)
+		var top := 0.73 if type == "archer" else 0.6
+		pole_flag(root, Vector3(0.2, top, -0.1), 0.45, ottoman_flag(), 0.26)
 	elif type == "archer":
-		pole_flag(root, Vector3(0, 0.88, 0), 0.3, ottoman_flag(), 0.18)
+		pole_flag(root, Vector3(0.2, 0.73, -0.1), 0.38, ottoman_flag(), 0.22)
 	return info
 
 

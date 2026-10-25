@@ -24,9 +24,9 @@ const LIGHTS := [
 	{"sun_rot": Vector3(-58, -150, 0), "sun_col": Color(1.0, 0.95, 0.86), "sun_e": 2.4,
 		"top": Color(0.32, 0.55, 0.88), "hor": Color(0.74, 0.84, 0.92), "gnd": Color(0.45, 0.5, 0.42),
 		"amb": 0.75, "amb_col": Color(0.78, 0.8, 0.85), "fog": Color(0.74, 0.82, 0.88), "torch": 0.0, "exp": 1.1, "name": "Öğle"},
-	{"sun_rot": Vector3(-30, -125, 0), "sun_col": Color(1.0, 0.76, 0.5), "sun_e": 2.5,
-		"top": Color(0.28, 0.42, 0.72), "hor": Color(1.0, 0.72, 0.48), "gnd": Color(0.38, 0.32, 0.26),
-		"amb": 0.62, "amb_col": Color(0.78, 0.66, 0.62), "fog": Color(0.95, 0.74, 0.55), "torch": 0.6, "exp": 1.1, "name": "İkindi"},
+	{"sun_rot": Vector3(-28, -118, 0), "sun_col": Color(1.0, 0.7, 0.42), "sun_e": 2.9,
+		"top": Color(0.3, 0.38, 0.62), "hor": Color(1.0, 0.68, 0.42), "gnd": Color(0.38, 0.3, 0.22),
+		"amb": 0.6, "amb_col": Color(0.86, 0.68, 0.56), "fog": Color(0.95, 0.72, 0.5), "torch": 0.7, "exp": 1.12, "name": "İkindi"},
 	{"sun_rot": Vector3(-50, -200, 0), "sun_col": Color(0.55, 0.65, 1.0), "sun_e": 0.45,
 		"top": Color(0.02, 0.04, 0.12), "hor": Color(0.1, 0.14, 0.28), "gnd": Color(0.04, 0.05, 0.08),
 		"amb": 0.42, "amb_col": Color(0.24, 0.3, 0.58), "fog": Color(0.08, 0.1, 0.2), "torch": 1.6, "exp": 1.3, "name": "Gece"},
@@ -288,50 +288,80 @@ func _build_grass() -> void:
 func _build_walls() -> void:
 	var z := to_world(0, game.wall_row + 0.5).z
 	var half := game.cols / 2.0
-	var ws := 0.75
-	var step := 2.0 * ws
-	models.add_prop(self, "wall_straight_gate", Vector3(0, 0, z), ws)
-	var x := step
-	while x < half + step:
-		for s in [-1, 1]:
-			models.add_prop(self, "wall_straight", Vector3(s * x, 0, z), ws)
-		x += step
 	var zb := game.rows / 2.0 + 0.15
-	x = -half + ws
-	while x < half:
-		models.add_prop(self, "wall_straight", Vector3(x, 0, zb), ws)
-		x += step
-	for s in [-1, 1]:
-		var zz := z + ws
-		while zz < zb:
-			models.add_prop(self, "wall_straight", Vector3(s * (half + 0.1), 0, zz), ws, PI / 2)
-			zz += step
-		models.add_prop(self, "building_tower_base", Vector3(s * (half + 0.1), 0, zb), 0.62, PI)
 	var flag := models.ottoman_flag()
-	for t in [[-0.95, 0.72], [0.95, 0.72], [-half + 0.15, 0.62], [half - 0.15, 0.62]]:
-		var tx: float = t[0]
-		var sc: float = t[1]
-		models.add_prop(self, "building_tower_base", Vector3(tx, 0, z), sc, PI)
-		var top := 1.5 * sc
-		models.cyl(self, 0.0, 0.47 * sc, 0.52, Vector3(tx, top + 0.26, z), models.mat(Models.LEAD, 0.55), 16)
-		models.sphere(self, 0.045, Vector3(tx, top + 0.54, z), models.mat(Models.GOLD, 0.35, 0.8), false, 10)
-		models.pole_flag(self, Vector3(tx, top + 0.5, z), 0.55, flag, 0.44)
-	# kapının üstünde altın hilal
+	var st := models.stone_mat()
+	var h := 0.62
+	var t := 0.34
+	# ön sur kapının iki yanında, arka ve yan surlar
+	for s in [-1, 1]:
+		_wall_run(Vector3(s * 0.62, 0, z), Vector3(s * (half - 0.1), 0, z), h, t, st)
+		_wall_run(Vector3(s * (half + 0.1), 0, z + 0.1), Vector3(s * (half + 0.1), 0, zb - 0.1), h * 0.9, t, st)
+	_wall_run(Vector3(-half, 0, zb), Vector3(half, 0, zb), h * 0.9, t, st)
+	# kapı: iki ayak, üstte kemerli taç ve altın hilal; açık ahşap kanatlar
+	for s in [-1, 1]:
+		models.box(self, Vector3(0.3, 0.95, 0.5), Vector3(s * 0.45, 0.475, z), st)
+		var door := models.box(self, Vector3(0.3, 0.6, 0.04), Vector3(s * 0.42, 0.3, z - 0.32), models.mat(Color("#6a4224")))
+		door.rotation.y = s * 1.1
+	models.box(self, Vector3(1.2, 0.32, 0.5), Vector3(0, 0.95, z), st)
+	models.box(self, Vector3(0.64, 0.05, 0.52), Vector3(0, 0.66, z), models.mat(Color("#8a6a3a")))
+	# kemer: koyu iç, altın kenar
+	var arch := models.cyl(self, 0.3, 0.3, 0.52, Vector3(0, 0.66, z), models.mat(Color("#2a1e16")), 16)
+	arch.rotation.x = PI / 2
+	arch.scale = Vector3(1.0, 1.0, 0.55)
+	for k in 7:
+		var x := -1.0 + k * (2.0 / 6.0)
+		models.box(self, Vector3(0.12, 0.1, 0.08), Vector3(x * 0.52, 1.16, z - 0.21), st)
+	models.box(self, Vector3(1.24, 0.03, 0.06), Vector3(0, 0.84, z - 0.27), models.mat(Models.GOLD, 0.35, 0.7))
 	var cr := TorusMesh.new()
 	cr.inner_radius = 0.06
 	cr.outer_radius = 0.085
 	var m := MeshInstance3D.new()
 	m.mesh = cr
 	m.material_override = models.mat(Models.GOLD, 0.3, 0.8)
-	m.position = Vector3(0, 0.98, z + 0.34)
+	m.position = Vector3(0, 1.02, z - 0.27)
 	m.rotation = Vector3(PI / 2, 0, 0.8)
 	add_child(m)
+	# kapı burçları ve köşe burçları: kubbeli, sancaklı
 	for s in [-1, 1]:
-		var pos := Vector3(s * 0.42, 0, z + 0.5)
+		models.round_tower(self, Vector3(s * 0.95, 0, z), 0.3, 1.05, true, flag)
+		models.round_tower(self, Vector3(s * (half + 0.05), 0, z), 0.34, 0.95, true, flag)
+		models.round_tower(self, Vector3(s * (half + 0.05), 0, zb), 0.3, 0.85, true, null)
+		models.round_tower(self, Vector3(s * 2.2, 0, z), 0.24, 0.82, false, null)
+		# asılı sancaklar: kapı ayaklarında ve burçlarda
+		for f in [-1, 1]:
+			models.hang_banner(self, Vector3(s * 0.45, 0.62, z + f * 0.26), 0.5)
+			models.hang_banner(self, Vector3(s * 0.95, 0.68, z + f * 0.335), 0.46)
+			models.hang_banner(self, Vector3(s * (half + 0.05), 0.6, z + f * 0.375), 0.42)
+			models.hang_banner(self, Vector3(s * 3.2, 0.42, z + f * 0.18), 0.34)
+	for s in [-1, 1]:
+		var pos := Vector3(s * 0.42, 0, z - 0.5)
 		models.cyl(self, 0.015, 0.02, 0.7, pos + Vector3(0, 0.35, 0), models.mat(Models.WOOD_DARK), 6)
 		fire(self, pos + Vector3(0, 0.74, 0), 1.0)
-	fire(self, Vector3(-0.95, 1.5 * 0.72 + 0.05, z + 0.32), 0.8)
-	fire(self, Vector3(0.95, 1.5 * 0.72 + 0.05, z + 0.32), 0.8)
+	fire(self, Vector3(-0.95, 1.12, z - 0.3), 0.8)
+	fire(self, Vector3(0.95, 1.12, z - 0.3), 0.8)
+
+
+# a'dan b'ye düz sur: gövde, iki yanda mazgallar, üstte yürüme yolu
+func _wall_run(a: Vector3, b: Vector3, h: float, t: float, st: Material) -> void:
+	var d := b - a
+	var len := d.length()
+	var mid := (a + b) / 2.0
+	var along_x := absf(d.x) > absf(d.z)
+	var size := Vector3(len, h, t) if along_x else Vector3(t, h, len)
+	models.box(self, size, mid + Vector3(0, h / 2.0, 0), st)
+	# kaide
+	var base := Vector3(len, 0.08, t + 0.08) if along_x else Vector3(t + 0.08, 0.08, len)
+	models.box(self, base, mid + Vector3(0, 0.04, 0), models.stone_mat(Color("#a89878")))
+	var n := int(len / 0.2)
+	for i in n:
+		if i % 2 == 1:
+			continue
+		var k := (i + 0.5) / n - 0.5
+		for side in [-1, 1]:
+			var off := Vector3(k * len, h + 0.05, side * (t / 2.0 - 0.04)) if along_x else Vector3(side * (t / 2.0 - 0.04), h + 0.05, k * len)
+			var mb := Vector3(0.1, 0.1, 0.07) if along_x else Vector3(0.07, 0.1, 0.1)
+			models.box(self, mb, mid + off, st)
 
 
 # Şehrin boş kareleri: şadırvan, çarşı, bahçeler, servi ağaçları ve cumbalı Osmanlı evleri.
@@ -602,6 +632,33 @@ func _build_decor() -> void:
 				continue
 			var p := to_world(c + rng.randf_range(0.15, 0.85), r + rng.randf_range(0.15, 0.85))
 			models.add_prop(self, ["rock_single_A", "rock_single_B", "rock_single_D"][rng.randi() % 3], p, rng.randf_range(0.35, 0.55), rng.randf() * TAU)
+	# kare köşelerinde çalılar ve çiçekler (kule kurulan kare ortalarına değmez)
+	var leaf := [models.mat(Color("#3f6a2a")), models.mat(Color("#4f7d30")), models.mat(Color("#5f8a34"))]
+	var petals := [models.mat(Color("#c8323a")), models.mat(Color("#f2c94c")), models.mat(Color("#f4efe4"))]
+	for r in range(1, game.wall_row):
+		for c in range(1, game.cols):
+			var near_path := false
+			for k in [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(-1, 0), Vector2i(0, 0)]:
+				if game.is_path_tile(c + k.x, r + k.y):
+					near_path = true
+			if rng.randf() > (0.25 if near_path else 0.5):
+				continue
+			var p := to_world(c + rng.randf_range(-0.06, 0.06), r + rng.randf_range(-0.06, 0.06))
+			var kind := rng.randf()
+			if kind < 0.6:
+				for b in rng.randi_range(2, 3):
+					var off := Vector3(rng.randf_range(-0.09, 0.09), 0, rng.randf_range(-0.09, 0.09))
+					var rr := rng.randf_range(0.06, 0.11)
+					var sp := models.sphere(self, rr, p + off + Vector3(0, rr * 0.7, 0), leaf[rng.randi() % 3], false, 8)
+					sp.scale.y = 0.8
+			elif kind < 0.85:
+				var pm: Material = petals[rng.randi() % 3]
+				for f in 6:
+					var off := Vector3(rng.randf_range(-0.12, 0.12), 0.03, rng.randf_range(-0.12, 0.12))
+					models.sphere(self, 0.022, p + off, pm if f % 3 else leaf[1], false, 6)
+			else:
+				models.add_prop(self, ["rock_single_B", "rock_single_C"][rng.randi() % 2], p, rng.randf_range(0.35, 0.5), rng.randf() * TAU)
+	_build_river()
 	var pw := _path_world()
 	var total := 0.0
 	for i in range(1, pw.size()):
@@ -618,3 +675,61 @@ func _build_decor() -> void:
 			acc += l
 		var off := Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized() * rng.randf_range(0.36, 0.48)
 		models.add_prop(self, "rock_single_A", p + off, rng.randf_range(0.25, 0.45), rng.randf() * TAU)
+
+
+# Sağ üstte, ordugâhın yanından akan dere: kayalar, köpüklü çağlayan ve ahşap köprü
+func _build_river() -> void:
+	var half := game.cols / 2.0
+	var top := -game.rows / 2.0
+	var water := StandardMaterial3D.new()
+	water.albedo_color = Color(0.22, 0.48, 0.62)
+	water.roughness = 0.08
+	water.metallic = 0.25
+	var pts := [Vector3(half + 1.6, 0, top - 3.0), Vector3(half - 0.2, 0, top - 2.2), Vector3(half - 1.2, 0, top - 1.2),
+		Vector3(half + 0.4, 0, top - 0.4), Vector3(half + 1.8, 0, top + 0.2)]
+	for k in range(1, pts.size()):
+		var a: Vector3 = pts[k - 1]
+		var b: Vector3 = pts[k]
+		var d := b - a
+		var seg := models.box(self, Vector3(0.62, 0.03, d.length() + 0.3), (a + b) / 2.0 + Vector3(0, 0.015, 0), water)
+		seg.rotation.y = atan2(d.x, d.z)
+		seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		for side in [-1, 1]:
+			for q in 3:
+				var t: float = (q + 0.5) / 3.0
+				var n: Vector3 = Vector3(d.z, 0, -d.x).normalized() * side * rng.randf_range(0.36, 0.46)
+				models.add_prop(self, ["rock_single_A", "rock_single_D", "rock_single_E"][rng.randi() % 3], a.lerp(b, t) + n, rng.randf_range(0.35, 0.6), rng.randf() * TAU)
+	# çağlayan köpüğü
+	var foam := CPUParticles3D.new()
+	var fq := SphereMesh.new()
+	fq.radius = 0.03
+	fq.height = 0.06
+	var fm := StandardMaterial3D.new()
+	fm.albedo_color = Color(0.92, 0.96, 1.0, 0.8)
+	fm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fq.material = fm
+	foam.mesh = fq
+	foam.amount = 30
+	foam.lifetime = 0.8
+	foam.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	foam.emission_box_extents = Vector3(0.25, 0.02, 0.1)
+	foam.direction = Vector3(0, 1, 0)
+	foam.spread = 40
+	foam.initial_velocity_min = 0.2
+	foam.initial_velocity_max = 0.5
+	foam.gravity = Vector3(0, -1.2, 0)
+	foam.position = pts[1] + Vector3(0, 0.05, 0)
+	add_child(foam)
+	# ahşap köprü
+	var mid: Vector3 = (pts[2] + pts[3]) / 2.0
+	var dir: Vector3 = (pts[3] - pts[2]).normalized()
+	var br := Node3D.new()
+	br.position = mid + Vector3(0, 0.06, 0)
+	br.rotation.y = atan2(dir.x, dir.z) + PI / 2
+	add_child(br)
+	for k in 7:
+		models.box(br, Vector3(0.1, 0.03, 0.34), Vector3(-0.42 + k * 0.14, 0.02, 0), models.mat(Models.WOOD))
+	for side in [-1, 1]:
+		models.box(br, Vector3(0.98, 0.03, 0.03), Vector3(0, 0.14, side * 0.17), models.mat(Models.WOOD_DARK))
+		for k in 3:
+			models.box(br, Vector3(0.03, 0.14, 0.03), Vector3(-0.42 + k * 0.42, 0.07, side * 0.17), models.mat(Models.WOOD_DARK))

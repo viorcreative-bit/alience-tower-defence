@@ -21,6 +21,7 @@ var city_pan := 0.0
 var drag_from := Vector2.ZERO
 var dragged := false
 var cam_tween: Tween
+var tilt: ShaderMaterial
 var shake := 0.0
 
 var tower_nodes := {}  # id → {info, level}
@@ -56,6 +57,7 @@ func _ready() -> void:
 	audio = GameAudio.new()
 	add_child(audio)
 	audio.set_enabled(save.get_value("settings", "sound", true))
+	_build_tilt()
 	ui = GameUI.new(game)
 	ui.best_wave = save.get_value("game", "best_wave", 0)
 	add_child(ui)
@@ -98,6 +100,7 @@ func _fit_camera() -> void:
 	cam_board = _fit(board, 54.0, Vector3(0, 0, 0.3))
 	camera.transform = _city_cam() if city_view else cam_board
 	cam_base = camera.transform
+	_update_tilt()
 
 
 func set_city_view(on: bool) -> void:
@@ -108,10 +111,38 @@ func set_city_view(on: bool) -> void:
 	shake = 0.0
 	city_pan = 0.0
 	cam_base = _city_cam() if on else cam_board
+	_update_tilt()
 	if cam_tween:
 		cam_tween.kill()
 	cam_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	cam_tween.tween_property(camera, "transform", cam_base, 0.8)
+
+
+# Minyatür etkisi katmanı (arayüzün altında): üst ve alt kenarı bulanıklaştırır
+func _build_tilt() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 0
+	add_child(layer)
+	var r := ColorRect.new()
+	r.set_anchors_preset(Control.PRESET_FULL_RECT)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tilt = ShaderMaterial.new()
+	tilt.shader = preload("res://shaders/tiltshift.gdshader")
+	r.material = tilt
+	layer.add_child(r)
+
+
+func _update_tilt() -> void:
+	var hgt := get_viewport().get_visible_rect().size.y
+	var y0 := ui.top_bottom() / hgt
+	var y1 := ui.panel_top() / hgt
+	var band := y1 - y0
+	if city_view:
+		tilt.set_shader_parameter("focus_top", y0 + band * 0.3)
+		tilt.set_shader_parameter("focus_bottom", y0 + band * 0.78)
+	else:
+		tilt.set_shader_parameter("focus_top", y0 + band * 0.16)
+		tilt.set_shader_parameter("focus_bottom", y1 + 0.2)
 
 
 func _city_cam() -> Transform3D:
@@ -220,6 +251,9 @@ func _on_action(name: String, arg: String) -> void:
 			set_city_view(false)
 		"view":
 			set_city_view(not city_view)
+		"pick_building":
+			var s: Array = D.BUILDINGS[arg].slot
+			game.select_tile(s[0], s[1])
 		"speed":
 			var list: Array = D.RULES.speeds
 			game.speed = list[(list.find(game.speed) + 1) % list.size()]
