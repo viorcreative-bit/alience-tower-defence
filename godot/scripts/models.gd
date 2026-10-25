@@ -24,6 +24,8 @@ var clips: AnimationLibrary
 var mats := {}
 var tex_cache := {}
 var flag_shader: Shader
+# Blender'da kodla yapılmış Osmanlı modelleri (tools/blender): ad -> PackedScene
+var ott := {}
 
 
 func _init() -> void:
@@ -42,6 +44,60 @@ func _init() -> void:
 		clips.get_animation(a).loop_mode = Animation.LOOP_LINEAR
 	k.free()
 	flag_shader = load("res://shaders/flag.gdshader")
+	for f in DirAccess.get_files_at("res://assets/models/ottoman"):
+		var fn := f.trim_suffix(".remap").trim_suffix(".import")
+		if fn.ends_with(".glb") and not ott.has(fn.get_basename()):
+			var ps: PackedScene = load("res://assets/models/ottoman/" + fn)
+			_paint_mats(ps)
+			ott[fn.get_basename()] = ps
+
+
+# glTF içe aktarımı köşe rengini kullanmaz; renkler köşe renginde olduğu için paylaşılan malzemelerle değiştirilir
+func _paint_mats(ps: PackedScene) -> void:
+	var n := ps.instantiate()
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var mesh: Mesh = mi.mesh
+		for i in mesh.get_surface_count():
+			var old := mesh.surface_get_material(i)
+			var key := "paint|" + (old.resource_name if old else "Painted")
+			if not mats.has(key):
+				var m := StandardMaterial3D.new()
+				m.vertex_color_use_as_albedo = true
+				match key:
+					"paint|Metal":
+						# uyumluluk çiziminde yansıma ortamı zayıf; tam metal kararır
+						m.metallic = 0.25
+						m.roughness = 0.35
+						m.metallic_specular = 0.8
+					"paint|Glaze":
+						m.roughness = 0.4
+					_:
+						m.roughness = 0.92
+						m.metallic_specular = 0.3
+				mats[key] = m
+			mesh.surface_set_material(i, mats[key])
+	n.free()
+
+
+func ott_model(name: String) -> Node3D:
+	return ott[name].instantiate()
+
+
+# Modeldeki işaret noktası (Blender'daki boş nesne); yoksa sıfır
+func mark(model: Node3D, name: String) -> Vector3:
+	var n: Node3D = model.find_child(name, true, false)
+	if n == null:
+		return Vector3.ZERO
+	return model.to_local(n.global_position) if model.is_inside_tree() else _local_pos(model, n)
+
+
+func _local_pos(root: Node3D, n: Node3D) -> Vector3:
+	var t := Transform3D.IDENTITY
+	var c: Node = n
+	while c != null and c != root:
+		t = (c as Node3D).transform * t
+		c = c.get_parent()
+	return t.origin
 
 
 # ---------------------------------------------------------------- yardımcılar
@@ -70,31 +126,19 @@ func stone_mat(color := Color("#cdbb98"), brick := Vector2(0.16, 0.075)) -> Shad
 	return mats[key]
 
 
-# Yuvarlak taş burç: gövde, mazgallı taç, isteğe bağlı kurşun kubbe ve sancak
+# Yuvarlak taş burç (Blender modeli): kesme taş gövde, mazgallı taç, isteğe bağlı kaburgalı kurşun kubbe ve sancak.
+# Dönüş: tepe yüksekliği
 func round_tower(parent: Node3D, pos: Vector3, r: float, h: float, domed := true, flag_tex: Texture2D = null) -> float:
-	var st := stone_mat()
-	cyl(parent, r, r * 1.08, h, pos + Vector3(0, h / 2.0, 0), st, 18)
-	# taç: biraz taşan halka ve mazgallar
-	cyl(parent, r * 1.14, r * 1.06, 0.07, pos + Vector3(0, h + 0.035, 0), st, 18)
-	var n := maxi(8, int(r * 26.0))
-	for i in n:
-		var a := i * TAU / n
-		if i % 2 == 0:
-			var mb := box(parent, Vector3(r * 0.32, 0.09, 0.06), pos + Vector3(cos(a) * r * 1.08, h + 0.115, sin(a) * r * 1.08), st)
-			mb.rotation.y = -a + PI / 2
-	# mazgal pencereleri
-	for a in [0.4, 2.5, 4.6]:
-		var w := box(parent, Vector3(0.05, 0.12, 0.02), pos + Vector3(cos(a) * r * 1.03, h * 0.6, sin(a) * r * 1.03), mat(Color("#2a1e16")))
-		w.rotation.y = -a + PI / 2
-	var top := h + 0.07
-	if domed:
-		cyl(parent, r * 0.8, r * 0.8, 0.1, pos + Vector3(0, top + 0.05, 0), st, 16)
-		var d := sphere(parent, r * 0.82, pos + Vector3(0, top + 0.1, 0), mat(Color("#8a9bb2"), 0.4, 0.3), true, 18)
-		d.scale.y = 1.15
-		sphere(parent, 0.035, pos + Vector3(0, top + 0.1 + r * 0.95, 0), mat(GOLD, 0.3, 0.8), false, 8)
-		top += 0.1 + r * 0.95
+	var m := ott_model("burc_dome" if domed else "burc_open")
+	var r0 := 0.3 if domed else 0.25
+	var h0 := 1.0 if domed else 0.82
+	m.scale = Vector3(r / r0, h / h0, r / r0)
+	m.position = pos
+	m.rotation.y = randf() * TAU
+	parent.add_child(m)
+	var top := mark(m, "top").y * h / h0
 	if flag_tex:
-		pole_flag(parent, pos + Vector3(0, top, 0), 0.5, flag_tex, 0.4)
+		pole_flag(parent, pos + Vector3(0, top - (0.12 if domed else 0.0), 0), 0.5, flag_tex, 0.4)
 	return top
 
 
@@ -586,53 +630,37 @@ func tower(type: String, level: int) -> Dictionary:
 	root.add_child(body)
 	match type:
 		"archer":
-			# yuvarlak taş kule, mazgallı taç, tepede okçu
-			var top := round_tower(body, Vector3.ZERO, 0.27, 0.66, false)
+			# yuvarlak kesme taş kule (Blender modeli), taşan mazgallı taç, tepede okçu
+			var m := ott_model("archer_tower_%d" % level)
+			body.add_child(m)
 			var head := Node3D.new()
-			head.position = Vector3(0, top, 0)
+			head.position = mark(m, "top")
 			body.add_child(head)
 			var ch := character("rogue_hooded", ["Rogue_Cape"], {"Body": Color("#b3202a"), "Cape": Color("#7a1a20"), "Head_Hooded": Color("#e8e0cc")}, 0.22)
 			add_bow(ch)
 			head.add_child(ch.root)
 			info.head = head
 			info.char = ch
-			cyl(body, 0.3, 0.33, 0.06, Vector3(0, 0.03, 0), stone_mat(Color("#a89878")), 18)
+			info.flag = mark(m, "flag")
 			if level >= 2:
 				add_prop(body, "bucket_arrows", Vector3(0.3, 0, 0.22), 1.1)
 		"tar":
-			cyl(body, 0.32, 0.36, 0.22, Vector3(0, 0.11, 0), stone_mat(), 16)
-			cyl(body, 0.26, 0.2, 0.22, Vector3(0, 0.33, 0), mat(Color("#b8743a"), 0.35, 0.7), 14)
-			cyl(body, 0.25, 0.25, 0.02, Vector3(0, 0.44, 0), mat(Color("#141016"), 0.2), 14)
-			for a in [0.0, 2.1, 4.2]:
-				box(body, Vector3(0.05, 0.3, 0.05), Vector3(cos(a) * 0.3, 0.27, sin(a) * 0.3), mat(IRON, 0.4, 0.5))
-			info.smoke = Vector3(0, 0.5, 0)
-			info.fire = Vector3(0, 0.18, 0.2)
+			var m := ott_model("tar_tower")
+			body.add_child(m)
+			info.smoke = mark(m, "smoke")
+			info.fire = mark(m, "fire")
 		"cannon":
-			box(body, Vector3(0.62, 0.12, 0.62), Vector3(0, 0.06, 0), stone_mat())
-			var head := Node3D.new()
-			head.position = Vector3(0, 0.12, 0)
-			body.add_child(head)
-			box(head, Vector3(0.3, 0.14, 0.42), Vector3(0, 0.1, -0.04), mat(WOOD))
-			for x in [-0.17, 0.17]:
-				var w := cyl(head, 0.12, 0.12, 0.05, Vector3(x, 0.12, -0.02), mat(WOOD_DARK), 12)
-				w.rotation.z = PI / 2
-			var barrel := Node3D.new()
-			barrel.position = Vector3(0, 0.24, 0)
-			head.add_child(barrel)
-			var b := cyl(barrel, 0.06, 0.085, 0.6, Vector3(0, 0, 0.12), mat(BRONZE, 0.35, 0.8), 12)
-			b.rotation.x = PI / 2 - 0.12
-			sphere(barrel, 0.09, Vector3(0, -0.02, -0.18), mat(BRONZE, 0.35, 0.8), false, 10)
-			info.head = head
-			info.barrel = barrel
-			info.muzzle = Vector3(0, 0.38, 0.45)
+			# taş tabya; "head" (kundak) döner, "barrel" (tunç namlu) geri teper
+			var m := ott_model("cannon_tower")
+			body.add_child(m)
+			info.head = m.find_child("head", true, false)
+			info.barrel = m.find_child("barrel", true, false)
+			info.muzzle = Vector3(0, 0.17, 0.42)
 		"musket":
-			cyl(body, 0.36, 0.42, 0.26, Vector3(0, 0.13, 0), stone_mat(Color("#bfa982")), 16)
-			cyl(body, 0.37, 0.37, 0.05, Vector3(0, 0.27, 0), stone_mat(), 16)
-			for i in 8:
-				var a := i * TAU / 8.0
-				sphere(body, 0.07, Vector3(cos(a) * 0.33, 0.31, sin(a) * 0.33), mat(Color("#c9b38a")), false, 8)
+			var m := ott_model("musket_tower")
+			body.add_child(m)
 			var head := Node3D.new()
-			head.position = Vector3(0, 0.28, 0)
+			head.position = mark(m, "top")
 			body.add_child(head)
 			var ch := character("knight", [], {"Body": Color("#3e6fb5"), "Arm": Color("#c8423a"), "Leg": Color("#e8e0cc")}, 0.27)
 			add_bork(ch)
@@ -644,11 +672,10 @@ func tower(type: String, level: int) -> Dictionary:
 	# seviye düğmeleri ve 3. seviyede sancak
 	for i in level:
 		sphere(root, 0.03, Vector3(-0.12 + i * 0.12, 0.03, 0.42), mat(GOLD, 0.3, 0.8), false, 8)
-	if level >= 3:
-		var top := 0.73 if type == "archer" else 0.6
-		pole_flag(root, Vector3(0.2, top, -0.1), 0.45, ottoman_flag(), 0.26)
-	elif type == "archer":
-		pole_flag(root, Vector3(0.2, 0.73, -0.1), 0.38, ottoman_flag(), 0.22)
+	if type == "archer":
+		pole_flag(body, info.flag, 0.42 if level >= 3 else 0.38, ottoman_flag(), 0.26 if level >= 3 else 0.22)
+	elif level >= 3:
+		pole_flag(root, Vector3(0.2, 0.6, -0.1), 0.45, ottoman_flag(), 0.26)
 	return info
 
 
@@ -659,139 +686,27 @@ func building(id: String, level: int) -> Node3D:
 	if level <= 0:
 		_empty_plot(root)
 		return root
-	var s: float = [0.0, 0.88, 1.0, 1.12][level]
+	# Blender modelleri arsanın ~%65'ini kaplar; 1.3 ile arsayı doldurur
+	var s: float = [0.0, 0.88, 1.0, 1.12][level] * 1.3
 	var g := Node3D.new()
 	g.scale = Vector3.ONE * s
 	root.add_child(g)
-	match id:
-		"palace":
-			add_prop(g, "building_castle", Vector3(0, 0, -0.05), 0.42)
-			if level >= 2:
-				for x in [-0.42, 0.42]:
-					ottoman_block(g, Vector3(x, 0, 0.12), Vector3(0.3, 0.26, 0.3), 0.13)
-			if level >= 3:
-				minaret(g, Vector3(-0.42, 0, -0.32), 0.95)
-				minaret(g, Vector3(0.42, 0, -0.32), 0.95)
-				pole_flag(g, Vector3(0, 1.62, -0.05), 0.45, ottoman_flag(), 0.32)
-		"school":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.62, 0.3, 0.5), 0.17)
-			if level >= 2:
-				ottoman_block(g, Vector3(-0.08, 0, 0.36), Vector3(0.3, 0.2, 0.2), 0.0)
-			if level >= 3:
-				dome(g, Vector3(0.24, 0.36, -0.08), 0.1, 0.03)
-		"barracks":
-			add_prop(g, "building_barracks", Vector3.ZERO, 0.62, PI)
-			if level >= 2:
-				add_prop(g, "weaponrack", Vector3(-0.35, 0, 0.36), 1.4)
-			if level >= 3:
-				pole_flag(g, Vector3(0.38, 0.2, 0.36), 0.7, ottoman_flag(), 0.3)
-		"archery":
-			add_prop(g, "building_archeryrange", Vector3.ZERO, 0.55, PI / 2)
-			if level >= 2:
-				add_prop(g, "target", Vector3(0.3, 0, 0.38), 1.3, PI)
-			if level >= 3:
-				add_prop(g, "bucket_arrows", Vector3(-0.3, 0, 0.38), 1.4)
-		"hospital":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.7, 0.3, 0.55), 0.2)
-			if level >= 2:
-				ottoman_block(g, Vector3(0, 0, 0.36), Vector3(0.5, 0.18, 0.18), 0.0)
-			if level >= 3:
-				dome(g, Vector3(-0.25, 0.36, 0), 0.09, 0.02)
-				dome(g, Vector3(0.25, 0.36, 0), 0.09, 0.02)
-		"cavalry":
-			add_prop(g, "building_tavern", Vector3(0, 0, -0.1), 0.5, PI)
-			for x in [-0.38, -0.12, 0.14, 0.4]:
-				box(g, Vector3(0.04, 0.16, 0.04), Vector3(x, 0.08, 0.38), mat(WOOD_DARK))
-			box(g, Vector3(0.82, 0.03, 0.03), Vector3(0, 0.13, 0.38), mat(WOOD))
-			if level >= 2:
-				var hr := horse(Color("#e8e2d6"), OTTOMAN_RED, 0.18)
-				hr.root.position = Vector3(0.25, 0, 0.25)
-				hr.root.rotation.y = 1.2
-				g.add_child(hr.root)
-			if level >= 3:
-				pole_flag(g, Vector3(-0.38, 0.16, 0.38), 0.6, ottoman_flag(), 0.26)
-		"science":
-			cyl(g, 0.24, 0.27, 0.5, Vector3(0, 0.25, 0), mat(WHITEWASH), 16)
-			box(g, Vector3(0.56, 0.06, 0.56), Vector3(0, 0.03, 0), mat(STONE_DARK))
-			cyl(g, 0.255, 0.255, 0.03, Vector3(0, 0.42, 0), mat(IZNIK, 0.4), 16)
-			dome(g, Vector3(0, 0.5, 0), 0.22, 0.0)
-			if level >= 2:
-				ottoman_block(g, Vector3(0.0, 0, 0.36), Vector3(0.5, 0.16, 0.16), 0.0)
-			if level >= 3:
-				var tel := cyl(g, 0.03, 0.04, 0.4, Vector3(0.15, 0.82, 0.1), mat(BRONZE, 0.35, 0.8), 8)
-				tel.rotation.x = 0.8
-		"religion":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.6, 0.32, 0.5), 0.18)
-			if level >= 2:
-				for x in [-0.33, 0.33]:
-					dome(g, Vector3(x, 0.38, 0.14), 0.07, 0.02)
-			if level >= 3:
-				pole_flag(g, Vector3(0.3, 0.38, -0.2), 0.45, ottoman_flag(), 0.24)
-		"court":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.66, 0.34, 0.52), 0.0)
-			# revak sütunları
-			for x in [-0.27, -0.09, 0.09, 0.27]:
-				cyl(g, 0.025, 0.025, 0.28, Vector3(x, 0.2, 0.33), mat(WHITEWASH), 8)
-			box(g, Vector3(0.7, 0.04, 0.18), Vector3(0, 0.36, 0.3), mat(Color("#c4553a")))
-			if level >= 2:
-				dome(g, Vector3(0, 0.62, 0), 0.12, 0.04)
-			if level >= 3:
-				cyl(g, 0.08, 0.09, 0.5, Vector3(-0.3, 0.45, -0.18), mat(WHITEWASH), 10)
-				cyl(g, 0.0, 0.1, 0.2, Vector3(-0.3, 0.8, -0.18), mat(LEAD, 0.5, 0.3), 10)
-		"market":
-			# Çarşı: kubbeli bedesten, önünde tenteli tezgâhlar; seviyeyle tezgâh ve mal artar
-			add_prop(g, "building_market", Vector3(0, 0, -0.1), 0.4, PI)
-			var tents := [[OTTOMAN_RED, Vector3(-0.22, 0, 0.26)]]
-			if level >= 2:
-				tents.append([IZNIK, Vector3(0.05, 0, 0.3)])
-			if level >= 3:
-				tents.append([Color("#3d7a3a"), Vector3(0.28, 0, 0.26)])
-				dome(g, Vector3(0.0, 0.42, -0.1), 0.1, 0.03)
-			for t in tents:
-				var tp: Vector3 = t[1]
-				for c in [Vector3(-0.08, 0, -0.06), Vector3(0.08, 0, -0.06), Vector3(-0.08, 0, 0.06), Vector3(0.08, 0, 0.06)]:
-					cyl(g, 0.008, 0.008, 0.22, tp + c + Vector3(0, 0.11, 0), mat(WOOD), 5)
-				box(g, Vector3(0.2, 0.015, 0.16), tp + Vector3(0, 0.23, 0), mat(t[0]))
-				box(g, Vector3(0.17, 0.05, 0.08), tp + Vector3(0, 0.07, 0.03), mat(WOOD_DARK))
-				sphere(g, 0.025, tp + Vector3(-0.04, 0.11, 0.03), mat(GOLD, 0.3, 0.8), false, 6)
-				sphere(g, 0.025, tp + Vector3(0.04, 0.11, 0.03), mat(Color("#b3202a")), false, 6)
-		"workshop":
-			# Odun-Demir Ocağı: demirhane, odun yığını, örs; seviyeyle kereste atölyesi ve ocak eklenir
-			add_prop(g, "building_blacksmith", Vector3(0.08, 0, -0.06), 0.36, PI)
-			add_prop(g, "resource_lumber", Vector3(-0.24, 0.0, 0.22), 0.5, 0.3)
-			box(g, Vector3(0.08, 0.06, 0.05), Vector3(0.2, 0.09, 0.3), mat(IRON, 0.4, 0.7))
-			cyl(g, 0.03, 0.04, 0.06, Vector3(0.2, 0.03, 0.3), mat(WOOD_DARK), 6)
-			for k in 3:
-				sphere(g, 0.035, Vector3(-0.02 + k * 0.05, 0.035, 0.32), mat(Color("#4a4440"), 0.6, 0.5), false, 6)
-			if level >= 2:
-				add_prop(g, "resource_lumber", Vector3(-0.3, 0.0, -0.05), 0.45, 1.6)
-				add_prop(g, "wheelbarrow", Vector3(0.32, 0, 0.12), 0.3, 0.6)
-			if level >= 3:
-				add_prop(g, "resource_stone", Vector3(-0.05, 0.0, 0.33), 0.45, 0.9)
-				pole_flag(g, Vector3(-0.32, 0, -0.3), 0.55, ottoman_flag(), 0.22)
-		"kitchen":
-			# Yemekhane: uzun yapı, ocak bacası, önünde kazanlar
-			ottoman_block(g, Vector3(0, 0, -0.08), Vector3(0.66, 0.3, 0.42), 0.0)
-			box(g, Vector3(0.1, 0.32, 0.1), Vector3(0.24, 0.5, -0.18), mat(STONE_DARK))
-			var pots := [Vector3(-0.18, 0, 0.28)]
-			if level >= 2:
-				pots.append(Vector3(0.05, 0, 0.3))
-			if level >= 3:
-				pots.append(Vector3(0.27, 0, 0.27))
-				dome(g, Vector3(-0.15, 0.36, -0.08), 0.1, 0.03)
-			for pp in pots:
-				cyl(g, 0.07, 0.05, 0.08, pp + Vector3(0, 0.04, 0), mat(STONE_DARK), 8)
-				cyl(g, 0.075, 0.06, 0.09, pp + Vector3(0, 0.12, 0), mat(IRON, 0.5, 0.6), 10)
-		"mosque":
-			box(g, Vector3(0.62, 0.06, 0.62), Vector3(0, 0.03, 0), mat(STONE_DARK))
-			box(g, Vector3(0.5, 0.3, 0.5), Vector3(0, 0.21, 0), mat(WHITEWASH))
-			box(g, Vector3(0.51, 0.03, 0.51), Vector3(0, 0.3, 0), mat(IZNIK, 0.4))
-			dome(g, Vector3(0, 0.36, 0), 0.24, 0.05)
-			for x in [-0.2, 0.2]:
-				dome(g, Vector3(x, 0.36, 0.2), 0.08, 0.0)
-			var spots := [Vector3(-0.3, 0, 0.3), Vector3(0.3, 0, 0.3), Vector3(-0.3, 0, -0.3), Vector3(0.3, 0, -0.3)]
-			for i in D.CITY.minarets[level]:
-				minaret(g, spots[i], 0.95)
+	# Blender modeli: gövde + "L2", "L3" parçaları; Cami'de minareler "M1".."M4"
+	var m := ott_model("b_" + id)
+	g.add_child(m)
+	for c in m.find_children("*", "Node3D", true, false):
+		var n := String(c.name)
+		if n == "L2" or n == "L3":
+			c.visible = level >= int(n.substr(1))
+		elif n.length() == 2 and n.begins_with("M"):
+			c.visible = int(n.substr(1)) <= D.CITY.minarets[level]
+	if level >= 3 and m.find_child("flag", true, false):
+		pole_flag(g, mark(m, "flag"), 0.4, ottoman_flag(), 0.24)
+	if id == "cavalry" and level >= 2:
+		var hr := horse(Color("#e8e2d6"), OTTOMAN_RED, 0.16)
+		hr.root.position = Vector3(0.05, 0, 0.12)
+		hr.root.rotation.y = 1.2
+		g.add_child(hr.root)
 	# seviye düğmeleri
 	for i in level:
 		sphere(root, 0.028, Vector3(-0.1 + i * 0.1, 0.03, 0.46), mat(GOLD, 0.3, 0.8), false, 8)

@@ -298,30 +298,10 @@ func _build_walls() -> void:
 		_wall_run(Vector3(s * 0.62, 0, z), Vector3(s * (half - 0.1), 0, z), h, t, st)
 		_wall_run(Vector3(s * (half + 0.1), 0, z + 0.1), Vector3(s * (half + 0.1), 0, zb - 0.1), h * 0.9, t, st)
 	_wall_run(Vector3(-half, 0, zb), Vector3(half, 0, zb), h * 0.9, t, st)
-	# kapı: iki ayak, üstte kemerli taç ve altın hilal; açık ahşap kanatlar
-	for s in [-1, 1]:
-		models.box(self, Vector3(0.3, 0.95, 0.5), Vector3(s * 0.45, 0.475, z), st)
-		var door := models.box(self, Vector3(0.3, 0.6, 0.04), Vector3(s * 0.42, 0.3, z - 0.32), models.mat(Color("#6a4224")))
-		door.rotation.y = s * 1.1
-	models.box(self, Vector3(1.2, 0.32, 0.5), Vector3(0, 0.95, z), st)
-	models.box(self, Vector3(0.64, 0.05, 0.52), Vector3(0, 0.66, z), models.mat(Color("#8a6a3a")))
-	# kemer: koyu iç, altın kenar
-	var arch := models.cyl(self, 0.3, 0.3, 0.52, Vector3(0, 0.66, z), models.mat(Color("#2a1e16")), 16)
-	arch.rotation.x = PI / 2
-	arch.scale = Vector3(1.0, 1.0, 0.55)
-	for k in 7:
-		var x := -1.0 + k * (2.0 / 6.0)
-		models.box(self, Vector3(0.12, 0.1, 0.08), Vector3(x * 0.52, 1.16, z - 0.21), st)
-	models.box(self, Vector3(1.24, 0.03, 0.06), Vector3(0, 0.84, z - 0.27), models.mat(Models.GOLD, 0.35, 0.7))
-	var cr := TorusMesh.new()
-	cr.inner_radius = 0.06
-	cr.outer_radius = 0.085
-	var m := MeshInstance3D.new()
-	m.mesh = cr
-	m.material_override = models.mat(Models.GOLD, 0.3, 0.8)
-	m.position = Vector3(0, 1.02, z - 0.27)
-	m.rotation = Vector3(PI / 2, 0, 0.8)
-	add_child(m)
+	# kapı (Blender modeli): kemer taşlı geçit, açık ahşap kanatlar, altın kitabe
+	var gate := models.ott_model("gate")
+	gate.position = Vector3(0, 0, z)
+	add_child(gate)
 	# kapı burçları ve köşe burçları: kubbeli, sancaklı
 	for s in [-1, 1]:
 		models.round_tower(self, Vector3(s * 0.95, 0, z), 0.3, 1.05, true, flag)
@@ -342,26 +322,25 @@ func _build_walls() -> void:
 	fire(self, Vector3(0.95, 1.12, z - 0.3), 0.8)
 
 
-# a'dan b'ye düz sur: gövde, iki yanda mazgallar, üstte yürüme yolu
-func _wall_run(a: Vector3, b: Vector3, h: float, t: float, st: Material) -> void:
+# a'dan b'ye düz sur: Blender'daki 1 karelik sur parçası (kesme taş, mazgal dişleri dışa bakar) dizilir.
+# Parçanın dış yüzü -z'dir; dış yön şehrin merkezinden uzağa doğru seçilir.
+func _wall_run(a: Vector3, b: Vector3, h: float, t: float, _st: Material) -> void:
 	var d := b - a
 	var len := d.length()
-	var mid := (a + b) / 2.0
 	var along_x := absf(d.x) > absf(d.z)
-	var size := Vector3(len, h, t) if along_x else Vector3(t, h, len)
-	models.box(self, size, mid + Vector3(0, h / 2.0, 0), st)
-	# kaide
-	var base := Vector3(len, 0.08, t + 0.08) if along_x else Vector3(t + 0.08, 0.08, len)
-	models.box(self, base, mid + Vector3(0, 0.04, 0), models.stone_mat(Color("#a89878")))
-	var n := int(len / 0.2)
+	var n := maxi(1, int(round(len)))
+	var city_z := (to_world(0, game.wall_row).z + game.rows / 2.0) / 2.0
+	var rot := 0.0
+	if along_x:
+		rot = 0.0 if a.z < city_z else PI
+	else:
+		rot = -PI / 2 if a.x > 0 else PI / 2
 	for i in n:
-		if i % 2 == 1:
-			continue
-		var k := (i + 0.5) / n - 0.5
-		for side in [-1, 1]:
-			var off := Vector3(k * len, h + 0.05, side * (t / 2.0 - 0.04)) if along_x else Vector3(side * (t / 2.0 - 0.04), h + 0.05, k * len)
-			var mb := Vector3(0.1, 0.1, 0.07) if along_x else Vector3(0.07, 0.1, 0.1)
-			models.box(self, mb, mid + off, st)
+		var seg := models.ott_model("wall_segment")
+		seg.position = a + d * ((i + 0.5) / n)
+		seg.rotation.y = rot
+		seg.scale = Vector3(len / n, h / 0.62, t / 0.34)
+		add_child(seg)
 
 
 # Şehrin boş kareleri: şadırvan, çarşı, bahçeler, servi ağaçları ve cumbalı Osmanlı evleri.
@@ -597,7 +576,11 @@ func _build_camp() -> void:
 	camp.position = to_world(game.path_points[0].x, -1.1)
 	add_child(camp)
 	for t in [[-1.1, -0.5, 0.4], [1.1, -0.3, -0.5], [-0.6, -1.4, 0.9], [0.9, -1.4, -0.2], [2.1, -0.9, 0.2]]:
-		models.add_prop(camp, "tent", Vector3(t[0], 0, t[1]), 1.5, t[2])
+		var tent := models.ott_model("camp_tent" if rng.randf() < 0.6 else "camp_tent_b")
+		tent.position = Vector3(t[0], 0, t[1])
+		tent.rotation.y = t[2]
+		tent.scale = Vector3.ONE * 1.6
+		camp.add_child(tent)
 	for t in [[-0.6, 0.5], [0.7, 0.4], [1.6, 0.1]]:
 		models.add_prop(camp, ["barrel", "crate_A_big", "sack"][rng.randi() % 3], Vector3(t[0], 0, t[1]), 1.6, rng.randf() * TAU)
 	models.add_prop(camp, "weaponrack", Vector3(-1.5, 0, 0.2), 1.6, 0.3)
