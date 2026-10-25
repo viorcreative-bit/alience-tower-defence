@@ -53,6 +53,12 @@ var lbl_country: Label
 var lbl_stage: Label
 var top_flag: TextureRect
 var honor_note := ""  # oyun sonu ekranına eklenen şeref satırı
+var duel_text := ""  # düelloda rakibin durumu (main her karede yazar)
+var duel_note := ""  # düellonun nasıl bittiği
+var duel_chip: PanelContainer
+var lbl_duel: Label
+var overlay_again: Button
+var overlay_map: Button
 var banner: Label
 var banner_tween: Tween
 var overlay: Control
@@ -680,6 +686,16 @@ func _build_view_button() -> void:
 	lbl_weather.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	weather_chip.add_child(lbl_weather)
 	root.add_child(weather_chip)
+	# düelloda rakip: üst şeridin altında, ortada
+	duel_chip = PanelContainer.new()
+	duel_chip.add_theme_stylebox_override("panel", _frame("panel", 18, 14))
+	duel_chip.custom_minimum_size = Vector2(0, 58)
+	duel_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	duel_chip.visible = false
+	lbl_duel = _label("", 21, C_DANGER, font_bold)
+	lbl_duel.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	duel_chip.add_child(lbl_duel)
+	root.add_child(duel_chip)
 	# kahramanın yeteneği: haritanın sol altında, alt panelin hemen üstünde
 	btn_hero = Button.new()
 	btn_hero.custom_minimum_size = Vector2(230, 74)
@@ -695,7 +711,7 @@ func _build_view_button() -> void:
 func set_country(c: String) -> void:
 	lbl_country.text = D.COUNTRIES[c].short
 	top_flag.texture = load("res://assets/ui/%s.png" % Models.banner_name(c))
-	lbl_stage.text = ("%s %d" % [game.stage.name, game.stage.year]).to_upper() if game.stage_id != "" else "SERBEST SAVAŞ"
+	lbl_stage.text = ("%s %d" % [game.stage.name, game.stage.year]).to_upper() if game.stage_id != "" else ("DÜELLO" if game.duel else "SERBEST SAVAŞ")
 	last_key = ""
 
 
@@ -914,6 +930,7 @@ func _build_overlay() -> void:
 	overlay_text.custom_minimum_size = Vector2(560, 0)
 	v.add_child(overlay_text)
 	var again := Button.new()
+	overlay_again = again
 	again.text = "Yeniden Oyna"
 	again.custom_minimum_size = Vector2(300, 72)
 	again.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -922,6 +939,7 @@ func _build_overlay() -> void:
 	again.pressed.connect(func(): action.emit("restart", ""))
 	v.add_child(again)
 	var menu := Button.new()
+	overlay_map = menu
 	menu.text = "Sefer Haritası"
 	menu.custom_minimum_size = Vector2(300, 64)
 	menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -936,7 +954,7 @@ func refresh(sound_label: String, light_name: String) -> void:
 	btn_menu.position = Vector2(btn_view.position.x - btn_menu.size.x - 10, btn_view.position.y)
 	lbl_gold.text = str(game.gold)
 	lbl_wall.text = str(game.wall)
-	lbl_wave.text = "%d/%d" % [game.wave, game.total_waves]
+	lbl_wave.text = str(game.wave) if game.duel else "%d/%d" % [game.wave, game.total_waves]
 	for k in lbl_res:
 		lbl_res[k].text = str(game.res[k])
 	lbl_wall.add_theme_color_override("font_color", C_DANGER if game.wall <= 5 else C_WALL)
@@ -980,7 +998,11 @@ func refresh(sound_label: String, light_name: String) -> void:
 	if boss != null:
 		boss_name.text = "%s · %s" % [D.ENEMY_NAMES[boss.type], D.NATION_NAMES[boss.nation]]
 		boss_fill.size.x = 396.0 * clampf(boss.hp / boss.max_hp, 0.0, 1.0)
-		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, btn_view.position.y + 70)
+		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, btn_view.position.y + (140 if game.duel else 70))
+	duel_chip.visible = game.duel and duel_text != ""
+	if duel_chip.visible:
+		lbl_duel.text = "Rakip: " + duel_text
+		duel_chip.position = Vector2((root.size.x - duel_chip.size.x) / 2.0, btn_view.position.y + 70)
 	lbl_weather.text = "%s · %s" % [D.SEASONS[game.season].name, D.WEATHER[game.weather].name]
 	lbl_weather.add_theme_color_override("font_color", C_TEXT if game.weather == "clear" else Color("#9fd0f0"))
 	btn_hero.visible = game.hero_id != ""
@@ -1001,7 +1023,8 @@ func refresh(sound_label: String, light_name: String) -> void:
 	var cstate := "none"
 	if ch.level:
 		cstate = str(ceili(ch.cooldown)) if ch.cooldown > 0.0 else ("ready" if game.can_charge() else "idle")
-	var ckey := "|".join([game.speed, game.phase, game.raid, game.wave, sound_label, cstate, ch.active > 0.0, light_name])
+	var countdown := ceili(game.duel_state.get("build", 0.0)) if game.duel and game.phase == "build" else -1
+	var ckey := "|".join([game.speed, game.phase, game.raid, game.wave, sound_label, cstate, ch.active > 0.0, light_name, countdown])
 	if ckey != last_controls:
 		last_controls = ckey
 		btn_sound.text = sound_label
@@ -1013,13 +1036,21 @@ func refresh(sound_label: String, light_name: String) -> void:
 		btn_primary.disabled = game.phase != "build"
 		if game.phase == "wave":
 			btn_primary.text = "Ani baskın!" if game.raid else "%d. dalga sürüyor" % game.wave
+		elif countdown >= 0:
+			btn_primary.text = "%d. Dalga · %d sn" % [game.wave + 1, countdown]
 		else:
 			btn_primary.text = "%d. Dalgayı Başlat" % mini(game.wave + 1, game.total_waves)
 
 	_refresh_tech()
 	var ended := game.phase == "won" or game.phase == "lost"
 	if ended and not overlay.visible:
-		if game.phase == "won":
+		overlay_again.text = "Yeni Düello" if game.duel else "Yeniden Oyna"
+		overlay_map.text = "Ana Menü" if game.duel else "Sefer Haritası"
+		if game.duel:
+			overlay_title.text = "Düello Kazanıldı!" if game.phase == "won" else "Düello Kaybedildi"
+			overlay_text.text = "%s\n%d. dalgaya kadar dayandın. Rakibe %d asker yolladın, rakipten %d geldi." % [duel_note, game.wave,
+				game.duel_state.sent, game.duel_state.got]
+		elif game.phase == "won":
 			if game.stage_id != "":
 				overlay_title.text = "%s Korundu!" % game.stage.name
 			else:

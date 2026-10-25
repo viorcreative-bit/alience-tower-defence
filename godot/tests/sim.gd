@@ -52,6 +52,7 @@ func _init() -> void:
 	_tech()
 	_bosses()
 	_progress()
+	_duel()
 	quit()
 
 
@@ -296,3 +297,76 @@ func _countries() -> void:
 				assert(g.troop_stats("janissary").hp > D.TROOPS.janissary.hp, "asker bonusu")
 		assert(D.king_text(c, 3) != "", "kral metni")
 	print("devletler tamam")
+
+
+# Düello: iki oyun doğrudan bağlanır. Güçlü taraf yendiği düşmanlarla zayıfa asker yollar; zayıfın
+# surları düşünce iki taraf da sonucu bilir. 12. dalgadan sonra dalgalar dönerek sürer.
+func _duel() -> void:
+	var D := GameData
+	assert(D.ACHIEVEMENTS.size() == D.ACHIEVEMENT_ORDER.size())
+	var ga := Game.new()
+	var gb := Game.new()
+	var la := DuelLink.new("a1", "Ali", "ottoman")
+	var lb := DuelLink.new("b2", "Veli", "hungary")
+	var inbox_a := []
+	var inbox_b := []
+	la.outgoing.connect(func(m): inbox_b.append(m.duplicate(true)))
+	lb.outgoing.connect(func(m): inbox_a.append(m.duplicate(true)))
+	var seeds := []
+	for pair in [[la, ga, 12, "hungary"], [lb, gb, 2, "ottoman"]]:
+		var l: DuelLink = pair[0]
+		var g: Game = pair[1]
+		l.started.connect(func(sd):
+			seeds.append(sd)
+			g.duel_state.nation = pair[3]
+			g.set_duel(true)
+			g.reset()
+			g.gold = 99999
+			g.res = {"wood": 9999, "iron": 9999, "food": 9999}
+			for b in ["school", "barracks", "archery", "hospital"]:
+				g.upgrade_building(b)
+			var n := 0
+			for r in range(0, 11):
+				for c in g.cols:
+					if n < pair[2] and not g.is_path_tile(c, r) and not g.is_work_site(c, r) and (g.is_path_tile(c, r - 1) or g.is_path_tile(c, r + 1)):
+						g.select_tile(c, r)
+						g.build_tower(["archer", "cannon", "musket", "tar"][n % 4])
+						g.upgrade_tower()
+						n += 1
+			g.gold = 200
+			l.game = g)
+		l.begin("ABCD")
+	var t := 0.0
+	var max_b_queue := 0
+	while t < 4000.0 and not (la.state == "over" and lb.state == "over"):
+		for l in [la, lb]:
+			l.tick(0.05)
+		for m in inbox_a:
+			la.handle(m)
+		for m in inbox_b:
+			lb.handle(m)
+		inbox_a.clear()
+		inbox_b.clear()
+		for l in [la, lb]:
+			if l.state == "playing" or (l.state == "over" and l.game.is_active()):
+				l.game.step(0.05)
+		t += 0.05
+	assert(seeds.size() == 2 and seeds[0] == seeds[1], "iki taraf aynı tohumla başlamalı: %s" % str(seeds))
+	assert(la.host() and not lb.host())
+	assert(gb.duel_state.got > 0, "güçlü taraf asker yollamadı")
+	assert(ga.duel_state.sent + gb.duel_state.got > 0)
+	assert(lb.result == "lose" and la.result == "win", "sonuç: %s / %s" % [la.result, lb.result])
+	assert(ga.phase == "won" and gb.phase == "lost")
+	assert(ga.stats.get("duel_wins", 0) == 1 and gb.stats.get("duel_wins", 0) == 0)
+	print("düello: %.0f sn, A %d. dalga sur %d, B %d. dalga; B'ye %d asker gitti, A'ya %d" % [t, ga.wave, ga.wall, gb.wave, gb.duel_state.got, ga.duel_state.got])
+	# dalgalar 12'den sonra da sürer
+	var g := Game.new()
+	g.set_duel(true)
+	g.reset()
+	for i in 30:
+		assert(g.wave_groups(i).size() > 0)
+	assert(g.wave_bosses(15).size() == 1)
+	# oda kodu
+	var rng := RandomNumberGenerator.new()
+	assert(DuelLink.make_code(rng).length() == D.DUEL.code_len)
+	print("düello tamam")

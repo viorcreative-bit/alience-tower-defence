@@ -49,6 +49,10 @@ var researching := {}
 var boulders: Array = []  # mancınık taşları {tower, t}
 # görev ve başarım sayımı (main hesaba aktarıp boşaltır); streak hasarsız üst üste dalga
 var stats := {}
+# düello: duel_state.build hazırlığın kalan süresi, pressure rakibe asker için biriken ödül,
+# out rakibe gidecek askerler (bağlantı boşaltır), pending sıradaki dalgaya eklenecek rakip askerleri
+var duel := false
+var duel_state := {}
 var streak := 0
 var wave_wall := 0
 var buildings := {}
@@ -80,6 +84,20 @@ func set_stage(id: String) -> void:
 	total_waves = stage.picks.size() if stage_id != "" else D.WAVES.size()
 
 
+# Düelloyu açar ya da kapatır (set_stage'den sonra, reset'ten önce): serbest savaş, bitmeyen dalgalar
+func set_duel(on: bool) -> void:
+	duel = on
+	if on:
+		set_stage("")
+		total_waves = 999
+
+
+# Serbest savaşta dalganın WAVES dizini; düelloda 12'den sonra son dört dalga döner
+func _wi(i: int) -> int:
+	var n: int = D.WAVES.size()
+	return i if i < n else n - 4 + (i - n) % 4
+
+
 # Zeminin nasıl kurulacağı: yol ve kuşatmanın zemin renkleri (değişirse dünya yeniden kurulur)
 func map_key() -> String:
 	return str(path_points) + str(stage.get("ground", {}))
@@ -88,13 +106,13 @@ func map_key() -> String:
 # i. dalgayı (0'dan) gönderen devlet; oyuncunun kendi devleti çıkarsa o seferi Osmanlı yapar
 func wave_nation(i: int) -> String:
 	if stage_id == "":
-		return D.wave_nation(i, country)
+		return D.wave_nation(_wi(i), country)
 	var n: String = stage.nations[mini(i, stage.nations.size() - 1)]
 	return "ottoman" if n == country else n
 
 
 func wave_groups(i: int) -> Array:
-	return D.WAVES[stage.picks[i] if stage_id != "" else i].groups
+	return D.WAVES[stage.picks[i] if stage_id != "" else _wi(i)].groups
 
 
 # n. dalgada (1'den) düşman canı çarpanı
@@ -103,7 +121,7 @@ func difficulty(n: int) -> float:
 
 
 func wave_bosses(i: int) -> Array:
-	return stage.bosses.get(i, []) if stage_id != "" else D.BOSS_WAVES.get(i, [])
+	return stage.bosses.get(i, []) if stage_id != "" else D.BOSS_WAVES.get(_wi(i), [])
 
 
 func describe_wave(i: int) -> String:
@@ -150,6 +168,8 @@ func reset() -> void:
 	researching = {}
 	boulders = []
 	stats = {}
+	duel_state = {"build": D.DUEL.first_build, "pressure": 0, "out": [], "pending": [], "sent": 0, "got": 0,
+		"nation": duel_state.get("nation", ""), "result": ""}
 	streak = 0
 	selected = null
 	time = 0.0
@@ -706,6 +726,9 @@ func start_wave() -> void:
 		spawn_queue[-1].gap = D.BOSS_GAP
 		for b in bosses:
 			spawn_queue.append({"type": b, "gap": D.BOSS_GAP, "nation": nation})
+	if duel:
+		spawn_queue.append_array(duel_state.pending)
+		duel_state.pending = []
 	spawn_timer = D.RULES.first_spawn_delay + 1.2
 	banner("%s seferde!" % D.NATION_NAMES[nation], "#f3e6c8", 2.4)
 	sound("waveStart")
@@ -734,6 +757,8 @@ func _update_spawner(dt: float) -> void:
 	while spawn_queue.size() and spawn_timer <= 0.0:
 		var n: Dictionary = spawn_queue.pop_front()
 		_spawn_enemy(n.type, n.nation)
+		if n.get("duel", false):
+			enemies[-1].from_duel = true
 		spawn_timer += n.gap
 
 
@@ -764,6 +789,7 @@ func _check_wave_end() -> bool:
 		res[k] += income[k]
 	phase = "build"
 	nation = wave_nation(wave)
+	duel_state.build = D.DUEL.build
 	charge.active = 0.0
 	_roll_weather(wave)
 	_reset_raid_timer()
@@ -792,7 +818,7 @@ func _reset_raid_timer() -> void:
 
 
 func _update_raid(dt: float) -> void:
-	if phase != "build" or wave < D.RAID.first_wave or wave >= total_waves:
+	if duel or phase != "build" or wave < D.RAID.first_wave or wave >= total_waves:
 		return
 	raid_timer -= dt
 	if raid_timer > 0.0:
@@ -875,6 +901,8 @@ func damage_enemy(e: Dictionary, amount: float, pierce: bool) -> void:
 		stat("kills")
 		if e.def.get("boss", false):
 			stat("boss_kills")
+		if duel:
+			_duel_kill(e)
 		var color: String = "#a0703c" if e.def.get("siege", false) else D.NATIONS[e.nation].primary
 		var big: bool = e.def.get("warning", false)
 		particles(e.x, e.y, color, 36 if big else 10, 2.2, e.radius * 0.28, 0.6)
@@ -1341,6 +1369,10 @@ func _id() -> int:
 # Bir sabit adım. Dalga ya da baskın bittiyse true döner (kayıt için).
 func step(dt: float) -> bool:
 	time += dt
+	if duel and phase == "build":
+		duel_state.build -= dt
+		if duel_state.build <= 0.0:
+			start_wave()
 	_update_raid(dt)
 	_update_market(dt)
 	_update_research(dt)
@@ -1370,3 +1402,55 @@ func advance(elapsed: float) -> bool:
 			ended = true
 		remaining -= s
 	return ended
+
+
+# ---------------------------------------------------------------- düello
+
+# Yenilen düşmanın ödülü birikir; her cost'ta rakibe bir asker. Rakibin yolladıkları geri gitmez.
+func _duel_kill(e: Dictionary) -> void:
+	if e.get("from_duel", false):
+		return
+	if e.def.get("boss", false):
+		duel_state.out.append(D.DUEL.boss_send)
+	duel_state.pressure += reward(e)
+	while duel_state.pressure >= D.DUEL.cost:
+		duel_state.pressure -= D.DUEL.cost
+		var open := []
+		for s in D.DUEL.send:
+			if wave >= s[0]:
+				open.append(s[1])
+		duel_state.out.append(open[duel_state.sent % open.size()])
+		duel_state.sent += 1
+
+
+# Rakipten gelen askerler: dalga sürüyorsa hemen sıraya, değilse sıradaki dalgaya eklenir
+func duel_receive(types: Array) -> void:
+	if not duel or not is_active() or types.is_empty():
+		return
+	var nat: String = duel_state.nation if D.NATIONS.has(duel_state.nation) else nation
+	var list := []
+	for t in types:
+		if D.ENEMIES.has(t):
+			list.append({"type": t, "gap": D.DUEL.gap, "nation": nat, "duel": true})
+	duel_state.got += list.size()
+	if phase == "wave" and not raid:
+		spawn_queue.append_array(list)
+		banner("Rakipten %d asker geldi!" % list.size(), "#ff5b4d", 1.6)
+	else:
+		duel_state.pending.append_array(list)
+		banner("Rakip %d asker yolladı, sıradaki dalgaya katılacak" % list.size(), "#ff5b4d", 1.6)
+	sound("horn")
+
+
+# Düellonun sonu: rakip düştüyse ya da ayrıldıysa zafer
+func duel_end(win: bool, why: String) -> void:
+	if not duel or not is_active():
+		return
+	duel_state.result = "win" if win else "lose"
+	phase = "won" if win else "lost"
+	if win:
+		stat("duel_wins")
+		sound("chant", {"voices": 16, "loud": 1})
+	else:
+		sound("defeat")
+	banner(why, "#f2c94c" if win else "#ff5b4d", 3.0)

@@ -21,6 +21,8 @@ Tarayıcı sürümünün (Vite + Three.js) Godot 4'e taşınmış hâli. Temel k
 - **Şehir görünüşü:** "Şehre Bak" düğmesi kamerayı surların içine yaklaştırır (parmakla sağa sola kaydırılır). Sokaklarda halk gezer; şadırvan, çarşı, bahçeler, cumbalı evler, fenerler ve Cami önünde semazenler vardır.
 - **Askerler:** Kışla Yeniçeri (en güçlü asker, en önde durur), Okçu Ocağı okçu, Sipahi Ocağı süvari, Cami Sofi yetiştirir. Sofiler arka sırada savaşır ve yanındaki askerlere can verir. Askerler surların önünde nöbet tutar; canı azalan asker Darüşşifa'ya yürür, iyileşince yerine döner.
 - **"Allah Allah!" hücumu:** Meşihat kurulunca açılır, bir süre bütün kulelerin atış hızını artırır.
+- **Düello (çok oyunculu):** ana menüden "Düello". Biri oda kurar, 4 harfli kodu arkadaşına verir; o kodla katılır. İkisi aynı tohumla serbest savaşa başlar; dalgalar kendiliğinden gelir ve bitmez. Yenilen düşmanların ödülü biriktikçe rakibe asker gider (patron yenince kuşatma kulesi), rakibin suru ve dalgası üstte görünür. Suru önce düşen kaybeder; zafer 150, yenilgi 30 şeref. İletiler Supabase Realtime yayın kanalından geçer, sunucuda oyun mantığı yoktur.
+- **Çevrimiçi sıralama:** Şeref Defteri'nde bütün oyuncular (Supabase `scores` tablosu). Her savaş sonunda hesabın satırı güncellenir. Kurulum için `supabase-kurulum.sql` ve `scripts/net_config.gd` (adres ve herkese açık anahtar); boşsa çevrimiçi özellikler kapalıdır.
 - **Ses ve müzik:** bütün sesler koddan üretilir (dosya yok). Dalgada tam mehter takımı çalar (kös, davul, nakkare, zil, iki oktav zurna, boru ve son ölçüde kös gürlemesi); hazırlıkta ve menüde ağır bir ney ezgisi. Patron sahadayken marş hızlanır. Toplar keskin patlayıp yankılanır; mancınık, fil, kuşatma kulesi, üç kahramanın yetenekleri, Medrese araştırması ve görev/başarım duyuruları kendi sesleriyle gelir. Arka planda kuşatmaya göre şehir sesi çalar: İstanbul'da çarşı uğultusu, şadırvan, kuşlar ve örs; Rodos'ta dalgalar, martılar ve gemi çanı; kara kuşatmalarında ordugâh, kuşlar ve uzak davul. Yağmurda yağmur, kar ve siste rüzgâr sesi eklenir. Ses düğmesi üç kipe geçer: Ses · Müziksiz · Sessiz. Ses kipi, ışık (Öğle · İkindi · Gece) ve en iyi dalga cihazda saklanır.
 
 ## Çalıştırma
@@ -33,7 +35,7 @@ Web çıktısı: `GODOT=/yol/godot tools/export_web.sh` → `build/web/`. Motor 
 
 Oyun mantığı testi: `godot --headless --script tests/sim.gd` (12 dalgayı kendi kendine oynar, hata olursa söyler).
 
-Kuşatma ve kahraman: `-- --stage=rodos --hero=sinan`; haritayı görmek için `-- --user=Ad --stars=2 --map`; yeteneği denemek için `-- --demo --wave=5 --use-hero --hero-at=5`; hava için `--weather=rain --season=autumn`; patronlar için `-- --demo --wave=6 --bosses`; Medrese için `-- --demo --tech`.
+Kuşatma ve kahraman: `-- --stage=rodos --hero=sinan`; haritayı görmek için `-- --user=Ad --stars=2 --map`; yeteneği denemek için `-- --demo --wave=5 --use-hero --hero-at=5`; hava için `--weather=rain --season=autumn`; patronlar için `-- --demo --wave=6 --bosses`; Medrese için `-- --demo --tech`; düello görünüşü için `-- --duel` (sahte rakip), düello menüsü için `-- --user=Ad --duel-menu`. Ağ sınaması: `godot --headless --script tests/net_mock.gd`.
 
 Menüyü atlamak için `-- --country=venice --king=3`; menüyü denemek için `-- --user=Ad --honor=500 --kings=2 --pick=mamluk` ya da `-- --login`.
 
@@ -46,6 +48,7 @@ Geliştirme için ekran görüntüsü: `godot --write-movie /tmp/kare.png --fixe
 - `scripts/world.gd`: zemin, surlar, şehir süsleri, ordugâh, ışık ve ateşler
 - `scripts/models.gd`: kule, düşman, asker, at ve bina modelleri
 - `scripts/ui.gd`: üst şerit, alt panel, sancak yazıları, oyun sonu ekranı
+- `scripts/net.gd`: Supabase bağlantısı (Realtime WebSocket ve REST), `scripts/duel.gd`: düellonun el sıkışması ve iletileri, `scripts/net_config.gd`: sunucu adresi ve anahtar
 - `scripts/audio.gd`: ses efektleri, mehter ve ney, şehir ve hava döngüleri (uzun döngüler her karede birkaç ms ayrılarak hazırlanır)
 - `scripts/menu.gd`: giriş, devlet seçimi, hükümdar geliştirme, sefer haritası ve kahraman seçimi
 - `scripts/campaign.gd`: sefer haritasının çizimi (kıyılar, Tuna, kaleler, yıldızlar)

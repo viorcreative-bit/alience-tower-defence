@@ -44,6 +44,9 @@ var menu: MainMenu
 var in_menu := true
 var honored_wave := 0  # şerefi verilmiş son dalga
 var debug_hero := ""  # `--hero=sinan` (geliştirme)
+var net: Net  # Supabase: çevrimiçi sıralama ve düello odaları
+var link: DuelLink  # süren düello (yoksa null)
+var net_state := ""  # odanın bağlantı durumu
 
 
 func _ready() -> void:
@@ -75,8 +78,18 @@ func _ready() -> void:
 	_sync_buildings()
 	_place_king("ottoman", 1)
 	profiles = Profiles.new()
-	menu = MainMenu.new(ui, models, profiles)
+	net = Net.new()
+	add_child(net)
+	net.message.connect(func(m):
+		if link:
+			link.handle(m))
+	net.status.connect(func(st):
+		net_state = st
+		_duel_status())
+	menu = MainMenu.new(ui, models, profiles, net)
 	menu.start.connect(_start_game)
+	menu.duel_join.connect(_duel_join)
+	menu.duel_cancel.connect(_duel_leave)
 	add_child(menu)
 	ui.visible = false
 	town = Town.new()
@@ -100,10 +113,16 @@ func _place_king(country: String, level: int) -> void:
 	add_child(sultan.root)
 
 
-func _start_game(country: String, level: int, stage := "") -> void:
+func _start_game(country: String, level: int, stage := "", duel := false) -> void:
+	if not duel:
+		_duel_leave()
 	game.country = country
 	game.king_level = level
 	game.set_stage(stage)
+	game.duel = false
+	if duel:
+		game.duel_state.nation = link.opp.get("country", "")
+		game.set_duel(true)
 	game.hero_id = debug_hero if debug_hero != "" else profiles.hero()
 	if world.path_key != game.map_key():
 		_rebuild_world()
@@ -115,7 +134,9 @@ func _start_game(country: String, level: int, stage := "") -> void:
 	in_menu = false
 	ui.visible = true
 	set_city_view(false)
-	if game.stage_id != "":
+	if game.duel:
+		game.banner("Düello: %s" % link.opp.get("name", "Rakip"), "#e0b24a", 2.4)
+	elif game.stage_id != "":
 		game.banner("%s Kuşatması" % game.stage.name, "#e0b24a", 2.4)
 	else:
 		game.banner(D.ruler_name(country), "#e0b24a", 2.4)
@@ -141,6 +162,75 @@ func _flush_stats() -> void:
 		ui.toast(msg)
 		audio.play("chime")
 	game.stats = {}
+	_submit_score()
+
+
+# Hesabın satırını çevrimiçi sıralamaya yazar (sunucu ayarlı değilse hiçbir şey yapmaz)
+func _submit_score() -> void:
+	if not Net.configured() or profiles.current == "":
+		return
+	var p := profiles
+	net.submit({"device": _device(), "name": p.current, "honor": p.get_v("honor_total", p.honor()), "stars": p.stars_total(),
+		"best_wave": p.get_v("best_wave", 0), "duel_wins": p.stats().get("duel_wins", 0),
+		"updated_at": Time.get_datetime_string_from_system(true) + "Z"})
+
+
+# Bu cihazın kalıcı kimliği (sıralamada aynı adlı başka cihazların satırını ezmemek için)
+func _device() -> String:
+	var d: String = save.get_value("settings", "device", "")
+	if d == "":
+		var r := RandomNumberGenerator.new()
+		r.randomize()
+		d = "%08x%08x" % [r.randi(), r.randi()]
+		save.set_value("settings", "device", d)
+		save.save(SAVE_PATH)
+	return d
+
+
+# ---------------------------------------------------------------- düello
+
+func _duel_join(code: String) -> void:
+	_duel_leave()
+	var r := RandomNumberGenerator.new()
+	r.randomize()
+	link = DuelLink.new("%s-%06d" % [_device(), r.randi() % 1000000], profiles.current, profiles.country())
+	link.outgoing.connect(net.send)
+	link.started.connect(_duel_start)
+	link.changed.connect(_duel_status)
+	link.begin(code)
+	net_state = ""
+	net.join(code)
+	_duel_status()
+
+
+func _duel_leave() -> void:
+	if link:
+		link.leave()
+		link = null
+	net.leave()
+
+
+func _duel_start(sd: int) -> void:
+	seed(sd)
+	link.game = game
+	menu.visible = false
+	_start_game(profiles.country(), profiles.king_level(profiles.country()), "", true)
+
+
+# Menüdeki bekleme satırı
+func _duel_status() -> void:
+	if link == null or link.state != "waiting":
+		return
+	var t := ""
+	if net_state == "error" or net_state == "closed":
+		t = "Sunucuya bağlanılamadı. İnternetini kontrol edip yeniden dene."
+	elif not net.joined:
+		t = "Sunucuya bağlanılıyor…"
+	elif link.opp.has("id"):
+		t = "Rakip bulundu: %s. Düello başlıyor…" % link.opp.name
+	else:
+		t = "Oda kodu %s. Rakibin bu kodla katılsın; bekleniyor…" % link.room
+	menu.duel_status(t)
 
 
 func _open_menu(map := false) -> void:
@@ -161,7 +251,10 @@ func _award_honor() -> void:
 		honored_wave += 1
 		n += honored_wave * D.KING.honor_per_wave
 	var stage_note := ""
-	if game.phase == "won" and honored_wave <= game.total_waves:
+	if game.duel and (game.phase == "won" or game.phase == "lost") and honored_wave <= game.total_waves:
+		honored_wave = game.total_waves + 1
+		n += D.DUEL.honor_win if game.phase == "won" else D.DUEL.honor_lose
+	elif game.phase == "won" and honored_wave <= game.total_waves:
 		honored_wave = game.total_waves + 1
 		if game.stage_id != "":
 			var stars := D.stage_stars(game.wall, game.max_wall)
@@ -377,11 +470,23 @@ func _on_action(name: String, arg: String) -> void:
 			save.set_value("settings", "light", world.time_of_day)
 			save.save(SAVE_PATH)
 		"restart":
-			_restart()
+			if game.duel:
+				_duel_leave()
+				_open_menu()
+				menu.show_duel()
+			else:
+				_restart()
 		"menu":
+			# süren düellodan çıkmak yenilgi sayılır; rakibe "bye" gider
+			if game.duel and game.is_active():
+				game.duel_end(false, "Düellodan çekildin")
+				_award_honor()
+			_duel_leave()
 			_open_menu()
 		"map":
-			_open_menu(true)
+			var was_duel := game.duel
+			_duel_leave()
+			_open_menu(not was_duel)
 
 
 func _restart() -> void:
@@ -402,6 +507,8 @@ func _restart() -> void:
 # ---------------------------------------------------------------- ana döngü
 
 func _process(delta: float) -> void:
+	if link:
+		link.tick(delta)
 	if in_menu:
 		town.update(delta)
 		# menüde şehir sesi ve ağır ney ezgisi
@@ -426,6 +533,11 @@ func _process(delta: float) -> void:
 	audio.set_boss(game.first_boss() != null)
 	var wx := {"rain": "rain", "snow": "wind", "fog": "wind"}
 	audio.set_ambience(game.stage.get("ambience", "city"), wx.get(game.weather, ""), game.phase == "wave")
+	ui.duel_text = ""
+	if game.duel and link and link.opp.has("id"):
+		var o: Dictionary = link.opp
+		ui.duel_text = "%s · Sur %d/%d · %d. dalga" % [o.name, o.wall, o.max_wall, o.wave]
+		ui.duel_note = link.why
 	ui.refresh(audio.mode_name(), world.light_name())
 	if shake > 0.0 and not (cam_tween and cam_tween.is_running()):
 		shake = maxf(0.0, shake - delta)
@@ -1020,6 +1132,14 @@ func _debug_hooks() -> void:
 	# `--country=venice --king=3` ya da `--demo`/`--city` menüyü atlayıp doğrudan oyunu açar
 	debug_hero = _arg(args, "--hero=", "")
 	var cn := _arg(args, "--country=", "")
+	# `--duel` sahte bir rakiple düelloyu açar (yalnız görünüş; ileti gitmez)
+	if "--duel" in args:
+		link = DuelLink.new("a", profiles.current if profiles.current != "" else "Ali", "ottoman")
+		link.begin("TEST")
+		link.opp = {"id": "b", "name": "Veli", "country": "hungary", "wall": 14, "max_wall": 20, "wave": 3, "seen": 0.0, "playing": true}
+		link.started.connect(_duel_start)
+		link._play()
+		return
 	if cn != "" or "--demo" in args or "--city" in args or "--play" in args or _arg(args, "--stage=", "") != "":
 		menu.visible = false
 		_start_game(cn if cn != "" else "ottoman", int(_arg(args, "--king=", "1")), _arg(args, "--stage=", ""))
@@ -1048,6 +1168,8 @@ func _debug_hooks() -> void:
 				profiles.cfg.set_value("hesap:" + n, "best_wave", n.length() * 2)
 		if "--progress" in args:
 			menu._show_progress()
+		elif "--duel-menu" in args:
+			menu.show_duel()
 		elif "--map" in args:
 			menu._show_campaign()
 		else:

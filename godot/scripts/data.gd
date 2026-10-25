@@ -84,6 +84,14 @@ const ENEMIES := {
 }
 # Patron dalgaları: serbest savaşta dalga dizinine (0'dan) göre; kuşatmalarda STAGES[...].bosses
 const BOSS_WAVES := {3: ["trebuchet"], 7: ["elephant"], 11: ["bossTower"]}
+
+# Düello: iki oyuncu aynı anda serbest savaş oynar, dalgalar bitmez (12'den sonra son dört dalga
+# güçlenerek döner). Hazırlık süresi dolunca dalga kendiliğinden başlar. Yenilen düşmanların ödülü
+# cost'a ulaştıkça rakibe bir asker gider; hangi askerin gideceği dalgaya göre açılır (send: [dalga, tür]).
+# Patron yenen rakibe kuşatma kulesi yollar. Suru önce düşen kaybeder.
+const DUEL := {"first_build": 35.0, "build": 20.0, "cost": 40, "boss_send": "siegeTower", "gap": 0.7,
+	"send": [[1, "infantry"], [3, "light"], [5, "knight"], [8, "ram"]], "honor_win": 150, "honor_lose": 30,
+	"timeout": 45.0, "code_len": 4}
 const BOSS_GAP := 3.0  # patron, dalganın son birliğinden bu kadar sonra çıkar
 const ENEMY_MELEE := {"rate": 1.0, "growth": 0.08}
 
@@ -569,7 +577,7 @@ static func wave_nation(i: int, country: String) -> String:
 # waves püskürtülen dalga, hero kahraman yeteneği, research araştırma, raids baskın, wins kuşatma zaferi,
 # free_wins serbest savaş zaferi, streak bir savaşta hasarsız üst üste dalga (en iyisi tutulur)
 const STAT_NAMES := {"kills": "düşman", "boss_kills": "patron", "towers": "kule", "waves": "dalga", "hero": "kahraman yeteneği",
-	"research": "araştırma", "raids": "baskın", "wins": "kuşatma zaferi"}
+	"research": "araştırma", "raids": "baskın", "wins": "kuşatma zaferi", "duel_wins": "düello zaferi"}
 
 # Başarımlar: bir kez kazanılır. need: {istatistik: en az}; stars: kazanılmış yıldız toplamı; all_stages: bütün kuşatmalar
 const ACHIEVEMENTS := {
@@ -585,8 +593,10 @@ const ACHIEVEMENTS := {
 	"perfect": {"name": "Kusursuz Savunma", "text": "Bir kuşatmayı 3 yıldızla kazan", "three": true, "honor": 80},
 	"campaign": {"name": "Sefer-i Hümayun", "text": "Bütün kuşatmaları kazan", "all_stages": true, "honor": 300},
 	"free": {"name": "Serbest Muzaffer", "text": "Serbest savaşın 12 dalgasını püskürt", "need": {"free_wins": 1}, "honor": 150},
+	"duel1": {"name": "Meydan Okuyan", "text": "Bir düello kazan", "need": {"duel_wins": 1}, "honor": 80},
+	"duel10": {"name": "Pehlivan", "text": "10 düello kazan", "need": {"duel_wins": 10}, "honor": 250},
 }
-const ACHIEVEMENT_ORDER := ["novice", "boss1", "builder", "conqueror", "perfect", "hero", "wall", "scholar", "veteran", "boss10", "free", "campaign"]
+const ACHIEVEMENT_ORDER := ["novice", "boss1", "builder", "conqueror", "perfect", "hero", "wall", "scholar", "veteran", "boss10", "free", "campaign", "duel1", "duel10"]
 
 # Günlük görevler: her gün tarihe göre 3 tanesi seçilir, gün içindeki sayımla tamamlanır
 const QUESTS := {
