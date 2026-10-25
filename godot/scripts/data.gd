@@ -88,6 +88,7 @@ const NATIONS := {
 	"russia": {"primary": "#f0eee8", "secondary": "#2f5fa8", "metal": "#a9adb8"},
 	"france": {"primary": "#2b4fa0", "secondary": "#f1d36b", "metal": "#b3b7c2"},
 	"holyLeague": {"primary": "#f4f1e8", "secondary": "#c0392b", "metal": "#c3c7d0"},
+	"hospitaller": {"primary": "#a31d26", "secondary": "#f4f1e8", "metal": "#b3b7c2"},
 }
 
 # Her dalga bir devletin seferidir. Gruplar sırayla çıkar: [birlik, adet, aralık]
@@ -105,6 +106,55 @@ const WAVES := [
 	{"nation": "france", "groups": [["infantry", 24, 0.3], ["knight", 14, 0.7], ["siegeTower", 2, 2.5]]},
 	{"nation": "holyLeague", "groups": [["knight", 10, 0.9], ["siegeTower", 2, 2.5], ["commander", 1, 2.0], ["light", 16, 0.35], ["ram", 5, 1.2]]},
 ]
+
+# Sefer haritası: sırayla açılan kuşatmalar. Her kalenin kendi yolu (yolun sonu hep kapıdır, [4, 12]),
+# dalga sayısı, düşmanları ve zorluğu vardır. picks: her dalganın WAVES'teki birlik dizilişi,
+# nations: o dalgayı gönderen devlet, hp: düşman canı çarpanı, honor: ilk zaferde verilen şeref.
+# map: haritadaki yeri (boylam, enlem). ground: zemin renkleri (yoksa varsayılan çim).
+const STAGES := {
+	"istanbul": {"name": "İstanbul", "year": 1453, "map": [28.98, 41.01], "hp": 0.85, "honor": 150, "gold": 0,
+		"path": [[1, -1], [1, 2], [6, 2], [6, 5], [2, 5], [2, 8], [7, 8], [7, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5],
+		"nations": ["byzantium", "byzantium", "serbia", "venice", "byzantium", "venice"],
+		"text": "Kostantiniyye'yi Bizans'ın ve müttefiklerinin karşı saldırısından koru."},
+	"belgrad": {"name": "Belgrad", "year": 1521, "map": [20.46, 44.82], "hp": 0.95, "honor": 200, "gold": 20,
+		"path": [[7, -1], [7, 3], [2, 3], [2, 7], [6, 7], [6, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7],
+		"nations": ["serbia", "hungary", "hungary", "serbia", "hungary", "hungary", "habsburg", "hungary"],
+		"ground": {"grass_a": Color(0.56, 0.6, 0.22), "grass_b": Color(0.36, 0.42, 0.14)},
+		"text": "Tuna'nın kilidi Belgrad. Macar ordusu kaleyi geri almak için yürüyor; yol kısa, kuleleri erken kur."},
+	"rodos": {"name": "Rodos", "year": 1522, "map": [28.22, 36.43], "hp": 1.0, "honor": 250, "gold": 40,
+		"path": [[4, -1], [4, 2], [1, 2], [1, 5], [7, 5], [7, 8], [2, 8], [2, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 3, 2, 4, 5, 6, 7, 8],
+		"nations": ["hospitaller", "hospitaller", "venice", "hospitaller", "spain", "hospitaller", "venice", "spain", "hospitaller"],
+		"ground": {"grass_a": Color(0.66, 0.64, 0.32), "grass_b": Color(0.47, 0.48, 0.2), "dirt": Color(0.9, 0.8, 0.58), "dirt_edge": Color(0.72, 0.6, 0.4)},
+		"text": "Ada kalesi Rodos. Şövalyeler ve denizden gelen Venedik, İspanya gemileri ağır zırhlı asker çıkarıyor."},
+	"mohac": {"name": "Mohaç", "year": 1526, "map": [18.68, 45.99], "hp": 1.0, "honor": 300, "gold": 60,
+		"path": [[0, -1], [0, 1], [8, 1], [8, 4], [0, 4], [0, 7], [8, 7], [8, 9], [4, 9], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+		"nations": ["hungary", "hungary", "poland", "hungary", "habsburg", "hungary", "poland", "habsburg", "hungary", "hungary"],
+		"ground": {"grass_a": Color(0.5, 0.66, 0.22), "grass_b": Color(0.3, 0.48, 0.13)},
+		"text": "Mohaç ovası: uzun ve kıvrımlı yol, bol süvari. Kuleler için yer çok, düşman da çok."},
+	"viyana": {"name": "Viyana", "year": 1529, "map": [16.37, 48.21], "hp": 1.1, "honor": 400, "gold": 80,
+		"path": [[2, -1], [2, 1], [6, 1], [6, 3], [1, 3], [1, 6], [7, 6], [7, 9], [3, 9], [3, 10], [4, 10], [4, 12]],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+		"nations": ["habsburg", "habsburg", "spain", "habsburg", "holyLeague", "habsburg", "spain", "habsburg", "poland", "holyLeague", "habsburg", "holyLeague"],
+		"ground": {"grass_a": Color(0.42, 0.56, 0.2), "grass_b": Color(0.24, 0.38, 0.12)},
+		"text": "Seferin sonu: Habsburg başkenti önünde Kutsal İttifak'ın bütün ordusu. 12 dalga, en güçlü düşman."},
+}
+const STAGE_ORDER := ["istanbul", "belgrad", "rodos", "mohac", "viyana"]
+# Kuşatmada kalan sur oranına göre yıldız: en az 1, sur %50 ve üstü 2, %80 ve üstü 3
+const STAGE_STARS := [0.5, 0.8]
+
+
+static func stage_stars(wall: int, max_wall: int) -> int:
+	var k := float(wall) / maxf(1.0, max_wall)
+	var n := 1
+	for t in STAGE_STARS:
+		if k >= t:
+			n += 1
+	return n
+
 
 # Oyuncunun seçebileceği devletler. Her devletin bir hükümdarı vardır; hükümdar menüde "şeref" ile
 # geliştirilir ve her seviyede devletin üstünlüğü (bonus) artar. Seçilen devlet düşman dalgalarında
@@ -312,6 +362,7 @@ const NATION_NAMES := {
 	"venice": "Venedik Cumhuriyeti", "mamluk": "Memlük Sultanlığı", "safavid": "Safevî Devleti",
 	"poland": "Lehistan Krallığı", "habsburg": "Habsburg Monarşisi", "spain": "İspanya Krallığı",
 	"russia": "Rus Çarlığı", "france": "Fransa Krallığı", "holyLeague": "Kutsal İttifak",
+	"hospitaller": "Rodos Şövalyeleri",
 }
 const BUILDING_NAMES := {
 	"palace": ["Saray", "Padişahın sarayı"], "school": ["Mektep", "Okul"], "barracks": ["Kışla", "Yeniçeri Ocağı"],
@@ -393,13 +444,3 @@ static func wave_nation(i: int, country: String) -> String:
 	var n: String = WAVES[i].nation
 	return "ottoman" if n == country else n
 
-
-static func describe_wave(i: int, country := "ottoman") -> String:
-	if i >= WAVES.size():
-		return ""
-	var w: Dictionary = WAVES[i]
-	var items := []
-	for g in w.groups:
-		items.append("%d %s" % [group_count(g[1], i + 1), ENEMY_NAMES[g[0]]])
-	var hard := " Düşman canı ×%s." % num(difficulty(i + 1)) if i > 0 else ""
-	return "Sıradaki sefer: %s — %s.%s" % [NATION_NAMES[wave_nation(i, country)], join_list(items), hard]

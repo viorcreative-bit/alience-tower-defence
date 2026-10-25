@@ -2,7 +2,7 @@ class_name Profiles
 extends RefCounted
 
 # Oyuncu hesapları: cihazda (user://hesaplar.cfg) saklanır, sunucu yoktur. Her hesabın adı, seçtiği devlet,
-# şerefi, her devletin hükümdar seviyesi ve en iyi dalgası vardır. Son giriş yapan hesap hatırlanır.
+# şerefi, her devletin hükümdar seviyesi, en iyi dalgası ve sefer haritasındaki yıldızları vardır. Son giriş yapan hesap hatırlanır.
 
 const D := preload("res://scripts/data.gd")
 const PATH := "user://hesaplar.cfg"
@@ -97,6 +97,33 @@ func upgrade_king(c: String) -> bool:
 	cfg.set_value(_sec(current), "honor", honor() - D.king_cost(l))
 	set_v("kings", kings)
 	return true
+
+
+# ---------------------------------------------------------------- sefer
+
+# Kuşatmalarda kazanılan yıldızlar {kuşatma: 1..3}; hiç kazanılmamış kuşatma yoktur
+func stage_stars(id: String) -> int:
+	return get_v("stages", {}).get(id, 0)
+
+
+# İlk kuşatma hep açıktır; sonrakiler bir öncekinin kazanılmasıyla açılır
+func stage_open(id: String) -> bool:
+	var i := D.STAGE_ORDER.find(id)
+	return i == 0 or (i > 0 and stage_stars(D.STAGE_ORDER[i - 1]) > 0)
+
+
+# Zaferi kaydeder; ilk zaferse kuşatmanın şerefini verir ve verilen şerefi döndürür
+func win_stage(id: String, stars: int) -> int:
+	if current == "":
+		return 0
+	var st: Dictionary = get_v("stages", {}).duplicate()
+	var first: bool = not st.has(id)
+	st[id] = maxi(st.get(id, 0), stars)
+	set_v("stages", st)
+	if first:
+		add_honor(D.STAGES[id].honor)
+		return D.STAGES[id].honor
+	return 0
 
 
 func add_honor(n: int) -> void:

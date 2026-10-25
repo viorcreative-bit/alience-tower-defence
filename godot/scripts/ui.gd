@@ -38,6 +38,7 @@ var btn_primary: Button
 var btn_view: Button
 var btn_menu: Button
 var lbl_country: Label
+var lbl_stage: Label
 var top_flag: TextureRect
 var honor_note := ""  # oyun sonu ekranına eklenen şeref satırı
 var banner: Label
@@ -212,7 +213,8 @@ func _build_top() -> void:
 	t1.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
 	t1.add_theme_constant_override("shadow_offset_y", 2)
 	title.add_child(t1)
-	title.add_child(_label("KALE SAVUNMASI", 15, C_TEXT, font_title))
+	lbl_stage = _label("KALE SAVUNMASI", 15, C_TEXT, font_title)
+	title.add_child(lbl_stage)
 	hb.add_child(title)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -388,7 +390,7 @@ func _render_idle() -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	context.add_child(l)
 	if game.phase == "build" and game.wave < game.total_waves:
-		var n := _label(D.describe_wave(game.wave, game.country), 23, C_TEXT, font_bold)
+		var n := _label(game.describe_wave(game.wave), 23, C_TEXT, font_bold)
 		n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		context.add_child(n)
 
@@ -619,6 +621,7 @@ func _build_view_button() -> void:
 func set_country(c: String) -> void:
 	lbl_country.text = D.COUNTRIES[c].short
 	top_flag.texture = load("res://assets/ui/%s.png" % Models.banner_name(c))
+	lbl_stage.text = ("%s %d" % [game.stage.name, game.stage.year]).to_upper() if game.stage_id != "" else "SERBEST SAVAŞ"
 	last_key = ""
 
 
@@ -687,10 +690,10 @@ func _build_overlay() -> void:
 	again.pressed.connect(func(): action.emit("restart", ""))
 	v.add_child(again)
 	var menu := Button.new()
-	menu.text = "Ana Menü"
+	menu.text = "Sefer Haritası"
 	menu.custom_minimum_size = Vector2(300, 64)
 	menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	menu.pressed.connect(func(): action.emit("menu", ""))
+	menu.pressed.connect(func(): action.emit("map", ""))
 	v.add_child(menu)
 
 
@@ -761,7 +764,10 @@ func refresh(sound_on: bool, light_name: String) -> void:
 	var ended := game.phase == "won" or game.phase == "lost"
 	if ended and not overlay.visible:
 		if game.phase == "won":
-			overlay_title.text = "Devlet-i Aliyye Muzaffer!" if game.country == "ottoman" else "%s Muzaffer!" % D.NATION_NAMES[game.country]
+			if game.stage_id != "":
+				overlay_title.text = "%s Korundu!" % game.stage.name
+			else:
+				overlay_title.text = "Devlet-i Aliyye Muzaffer!" if game.country == "ottoman" else "%s Muzaffer!" % D.NATION_NAMES[game.country]
 			overlay_text.text = "%d seferin hepsini püskürttün. Surda %d sağlamlık kaldı." % [game.total_waves, game.wall]
 		else:
 			overlay_title.text = "Kale Düştü"

@@ -2,8 +2,9 @@ class_name MainMenu
 extends CanvasLayer
 
 # Oyundan önceki ana menü: önce giriş (ad ile, hesap cihazda saklanır), sonra devlet seçimi ve hükümdar.
-# Her devletin bir hükümdarı vardır; savaşlarda kazanılan şerefle geliştirilir. "Savaşa Başla" seçilen
-# devlet ve hükümdar seviyesiyle start sinyalini yollar. Arkada 3B kale görünmeye devam eder.
+# Her devletin bir hükümdarı vardır; savaşlarda kazanılan şerefle geliştirilir. "Sefere Çık" sefer haritasını
+# açar; oradan bir kuşatma ya da serbest savaş seçilince start sinyali devlet, hükümdar seviyesi ve
+# kuşatmayla ("" = serbest savaş) gelir. Arkada 3B kale görünmeye devam eder.
 
 const D := preload("res://scripts/data.gd")
 const C_TEXT := GameUI.C_TEXT
@@ -11,7 +12,7 @@ const C_DIM := GameUI.C_DIM
 const C_GOLD := GameUI.C_GOLD
 const C_COIN := GameUI.C_COIN
 
-signal start(country: String, king_level: int)
+signal start(country: String, king_level: int, stage: String)
 
 var ui: GameUI  # yazı tipleri, çerçeveler ve tema için
 var models: Models
@@ -21,6 +22,7 @@ var page: VBoxContainer
 var selected := "ottoman"
 var name_edit: LineEdit
 var cards := {}  # devlet → PanelContainer
+var stage := ""  # haritada seçili kuşatma
 
 
 func _init(u: GameUI, m: Models, p: Profiles) -> void:
@@ -49,11 +51,13 @@ func _ready() -> void:
 	open()
 
 
-# Giriş yapılmışsa doğrudan devlet seçimine geçer
-func open() -> void:
+# Giriş yapılmışsa doğrudan devlet seçimine geçer; map true ise sefer haritasına
+func open(map := false) -> void:
 	visible = true
 	if profiles.current == "":
 		_show_login()
+	elif map:
+		_show_campaign()
 	else:
 		selected = profiles.country()
 		_show_countries()
@@ -203,10 +207,9 @@ func _show_countries() -> void:
 		grid.add_child(_country_card(c))
 
 	page.add_child(_king_panel())
-	var go := _button(page, "Savaşa Başla", func():
+	var go := _button(page, "Sefere Çık", func():
 		profiles.set_v("country", selected)
-		visible = false
-		start.emit(selected, profiles.king_level(selected)), true, 84)
+		_show_campaign(), true, 84)
 	go.icon = load("res://assets/ui/swords.png")
 	go.add_theme_constant_override("icon_max_width", 36)
 	go.add_theme_font_size_override("font_size", 32)
@@ -400,3 +403,80 @@ func _bounds(n: Node3D) -> AABB:
 		out = b if first else out.merge(b)
 		first = false
 	return out
+
+
+# ---------------------------------------------------------------- sefer haritası
+
+# Kuşatmalar sırayla açılır. Haritada kaleye dokununca altında bilgisi çıkar.
+func _show_campaign() -> void:
+	_clear()
+	selected = profiles.country()
+	if stage == "" or not profiles.stage_open(stage):
+		stage = D.STAGE_ORDER[0]
+		for id in D.STAGE_ORDER:
+			if profiles.stage_open(id):
+				stage = id
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	page.add_child(top)
+	var back := Button.new()
+	back.text = "Geri"
+	back.custom_minimum_size = Vector2(110, 58)
+	back.pressed.connect(_show_countries)
+	top.add_child(back)
+	var h := ui._label("SEFER HARİTASI", 32, C_GOLD, ui.font_title)
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top.add_child(h)
+	var fl := _flag_rect(selected, 64)
+	top.add_child(fl)
+
+	var map := CampaignMap.new(profiles, ui.font_bold, ui.font_title)
+	map.custom_minimum_size = Vector2(0, 560)
+	map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	map.selected = stage
+	map.picked.connect(func(id):
+		stage = id
+		_show_campaign())
+	page.add_child(map)
+
+	var st: Dictionary = D.STAGES[stage]
+	var open := profiles.stage_open(stage)
+	var stars := profiles.stage_stars(stage)
+	var v := _panel()
+	var head := HBoxContainer.new()
+	head.add_child(ui._label("%s Kuşatması" % st.name, 30, C_TEXT, ui.font_title))
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(sp)
+	head.add_child(ui._label(str(st.year), 26, C_GOLD, ui.font_bold))
+	v.add_child(head)
+	var d := ui._label(st.text, 20, C_DIM)
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(d)
+	var foes := []
+	for n in st.nations:
+		var nm: String = D.NATION_NAMES["ottoman" if n == selected else n]
+		if not nm in foes:
+			foes.append(nm)
+	var info := ui._label("%d dalga · %s · düşman canı ×%s" % [st.picks.size(), D.join_list(foes), D.num(st.hp, 2)], 20, C_TEXT, ui.font_bold)
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(info)
+	var rw := "Zafer ödülü: %d şeref" % st.honor if stars == 0 else "Kazanıldı · en iyi %d/3 yıldız" % stars
+	v.add_child(ui._label(rw, 20, C_COIN, ui.font_bold))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	v.add_child(row)
+	var go := _button(row, "Kuşatmaya Başla" if open else "Önce önceki kaleyi kazan", func(): _go(stage), true, 76)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	go.disabled = not open
+	if open:
+		go.icon = load("res://assets/ui/swords.png")
+		go.add_theme_constant_override("icon_max_width", 32)
+	var free := _button(row, "Serbest Savaş", func(): _go(""), false, 76)
+	free.custom_minimum_size.x = 200
+
+
+func _go(id: String) -> void:
+	visible = false
+	start.emit(selected, profiles.king_level(selected), id)

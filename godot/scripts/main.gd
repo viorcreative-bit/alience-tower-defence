@@ -98,9 +98,12 @@ func _place_king(country: String, level: int) -> void:
 	add_child(sultan.root)
 
 
-func _start_game(country: String, level: int) -> void:
+func _start_game(country: String, level: int, stage := "") -> void:
 	game.country = country
 	game.king_level = level
+	game.set_stage(stage)
+	if world.path_key != game.map_key():
+		_rebuild_world()
 	models.set_player_flag(country)
 	_place_king(country, level)
 	ui.set_country(country)
@@ -109,15 +112,30 @@ func _start_game(country: String, level: int) -> void:
 	in_menu = false
 	ui.visible = true
 	set_city_view(false)
-	game.banner(D.ruler_name(country), "#e0b24a", 2.4)
+	if game.stage_id != "":
+		game.banner("%s Kuşatması" % game.stage.name, "#e0b24a", 2.4)
+	else:
+		game.banner(D.ruler_name(country), "#e0b24a", 2.4)
 
 
-func _open_menu() -> void:
+# Kuşatmanın yolu farklıysa zemin, çim, süsler ve ordugâh yeni yola göre baştan kurulur
+func _rebuild_world() -> void:
+	var tod := world.time_of_day
+	world.queue_free()
+	world = World.new()
+	add_child(world)
+	world.time_of_day = tod
+	world.setup(models, game)
+	town.world = world
+	spark_mat = world.fire_mat
+
+
+func _open_menu(map := false) -> void:
 	in_menu = true
 	ui.visible = false
 	ui.overlay.visible = false
 	game.selected = null
-	menu.open()
+	menu.open(map)
 
 
 # Her püskürtülen dalga için dalga × honor_per_wave şeref, zaferde ayrıca honor_win
@@ -127,12 +145,22 @@ func _award_honor() -> void:
 	while honored_wave < cleared:
 		honored_wave += 1
 		n += honored_wave * D.KING.honor_per_wave
+	var stage_note := ""
 	if game.phase == "won" and honored_wave <= game.total_waves:
-		n += D.KING.honor_win
 		honored_wave = game.total_waves + 1
+		if game.stage_id != "":
+			var stars := D.stage_stars(game.wall, game.max_wall)
+			var first := profiles.win_stage(game.stage_id, stars)
+			stage_note = "%d/3 yıldız" % stars + (" · ilk zafer +%d şeref" % first if first > 0 else "")
+			var i := D.STAGE_ORDER.find(game.stage_id)
+			if first > 0 and i + 1 < D.STAGE_ORDER.size():
+				stage_note += "\nSıradaki kuşatma açıldı: %s" % D.STAGES[D.STAGE_ORDER[i + 1]].name
+		else:
+			n += D.KING.honor_win
 	if n > 0:
 		profiles.add_honor(n)
-		ui.honor_note = "Toplam şeref: %d (hükümdarını menüden geliştir)" % profiles.honor()
+	if n > 0 or stage_note != "":
+		ui.honor_note = (stage_note + "\n" if stage_note != "" else "") + "Toplam şeref: %d (hükümdarını menüden geliştir)" % profiles.honor()
 		game.text(4.5, 12.6, "+%d şeref" % n, "#e0b24a")
 
 
@@ -329,6 +357,8 @@ func _on_action(name: String, arg: String) -> void:
 			_restart()
 		"menu":
 			_open_menu()
+		"map":
+			_open_menu(true)
 
 
 func _restart() -> void:
@@ -903,9 +933,9 @@ func _debug_hooks() -> void:
 	var args := OS.get_cmdline_user_args()
 	# `--country=venice --king=3` ya da `--demo`/`--city` menüyü atlayıp doğrudan oyunu açar
 	var cn := _arg(args, "--country=", "")
-	if cn != "" or "--demo" in args or "--city" in args or "--play" in args:
+	if cn != "" or "--demo" in args or "--city" in args or "--play" in args or _arg(args, "--stage=", "") != "":
 		menu.visible = false
-		_start_game(cn if cn != "" else "ottoman", int(_arg(args, "--king=", "1")))
+		_start_game(cn if cn != "" else "ottoman", int(_arg(args, "--king=", "1")), _arg(args, "--stage=", ""))
 	elif "--login" in args:
 		profiles.logout()
 		menu.open()
@@ -919,7 +949,15 @@ func _debug_hooks() -> void:
 				k[c] = int(_arg(args, "--kings=", "1"))
 			profiles.set_v("kings", k)
 		menu.selected = _arg(args, "--pick=", profiles.country())
-		menu._show_countries()
+		if _arg(args, "--stars=", "") != "":
+			var st := {}
+			for id in D.STAGE_ORDER.slice(0, int(_arg(args, "--stars=", "0"))):
+				st[id] = 1 + st.size() % 3
+			profiles.set_v("stages", st)
+		if "--map" in args:
+			menu._show_campaign()
+		else:
+			menu._show_countries()
 	for a in args:
 		if a.begins_with("--light="):
 			world.time_of_day = int(a.substr(8))

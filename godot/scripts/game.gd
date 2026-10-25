@@ -30,6 +30,9 @@ var nation := "byzantium"
 var country := "ottoman"
 var king_level := 1
 var speed := 1
+# sefer haritasındaki kuşatma ("" = serbest savaş: klasik yol ve 12 dalga)
+var stage_id := ""
+var stage := {}
 var buildings := {}
 var towers: Array = []
 var enemies: Array = []
@@ -47,19 +50,60 @@ var events: Array = []
 
 
 func _init() -> void:
-	_build_path()
+	_build_path(D.MAP.path)
 	reset()
 
 
+# Kuşatmayı seçer: yolu ve dalga sayısını değiştirir. reset'ten önce çağrılır.
+func set_stage(id: String) -> void:
+	stage_id = id if D.STAGES.has(id) else ""
+	stage = D.STAGES[stage_id] if stage_id != "" else {}
+	_build_path(stage.get("path", D.MAP.path))
+	total_waves = stage.picks.size() if stage_id != "" else D.WAVES.size()
+
+
+# Zeminin nasıl kurulacağı: yol ve kuşatmanın zemin renkleri (değişirse dünya yeniden kurulur)
+func map_key() -> String:
+	return str(path_points) + str(stage.get("ground", {}))
+
+
+# i. dalgayı (0'dan) gönderen devlet; oyuncunun kendi devleti çıkarsa o seferi Osmanlı yapar
+func wave_nation(i: int) -> String:
+	if stage_id == "":
+		return D.wave_nation(i, country)
+	var n: String = stage.nations[mini(i, stage.nations.size() - 1)]
+	return "ottoman" if n == country else n
+
+
+func wave_groups(i: int) -> Array:
+	return D.WAVES[stage.picks[i] if stage_id != "" else i].groups
+
+
+# n. dalgada (1'den) düşman canı çarpanı
+func difficulty(n: int) -> float:
+	return D.difficulty(n) * stage.get("hp", 1.0)
+
+
+func describe_wave(i: int) -> String:
+	if i >= total_waves:
+		return ""
+	var items := []
+	for g in wave_groups(i):
+		items.append("%d %s" % [D.group_count(g[1], i + 1), D.ENEMY_NAMES[g[0]]])
+	var k := difficulty(i + 1)
+	var hard := " Düşman canı ×%s." % D.num(k) if absf(k - 1.0) > 0.01 else ""
+	return "Sıradaki sefer: %s — %s.%s" % [D.NATION_NAMES[wave_nation(i)], D.join_list(items), hard]
+
+
 func reset() -> void:
-	gold = D.RULES.start_gold + (D.KING.start_gold * king_level if king_bonus_kind() == "gold" else 0)
+	gold = D.RULES.start_gold + stage.get("gold", 0) + (D.KING.start_gold * king_level if king_bonus_kind() == "gold" else 0)
 	res = D.RULES.start_res.duplicate()
 	wall = D.RULES.start_wall + int(king_bonus("wall"))
 	max_wall = wall
 	wave = 0
 	phase = "build"
 	raid = false
-	nation = D.wave_nation(0, country)
+	nation = wave_nation(0)
 	speed = 1
 	buildings = {}
 	for id in D.BUILDINGS:
@@ -81,8 +125,12 @@ func reset() -> void:
 
 # ---------------------------------------------------------------- yol
 
-func _build_path() -> void:
-	for p in D.MAP.path:
+func _build_path(pts: Array) -> void:
+	path_points = []
+	path_segs = []
+	path_length = 0.0
+	path_tiles = {}
+	for p in pts:
 		path_points.append(Vector2(p[0] + 0.5, p[1] + 0.5))
 	for i in path_points.size() - 1:
 		var a := path_points[i]
@@ -90,7 +138,6 @@ func _build_path() -> void:
 		var l := a.distance_to(b)
 		path_segs.append({"a": a, "dir": (b - a) / l, "len": l, "start": path_length})
 		path_length += l
-	var pts: Array = D.MAP.path
 	for i in pts.size() - 1:
 		var c0: int = pts[i][0]
 		var r0: int = pts[i][1]
@@ -417,10 +464,9 @@ func start_wave() -> void:
 	wave += 1
 	phase = "wave"
 	raid = false
-	var w: Dictionary = D.WAVES[wave - 1]
-	nation = D.wave_nation(wave - 1, country)
+	nation = wave_nation(wave - 1)
 	spawn_queue = []
-	for g in w.groups:
+	for g in wave_groups(wave - 1):
 		for i in D.group_count(g[1], wave):
 			spawn_queue.append({"type": g[0], "gap": g[2], "nation": nation})
 	spawn_timer = D.RULES.first_spawn_delay + 1.2
@@ -431,7 +477,7 @@ func start_wave() -> void:
 
 func _spawn_enemy(type: String, nat: String) -> void:
 	var def: Dictionary = D.ENEMIES[type]
-	var hp := roundi(def.hp * D.difficulty(wave))
+	var hp := roundi(def.hp * difficulty(wave))
 	var spd: float = def.speed * (1.0 + D.RULES.speed_growth * max(0, wave - 1))
 	var p := point_at(0.0)
 	enemies.append({"id": _id(), "def": def, "type": type, "nation": nat, "hp": float(hp), "max_hp": float(hp),
@@ -459,7 +505,7 @@ func _check_wave_end() -> bool:
 		raid = false
 		phase = "build"
 		gold += D.RAID.bonus
-		nation = D.wave_nation(wave, country)
+		nation = wave_nation(wave)
 		_reset_raid_timer()
 		banner("Baskın püskürtüldü  +%d" % D.RAID.bonus, "#f2c94c")
 		return false
@@ -474,7 +520,7 @@ func _check_wave_end() -> bool:
 	for k in D.RES_ORDER:
 		res[k] += income[k]
 	phase = "build"
-	nation = D.wave_nation(wave, country)
+	nation = wave_nation(wave)
 	charge.active = 0.0
 	_reset_raid_timer()
 	banner("%d. sefer püskürtüldü  +%d" % [wave, bonus + income.tax + income.endowment + income.palace_tax], "#f2c94c")
@@ -501,7 +547,7 @@ func _update_raid(dt: float) -> void:
 	raid_timer -= dt
 	if raid_timer > 0.0:
 		return
-	var nat := D.wave_nation(wave, country)
+	var nat := wave_nation(wave)
 	var count := roundi(D.RAID.base_count + wave * D.RAID.count_per_wave)
 	phase = "wave"
 	raid = true

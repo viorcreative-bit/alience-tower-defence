@@ -19,6 +19,7 @@ var camp_nation := ""
 var fire_mat: StandardMaterial3D
 var rng := RandomNumberGenerator.new()
 var blocked := {}
+var path_key := ""  # kurulduğu yol (main, kuşatma değişince yeniden kurar)
 
 const LIGHTS := [
 	{"sun_rot": Vector3(-58, -150, 0), "sun_col": Color(1.0, 0.95, 0.86), "sun_e": 2.4,
@@ -37,6 +38,7 @@ func setup(m: Models, g: Game) -> void:
 	models = m
 	game = g
 	rng.seed = D.MAP.seed
+	path_key = game.map_key()
 	fire_mat = StandardMaterial3D.new()
 	fire_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	fire_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -201,6 +203,9 @@ func _build_ground() -> void:
 	mat.set_shader_parameter("pts", pts)
 	mat.set_shader_parameter("count", pts.size())
 	mat.set_shader_parameter("wall_z", to_world(0, game.wall_row + 0.5).z)
+	var ground: Dictionary = game.stage.get("ground", {})
+	for k in ground:
+		mat.set_shader_parameter(k, ground[k])
 	var g := MeshInstance3D.new()
 	g.mesh = pm
 	g.material_override = mat
