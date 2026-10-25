@@ -1403,6 +1403,8 @@ func step(dt: float) -> bool:
 			start_wave()
 	if pvp == "defend":
 		_update_pvp(dt)
+	if pvp != "attack":
+		_update_tower_damage(dt)
 	_update_raid(dt)
 	_update_market(dt)
 	_update_research(dt)
@@ -1516,7 +1518,12 @@ func _update_pvp(dt: float) -> void:
 		wall = mini(max_wall, wall + inc.repair)
 		for k in D.RES_ORDER:
 			res[k] += inc[k]
-	# saldıran askerler yanından geçtikleri kuleye vurur; savaş yoksa kuleler kendini onarır
+
+
+# Düşmanlar yanından geçtikleri kuleye vurur, savaş yoksa kuleler kendini onarır (her oyunda;
+# Saldıran ve Savunan'da daha sert vurur ve yıkılan kule saldırana ganimet getirir)
+func _update_tower_damage(dt: float) -> void:
+	var dps: float = D.PVP.tower_dps if pvp != "" else D.PVP.tower_dps_solo
 	var down := []
 	for t in towers:
 		if not t.has("hp"):
@@ -1524,7 +1531,7 @@ func _update_pvp(dt: float) -> void:
 		if enemies.is_empty():
 			t.hp = minf(t.max_hp, t.hp + t.max_hp * D.PVP.tower_regen * dt)
 	for e in enemies:
-		if e.dead or not e.get("pvp", false) or e.y >= wall_row:
+		if e.dead or e.y >= wall_row:
 			continue
 		var reach: float = D.PVP.reach.get(e.type, D.PVP.tower_reach)
 		if reach <= 0.0:
@@ -1537,7 +1544,9 @@ func _update_pvp(dt: float) -> void:
 				bd = d
 				best = t
 		if best != null:
-			best.hp -= maxf(1.0, e.def.damage) * D.PVP.tower_dps * e.get("dmg_mult", 1.0) * dt
+			# tek kişilik oyunda iri düşmanlar da kuleyi en fazla solo_cap kadar hızlı döver
+			var hit: float = maxf(1.0, e.def.damage) if pvp != "" else clampf(e.def.damage, 1.0, D.PVP.solo_cap)
+			best.hp -= hit * dps * e.get("dmg_mult", 1.0) * dt
 			e.swing = maxf(e.swing, 0.7)
 			if best.hp <= 0.0 and not best in down:
 				down.append(best)
@@ -1545,7 +1554,8 @@ func _update_pvp(dt: float) -> void:
 		towers.erase(t)
 		if selected != null and selected.get("c") == t.c and selected.get("r") == t.r:
 			selected = null
-		pvp_state.loot += D.PVP.loot_tower * t.level
+		if pvp != "":
+			pvp_state.loot += D.PVP.loot_tower * t.level
 		particles(t.x, t.y, "#8a7a68", 30, 2.4, 0.09, 0.7)
 		particles(t.x, t.y, "#e8dcc0", 16, 1.6, 0.12, 0.8)
 		text(t.x, t.y - 0.5, "Kule yıkıldı!", "#ff5b4d")

@@ -26,10 +26,12 @@ func _init() -> void:
 	assert(g.upgrade_building("palace"))
 	assert(g.upgrade_building("school"))
 	var types := ["archer", "tar", "cannon", "musket"]
+	var plan := []
 	for i in spots.size():
 		g.select_tile(spots[i][0], spots[i][1])
 		g.build_tower(types[i % 4])
 		g.upgrade_tower()
+		plan.append([spots[i][0], spots[i][1], types[i % 4], 2])
 	print("kule: ", g.towers.size())
 	print("eğitim ", g.training)
 	for k in ["janissary", "archer", "sipahi", "sufi"]:
@@ -41,6 +43,7 @@ func _init() -> void:
 	while g.is_active() and t < 3000.0:
 		if g.phase == "build":
 			print("dalga ", g.wave, " bitti t=", int(t), " sur ", g.wall, " akçe ", g.gold, " asker ", g.units.size())
+			_rebuild(g, plan)
 			g.start_wave()
 		if g.can_charge():
 			g.trigger_charge()
@@ -258,12 +261,14 @@ func _stages() -> void:
 		for b in ["school", "barracks", "archery", "science", "hospital", "mosque"]:
 			g.upgrade_building(b)
 		var n := 0
+		var plan := []
 		for r in range(0, 11):
 			for c in g.cols:
 				if n < 12 and not g.is_path_tile(c, r) and not g.is_work_site(c, r) and (g.is_path_tile(c, r - 1) or g.is_path_tile(c, r + 1)):
 					g.select_tile(c, r)
 					g.build_tower(["archer", "cannon", "musket", "tar"][n % 4])
 					g.upgrade_tower()
+					plan.append([c, r, ["archer", "cannon", "musket", "tar"][n % 4], 2])
 					n += 1
 		for k in ["janissary", "archer", "sufi"]:
 			while g.can_train(k):
@@ -271,6 +276,7 @@ func _stages() -> void:
 		var t := 0.0
 		while g.is_active() and t < 3000.0:
 			if g.phase == "build":
+				_rebuild(g, plan)
 				g.start_wave()
 			g.step(0.03)
 			t += 0.03
@@ -488,3 +494,14 @@ func _siege(towers: int, smart := false) -> void:
 	print("saldır-savun (%d kule%s): %.0f sn, kazanan %s, savunan sur %d, kule %d/%d, en düşük kule canı %%%d, ganimet %d, saldırı %d, yükseltme %s" % [
 		towers, ", akıllı savunan" if smart else "", t, "saldıran" if la.result == "win" else "savunan", gd.wall, gd.towers.size(), max_towers, roundi(min_tower_hp * 100),
 		gd.pvp_state.loot, gd.pvp_state.attacks, str(ga.pvp_state.up)])
+
+
+# Dalgalar arasında oyuncu gibi yıkılan kuleleri yeniden kurar (kuleler artık yıkılabiliyor)
+func _rebuild(g: Game, plan: Array) -> void:
+	for p in plan:
+		if g.tower_at(p[0], p[1]) == null:
+			g.select_tile(p[0], p[1])
+			g.build_tower(p[2])
+			for i in p[3] - 1:
+				g.upgrade_tower()
+	g.selected = null
