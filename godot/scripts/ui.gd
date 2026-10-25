@@ -36,6 +36,29 @@ var btn_light: Button
 var btn_charge: Button
 var btn_primary: Button
 var btn_view: Button
+var btn_menu: Button
+var btn_hero: Button
+var weather_chip: PanelContainer
+var tech: ColorRect  # Medrese'nin teknoloji ağacı (açılır pencere)
+var tech_grid: HBoxContainer
+var tech_status: Label
+var tech_bar: ColorRect
+var tech_key := ""
+var toasts: VBoxContainer  # görev ve başarım duyuruları
+var boss_box: PanelContainer  # sahadaki patronun büyük can çubuğu
+var boss_name: Label
+var boss_fill: ColorRect
+var lbl_weather: Label
+var lbl_country: Label
+var lbl_stage: Label
+var top_flag: TextureRect
+var honor_note := ""  # oyun sonu ekranına eklenen şeref satırı
+var duel_text := ""  # düelloda rakibin durumu (main her karede yazar)
+var duel_note := ""  # düellonun nasıl bittiği
+var duel_chip: PanelContainer
+var lbl_duel: Label
+var overlay_again: Button
+var overlay_map: Button
 var banner: Label
 var banner_tween: Tween
 var overlay: Control
@@ -44,6 +67,9 @@ var overlay_text: Label
 var bars: Control
 var panel: PanelContainer
 var top: PanelContainer
+var ctrl_row: HBoxContainer
+var btn_fold: Button
+var folded := false
 
 var last_key := ""
 var last_controls := ""
@@ -81,8 +107,17 @@ func _ready() -> void:
 
 	_build_top()
 	_build_panel()
+	_build_fold()
 	_build_view_button()
 	_build_banner()
+	toasts = VBoxContainer.new()
+	toasts.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	toasts.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	toasts.position.y = 250
+	toasts.add_theme_constant_override("separation", 6)
+	toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(toasts)
+	_build_tech()
 	_build_overlay()
 
 
@@ -204,10 +239,12 @@ func _build_top() -> void:
 	var title := VBoxContainer.new()
 	title.add_theme_constant_override("separation", -8)
 	var t1 := _label("OSMANLI", 38, C_GOLD, font_title)
+	lbl_country = t1
 	t1.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.7))
 	t1.add_theme_constant_override("shadow_offset_y", 2)
 	title.add_child(t1)
-	title.add_child(_label("KALE SAVUNMASI", 15, C_TEXT, font_title))
+	lbl_stage = _label("KALE SAVUNMASI", 15, C_TEXT, font_title)
+	title.add_child(lbl_stage)
 	hb.add_child(title)
 	var sp := Control.new()
 	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -237,6 +274,7 @@ func _build_top() -> void:
 		lbl_res[k] = v
 	# şeridin solundan sarkan sancak
 	var flag := _icon("banner", 0)
+	top_flag = flag
 	flag.custom_minimum_size = Vector2(46, 100)
 	flag.position = Vector2(14, 40)
 	root.add_child(flag)
@@ -287,6 +325,7 @@ func _build_panel() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	vb.add_child(row)
+	ctrl_row = row
 	btn_sound = _ctrl(row, "Ses", 96, func(): action.emit("sound", ""))
 	btn_sound.icon = load("res://assets/ui/speaker.png")
 	btn_speed = _ctrl(row, "1×", 64, func(): action.emit("speed", ""))
@@ -301,6 +340,49 @@ func _build_panel() -> void:
 	btn_primary.add_theme_stylebox_override("pressed", _frame("red_hot"))
 	btn_primary.add_theme_font_size_override("font_size", 25)
 	btn_charge.add_theme_color_override("font_color", C_GOLD)
+
+
+# Panelin sağ üst köşesindeki kulp: kartları gizleyip oyun alanını büyütür
+func _build_fold() -> void:
+	btn_fold = Button.new()
+	btn_fold.custom_minimum_size = Vector2(84, 44)
+	btn_fold.focus_mode = Control.FOCUS_NONE
+	var sb := _frame("panel", 14, 4)
+	btn_fold.add_theme_stylebox_override("normal", sb)
+	btn_fold.add_theme_stylebox_override("hover", sb)
+	btn_fold.add_theme_stylebox_override("pressed", sb)
+	btn_fold.pressed.connect(func(): action.emit("fold", ""))
+	root.add_child(btn_fold)
+	var arrow := Control.new()
+	arrow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrow.draw.connect(func():
+		var c := arrow.size / 2.0
+		var d := -1.0 if folded else 1.0
+		var pts := PackedVector2Array([c + Vector2(-14, -6 * d), c + Vector2(0, 7 * d), c + Vector2(14, -6 * d)])
+		arrow.draw_polyline(pts, C_GOLD, 4.0, true))
+	btn_fold.add_child(arrow)
+	btn_fold.set_meta("arrow", arrow)
+
+
+func set_folded(on: bool) -> void:
+	folded = on
+	last_key = ""
+	(btn_fold.get_meta("arrow") as Control).queue_redraw()
+
+
+# Kamera bu çizginin üstüne sığdırılır: panel kapalıyken yalnız düğme sırası sayılır
+func play_bottom() -> float:
+	if folded:
+		return root.size.y - ctrl_row.size.y - 28.0
+	return panel_top()
+
+
+func _passthrough(n: Node) -> void:
+	if n is Control:
+		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in n.get_children():
+		_passthrough(c)
 
 
 func _ctrl(parent: Control, text: String, w: float, cb: Callable) -> Button:
@@ -369,12 +451,66 @@ func _render_strip() -> void:
 		b.add_child(l)
 
 
+# Saldıranın paneli: akçe ve ganimet, gönderilecek birlikler ve asker yükseltmeleri
+func _render_attack() -> void:
+	var head := HBoxContainer.new()
+	context.add_child(head)
+	var st: Dictionary = game.pvp_state
+	var info := "Akçe %d · ganimet %d" % [game.atk_gold(), st.loot]
+	if not game.atk_ready():
+		info += " · hazırlık %d sn" % ceili(D.PVP.prep - st.def_time)
+	var l := _label(info, 22, C_COIN, font_bold)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(l)
+	head.add_child(_label("Kule yık, sura vur: ganimet", 18, C_DIM))
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	context.add_child(grid)
+	for type in D.PVP.unit_order:
+		var n := atk_batch(type)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 66)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		b.add_theme_font_size_override("font_size", 17)
+		b.text = "%s%s\n%d" % ["%d " % n if n > 1 else "", D.ENEMY_NAMES[type], game.atk_cost(type, n)]
+		b.disabled = not game.can_send(type, n)
+		var boss: bool = D.ENEMIES[type].get("boss", false)
+		b.add_theme_stylebox_override("normal", _frame("red" if boss else "card", 12, 6))
+		b.add_theme_stylebox_override("disabled", _frame("panel", 12, 6))
+		b.pressed.connect(func(): action.emit("send", type))
+		grid.add_child(b)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	context.add_child(row)
+	for k in D.PVP.up_order:
+		var lv: int = st.up[k]
+		var c := game.up_cost(k)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 54)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 19)
+		b.text = ("%s %d/%d · %d" % [D.PVP.up_names[k], lv, D.PVP.up_max, c]) if c > 0 else "%s en üst" % D.PVP.up_names[k]
+		b.disabled = not game.can_upgrade_army(k)
+		b.pressed.connect(func(): action.emit("army_up", k))
+		row.add_child(b)
+
+
+# Ucuz birlikler (piyade, süvari, atlı okçu) üçerli gider
+static func atk_batch(type: String) -> int:
+	return 3 if D.PVP.units[type] < 20 else 1
+
+
 func _render_idle() -> void:
 	if city_view:
 		_render_strip()
 		return
 	var lines := []
-	if game.phase == "wave":
+	if game.pvp == "defend":
+		lines.append("Düşmanları rakibin seçip gönderiyor. Askerleri yanından geçtikleri kulelere vurur; savaş durunca kuleler kendini onarır, yükseltilen kulenin canı dolar. Süre bitene kadar dayan!")
+	elif game.phase == "wave":
 		lines.append("Ani baskın! Akıncıları kapıya varmadan durdur." if game.raid else "Dalga sürerken de kule ve bina kurabilirsin.")
 	else:
 		lines.append("Yolun dışındaki boş kareye dokunup kule kur. Surların içindeki arsalara dokunup şehri geliştir; Kışla, Okçu Ocağı ve Sipahi Ocağı surların önüne asker yetiştirir.")
@@ -382,9 +518,13 @@ func _render_idle() -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	context.add_child(l)
 	if game.phase == "build" and game.wave < game.total_waves:
-		var n := _label(D.describe_wave(game.wave), 23, C_TEXT, font_bold)
+		var n := _label(game.describe_wave(game.wave), 23, C_TEXT, font_bold)
 		n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		context.add_child(n)
+	if game.weather != "clear":
+		var w := _label("Hava: %s, %s." % [D.WEATHER[game.weather].name, D.weather_text(game.weather)], 21, Color("#9fd0f0"), font_bold)
+		w.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		context.add_child(w)
 
 
 func _render_build() -> void:
@@ -544,6 +684,16 @@ func _render_building(id: String) -> void:
 	if not block.is_empty():
 		up.icon = null
 	row.add_child(up)
+	if id == "medrese" and level > 0:
+		var tb := Button.new()
+		tb.text = "Teknoloji Ağacı"
+		if not game.researching.is_empty():
+			tb.text = "%s araştırılıyor" % D.TECH[game.researching.id].name
+		tb.custom_minimum_size = Vector2(0, 60)
+		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tb.add_theme_color_override("font_color", Color("#9fd0f0"))
+		tb.pressed.connect(func(): action.emit("tech", ""))
+		row.add_child(tb)
 	var kind = game.troop_of(id)
 	if kind != null and level > 0:
 		var cap := game.troop_cap(kind)
@@ -597,12 +747,229 @@ func _build_view_button() -> void:
 	btn_view.pressed.connect(func(): action.emit("view", ""))
 	root.add_child(btn_view)
 	set_view_label(false)
+	# ana menüye dönüş (oyun durur; menüden "Savaşa Başla" yeni oyun açar)
+	btn_menu = Button.new()
+	btn_menu.text = "Menü"
+	btn_menu.custom_minimum_size = Vector2(110, 58)
+	btn_menu.add_theme_font_size_override("font_size", 23)
+	btn_menu.add_theme_stylebox_override("normal", _frame("panel", 18, 14))
+	btn_menu.add_theme_stylebox_override("hover", _frame("button_hot", 16, 14))
+	btn_menu.add_theme_stylebox_override("pressed", _frame("button_hot", 16, 14))
+	btn_menu.add_theme_color_override("font_color", C_GOLD)
+	btn_menu.pressed.connect(func(): action.emit("menu", ""))
+	root.add_child(btn_menu)
+	# patron can çubuğu: üst şeridin altında, ortada
+	boss_box = PanelContainer.new()
+	boss_box.add_theme_stylebox_override("panel", _frame("panel", 18, 14))
+	boss_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boss_box.visible = false
+	var bv := VBoxContainer.new()
+	bv.add_theme_constant_override("separation", 4)
+	boss_box.add_child(bv)
+	boss_name = _label("", 18, C_DANGER, font_title)
+	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bv.add_child(boss_name)
+	var bbg := ColorRect.new()
+	bbg.color = Color(0.1, 0.05, 0.02, 0.9)
+	bbg.custom_minimum_size = Vector2(320, 10)
+	bv.add_child(bbg)
+	boss_fill = ColorRect.new()
+	boss_fill.color = C_DANGER
+	boss_fill.position = Vector2(2, 2)
+	boss_fill.size = Vector2(316, 6)
+	bbg.add_child(boss_fill)
+	root.add_child(boss_box)
+	# mevsim ve hava: haritanın sol üstünde
+	weather_chip = PanelContainer.new()
+	weather_chip.add_theme_stylebox_override("panel", _frame("panel", 18, 14))
+	weather_chip.custom_minimum_size = Vector2(0, 58)
+	weather_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl_weather = _label("", 20, C_TEXT, font_bold)
+	lbl_weather.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	weather_chip.add_child(lbl_weather)
+	root.add_child(weather_chip)
+	# düelloda rakip: üst şeridin altında, ortada
+	duel_chip = PanelContainer.new()
+	duel_chip.add_theme_stylebox_override("panel", _frame("panel", 18, 14))
+	duel_chip.custom_minimum_size = Vector2(0, 58)
+	duel_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	duel_chip.visible = false
+	lbl_duel = _label("", 19, C_DANGER, font_bold)
+	lbl_duel.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	duel_chip.add_child(lbl_duel)
+	root.add_child(duel_chip)
+	# haritanın üstündeki bilgi kutuları dokunmayı yutmaz: altlarındaki kareye kule kurulabilsin
+	for n in [boss_box, weather_chip, duel_chip]:
+		_passthrough(n)
+		n.modulate.a = 0.88
+	# kahramanın yeteneği: haritanın sol altında, alt panelin hemen üstünde
+	btn_hero = Button.new()
+	btn_hero.custom_minimum_size = Vector2(230, 74)
+	btn_hero.add_theme_font_size_override("font_size", 21)
+	btn_hero.add_theme_stylebox_override("normal", _frame("red"))
+	btn_hero.add_theme_stylebox_override("hover", _frame("red_hot"))
+	btn_hero.add_theme_stylebox_override("pressed", _frame("red_hot"))
+	btn_hero.add_theme_stylebox_override("disabled", _frame("panel", 18, 14))
+	btn_hero.pressed.connect(func(): action.emit("hero", ""))
+	root.add_child(btn_hero)
+
+
+func set_country(c: String) -> void:
+	lbl_country.text = D.COUNTRIES[c].short
+	top_flag.texture = load("res://assets/ui/%s.png" % Models.banner_name(c))
+	lbl_stage.text = ("%s %d" % [game.stage.name, game.stage.year]).to_upper() if game.stage_id != "" else \
+		{"attack": "SALDIRAN", "defend": "SAVUNAN"}.get(game.pvp, "DÜELLO" if game.duel else "SERBEST SAVAŞ")
+	# üst şeritteki dalga başlığı Saldıran ve Savunan'da kalan süreyi gösterir
+	var head: Label = lbl_wave.get_parent().get_parent().get_child(0)
+	head.text = "SÜRE" if game.pvp != "" else "DALGA"
+	last_key = ""
 
 
 func set_view_label(city: bool) -> void:
 	city_view = city
 	btn_view.text = "Savaşa Dön" if city else "Şehre Bak"
 	last_key = ""
+
+
+# ---------------------------------------------------------------- teknoloji ağacı
+
+func _build_tech() -> void:
+	tech = ColorRect.new()
+	tech.color = Color(0.06, 0.04, 0.03, 0.9)
+	tech.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tech.visible = false
+	root.add_child(tech)
+	var m := MarginContainer.new()
+	m.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right"]:
+		m.add_theme_constant_override("margin_" + side, 18)
+	m.add_theme_constant_override("margin_top", 60)
+	m.add_theme_constant_override("margin_bottom", 40)
+	tech.add_child(m)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	m.add_child(v)
+	var t := _label("MEDRESE", 40, C_GOLD, font_title)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var st := _label("Teknoloji Ağacı", 24, C_DIM, font_bold)
+	st.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(st)
+	tech_status = _label("", 21, Color("#9fd0f0"), font_bold)
+	tech_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tech_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(tech_status)
+	var bar_bg := ColorRect.new()
+	bar_bg.color = Color(0, 0, 0, 0.5)
+	bar_bg.custom_minimum_size = Vector2(0, 8)
+	v.add_child(bar_bg)
+	tech_bar = ColorRect.new()
+	tech_bar.color = Color("#9fd0f0")
+	tech_bar.size = Vector2(0, 8)
+	bar_bg.add_child(tech_bar)
+	tech_grid = HBoxContainer.new()
+	tech_grid.add_theme_constant_override("separation", 10)
+	tech_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(tech_grid)
+	var close := Button.new()
+	close.text = "Kapat"
+	close.custom_minimum_size = Vector2(260, 70)
+	close.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	close.pressed.connect(func(): action.emit("tech", ""))
+	v.add_child(close)
+
+
+func _render_tech() -> void:
+	for c in tech_grid.get_children():
+		c.queue_free()
+	for br in D.TECH_BRANCH_ORDER:
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", 0)
+		tech_grid.add_child(col)
+		var h := _label(String(D.TECH_BRANCHES[br]).to_upper(), 24, C_GOLD, font_title)
+		h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		col.add_child(h)
+		for tier in [1, 2, 3]:
+			var id := D.tech_of(br, tier)
+			var td: Dictionary = D.TECH[id]
+			var block := game.tech_block(id)
+			# kademeler arasında bağlantı çizgisi
+			var link := ColorRect.new()
+			link.color = Color("#9fd0f0") if block == "done" or block == "running" else Color(C_EDGE, 0.9)
+			link.custom_minimum_size = Vector2(4, 22)
+			link.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			col.add_child(link)
+			var b := Button.new()
+			b.custom_minimum_size = Vector2(0, 250)
+			b.disabled = not game.can_research(id) and block != "done"
+			var hot := block == "done" or block == "running"
+			b.add_theme_stylebox_override("normal", _frame("card_hot" if hot else "card", 12, 8))
+			b.add_theme_stylebox_override("hover", _frame("card_hot", 12, 8))
+			b.add_theme_stylebox_override("pressed", _frame("card_hot", 12, 8))
+			b.add_theme_stylebox_override("disabled", _frame("card", 12, 8))
+			b.pressed.connect(func(): action.emit("research", id))
+			col.add_child(b)
+			var v := VBoxContainer.new()
+			v.set_anchors_preset(Control.PRESET_FULL_RECT)
+			v.offset_left = 10
+			v.offset_right = -10
+			v.offset_top = 10
+			v.offset_bottom = -10
+			v.add_theme_constant_override("separation", 4)
+			v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.add_child(v)
+			var tl := _label("%d. kademe" % tier, 16, C_DIM, font_bold)
+			var nm := _label(td.name, 22, C_TEXT if block != "medrese" else C_DIM, font_bold)
+			nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			var tx := _label(td.text, 18, C_DIM)
+			tx.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			tx.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			var state := ""
+			var sc := C_COIN
+			match block:
+				"done":
+					state = "Tamamlandı"
+					sc = Color("#9fd0f0")
+				"running":
+					state = "Araştırılıyor"
+					sc = Color("#9fd0f0")
+				"medrese":
+					state = "Medrese %d. seviye" % tier
+					sc = C_DIM
+				"prev":
+					state = "Önce %s" % D.TECH[D.tech_of(br, tier - 1)].name
+					sc = C_DIM
+				_:
+					state = "%d akçe · %d sn" % [td.cost, roundi(td.time)]
+					sc = C_COIN if game.gold >= td.cost else C_DANGER
+			var sl := _label(state, 17, sc, font_bold)
+			sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			for l in [tl, nm, tx, sl]:
+				l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				v.add_child(l)
+
+
+func _refresh_tech() -> void:
+	if not tech.visible:
+		return
+	var r: Dictionary = game.researching
+	var key := "|".join([game.gold, str(game.research.keys()), r.get("id", ""), game.buildings.medrese, game.phase])
+	if key != tech_key:
+		tech_key = key
+		_render_tech()
+	if r.is_empty():
+		tech_status.text = "Bir araştırma seç. Aynı anda tek araştırma yapılır; kademeler Medrese seviyesiyle açılır."
+		tech_bar.size.x = 0
+	else:
+		var td: Dictionary = D.TECH[r.id]
+		tech_status.text = "%s araştırılıyor · %d sn kaldı" % [td.name, ceili(r.time)]
+		tech_bar.size.x = tech_bar.get_parent().size.x * (1.0 - r.time / td.time)
+
+
+func toggle_tech() -> void:
+	tech.visible = not tech.visible
+	tech_key = ""
 
 
 # ---------------------------------------------------------------- duyuru ve bitiş ekranı
@@ -621,9 +988,26 @@ func _build_banner() -> void:
 	root.add_child(banner)
 
 
+func toast(text: String) -> void:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", _frame("card_hot", 12, 14))
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := _label(text, 22, C_COIN, font_bold)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	p.add_child(l)
+	toasts.add_child(p)
+	var tw := p.create_tween()
+	p.modulate.a = 0.0
+	tw.tween_property(p, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(3.5 + toasts.get_child_count() * 0.6)
+	tw.tween_property(p, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(p.queue_free)
+
+
 func show_banner(text: String, color: Color, life := 2.2) -> void:
 	banner.text = text
 	banner.add_theme_color_override("font_color", color)
+	banner.add_theme_font_size_override("font_size", 40 if text.length() <= 24 else 30)
 	if banner_tween:
 		banner_tween.kill()
 	banner.modulate.a = 0.0
@@ -656,6 +1040,7 @@ func _build_overlay() -> void:
 	overlay_text.custom_minimum_size = Vector2(560, 0)
 	v.add_child(overlay_text)
 	var again := Button.new()
+	overlay_again = again
 	again.text = "Yeniden Oyna"
 	again.custom_minimum_size = Vector2(300, 72)
 	again.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -663,23 +1048,38 @@ func _build_overlay() -> void:
 	again.add_theme_stylebox_override("hover", _box(Color("#bf2a33"), C_GOLD, 10))
 	again.pressed.connect(func(): action.emit("restart", ""))
 	v.add_child(again)
+	var menu := Button.new()
+	overlay_map = menu
+	menu.text = "Sefer Haritası"
+	menu.custom_minimum_size = Vector2(300, 64)
+	menu.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	menu.pressed.connect(func(): action.emit("map", ""))
+	v.add_child(menu)
 
 
 # ---------------------------------------------------------------- her kare
 
-func refresh(sound_on: bool, light_name: String) -> void:
+func refresh(sound_label: String, light_name: String) -> void:
 	btn_view.position = Vector2(root.size.x - btn_view.size.x - 14, top_bottom() + 12)
-	lbl_gold.text = str(game.gold)
+	btn_menu.position = Vector2(btn_view.position.x - btn_menu.size.x - 10, btn_view.position.y)
+	lbl_gold.text = str(game.atk_gold() if game.pvp == "attack" else game.gold)
 	lbl_wall.text = str(game.wall)
-	lbl_wave.text = "%d/%d" % [game.wave, game.total_waves]
+	if game.pvp != "":
+		var left := ceili(game.pvp_state.get("time_left", 0.0))
+		lbl_wave.text = "%d:%02d" % [left / 60, left % 60]
+	else:
+		lbl_wave.text = str(game.wave) if game.duel else "%d/%d" % [game.wave, game.total_waves]
 	for k in lbl_res:
-		lbl_res[k].text = str(game.res[k])
+		lbl_res[k].text = "-" if game.pvp == "attack" else str(game.res[k])
 	lbl_wall.add_theme_color_override("font_color", C_DANGER if game.wall <= 5 else C_WALL)
 
 	var sel = game.selected
 	var tower = game.selected_tower()
 	var mode := "idle"
-	if sel != null:
+	if game.pvp == "attack":
+		mode = "attack"
+		sel = null
+	elif sel != null:
 		mode = "building" if sel.has("building") else ("tower" if tower != null else "build")
 	var tkey := ""
 	if mode == "building":
@@ -688,7 +1088,14 @@ func refresh(sound_on: bool, light_name: String) -> void:
 			var tr := game.training_of(kind)
 			tkey = "%d,%d" % [game.troop_count(kind), tr.queue]
 	var key := "|".join([mode, game.phase, game.raid, game.wave, game.gold, str(game.res.values()), sel.c if sel else -1, sel.r if sel else -1,
-		tower.level if tower else 0, str(game.buildings.values()), tkey])
+		tower.level if tower else 0, str(game.buildings.values()), tkey, game.researching.get("id", ""), game.research.size(),
+		game.atk_gold() if game.pvp == "attack" else 0, str(game.pvp_state.get("up", {})), game.atk_ready() if game.pvp == "attack" else false,
+		ceili(D.PVP.prep - game.pvp_state.get("def_time", 0.0)) if game.pvp == "attack" and not game.atk_ready() else 0])
+	# kapalıyken bir kare ya da kule seçilirse kartlar geçici olarak açılır
+	var peek := folded and mode in ["build", "tower", "building"]
+	if context.visible != (not folded or peek):
+		context.visible = not context.visible
+		panel.offset_top = panel.offset_bottom
 	if key != last_key:
 		last_key = key
 		_clear_context()
@@ -699,6 +1106,8 @@ func refresh(sound_on: bool, light_name: String) -> void:
 				_render_build()
 			"building":
 				_render_building(sel.building)
+			"attack":
+				_render_attack()
 			_:
 				_render_idle()
 	if train_bar and is_instance_valid(train_bar):
@@ -709,31 +1118,102 @@ func refresh(sound_on: bool, light_name: String) -> void:
 		train_bar.position = Vector2(4, b.size.y - 8)
 		train_bar.size = Vector2((b.size.x - 8) * p, 5)
 
+	btn_fold.position = Vector2(root.size.x - btn_fold.size.x - 14, panel_top() - btn_fold.size.y + 4)
+
+	weather_chip.position = Vector2(14, btn_view.position.y)
+	var boss = game.first_boss()
+	boss_box.visible = boss != null
+	if boss != null:
+		boss_name.text = "%s · %s" % [D.ENEMY_NAMES[boss.type], D.NATION_NAMES[boss.nation]]
+		boss_fill.size.x = 316.0 * clampf(boss.hp / boss.max_hp, 0.0, 1.0)
+	duel_chip.visible = (game.duel or game.pvp != "") and duel_text != ""
+	var below := btn_view.position.y + 70
+	if duel_chip.visible:
+		lbl_duel.text = duel_text
+		# sığarsa hava kutusuyla Menü düğmesinin arasına, sığmazsa onların altına
+		var left := weather_chip.position.x + weather_chip.size.x + 8
+		var right := btn_menu.position.x - 8
+		if duel_chip.size.x <= right - left:
+			duel_chip.position = Vector2((left + right - duel_chip.size.x) / 2.0, btn_view.position.y)
+		else:
+			duel_chip.position = Vector2((root.size.x - duel_chip.size.x) / 2.0, below)
+			below += 66
+	if boss != null:
+		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, below)
+	lbl_weather.text = "%s · %s" % [D.SEASONS[game.season].name, D.WEATHER[game.weather].name]
+	lbl_weather.add_theme_color_override("font_color", C_TEXT if game.weather == "clear" else Color("#9fd0f0"))
+	btn_hero.visible = game.hero_id != ""
+	if btn_hero.visible:
+		btn_hero.position = Vector2(14, panel_top() - btn_hero.size.y - 12)
+		var hd := game.hero_def()
+		var hstate: String = hd.ability
+		if game.hero_unit() == null:
+			hstate = "Yaralı · %d sn" % ceili(game.hero_timer)
+		elif game.hero_cd > 0.0:
+			hstate = "%s · %d sn" % [hd.ability, ceili(game.hero_cd)]
+		elif game.phase != "wave":
+			hstate = "%s (dalgada)" % hd.ability
+		btn_hero.text = "%s\n%s" % [hd.name, hstate]
+		btn_hero.disabled = not game.can_hero()
+
 	var ch: Dictionary = game.charge
 	var cstate := "none"
 	if ch.level:
 		cstate = str(ceili(ch.cooldown)) if ch.cooldown > 0.0 else ("ready" if game.can_charge() else "idle")
-	var ckey := "|".join([game.speed, game.phase, game.raid, game.wave, sound_on, cstate, ch.active > 0.0, light_name])
+	var countdown := ceili(game.duel_state.get("build", 0.0)) if game.duel and game.phase == "build" else -1
+	if game.pvp == "attack":
+		countdown = int(game.atk_ready())
+	var ckey := "|".join([game.speed, game.phase, game.raid, game.wave, sound_label, cstate, ch.active > 0.0, light_name, countdown])
 	if ckey != last_controls:
 		last_controls = ckey
-		btn_sound.text = "Ses" if sound_on else "Sessiz"
+		btn_sound.text = sound_label
 		btn_speed.text = "%d×" % game.speed
 		btn_light.text = light_name
 		btn_charge.visible = ch.level > 0
 		btn_charge.disabled = not game.can_charge()
 		btn_charge.text = ("%d sn" % ceili(ch.cooldown)) if ch.cooldown > 0.0 and ch.active <= 0.0 else "Allah Allah!"
-		btn_primary.disabled = game.phase != "build"
-		if game.phase == "wave":
+		btn_primary.disabled = game.phase != "build" or game.pvp != ""
+		btn_speed.visible = game.pvp == ""
+		btn_charge.visible = btn_charge.visible and game.pvp != "attack"
+		btn_view.visible = game.pvp != "attack"
+		if game.pvp == "attack":
+			btn_primary.text = "Saldırı hazırlığı" if not game.atk_ready() else "Kuşatma sürüyor"
+		elif game.pvp == "defend":
+			btn_primary.text = "Saldırı geliyor!" if game.phase == "wave" else "Saldırı bekleniyor"
+		elif game.phase == "wave":
 			btn_primary.text = "Ani baskın!" if game.raid else "%d. dalga sürüyor" % game.wave
+		elif countdown >= 0:
+			btn_primary.text = "%d. Dalga · %d sn" % [game.wave + 1, countdown]
 		else:
 			btn_primary.text = "%d. Dalgayı Başlat" % mini(game.wave + 1, game.total_waves)
 
+	_refresh_tech()
 	var ended := game.phase == "won" or game.phase == "lost"
 	if ended and not overlay.visible:
-		if game.phase == "won":
-			overlay_title.text = "Devlet-i Aliyye Muzaffer!"
+		var online := game.duel or game.pvp != ""
+		overlay_again.text = "Yeni Düello" if online else "Yeniden Oyna"
+		overlay_map.text = "Ana Menü" if online else "Sefer Haritası"
+		if game.pvp != "":
+			var won := game.phase == "won"
+			overlay_title.text = ("Kale Senin!" if won else "Kuşatma Başarısız") if game.pvp == "attack" else ("Kale Dayandı!" if won else "Kale Düştü")
+			overlay_text.text = duel_note
+			if game.pvp == "attack":
+				overlay_text.text += "\n%d asker gönderdin, %d ganimet topladın." % [game.pvp_state.sent, game.pvp_state.loot]
+			else:
+				overlay_text.text += "\n%d saldırı karşıladın, surda %d kaldı." % [game.pvp_state.attacks, game.wall]
+		elif game.duel:
+			overlay_title.text = "Düello Kazanıldı!" if game.phase == "won" else "Düello Kaybedildi"
+			overlay_text.text = "%s\n%d. dalgaya kadar dayandın. Rakibe %d asker yolladın, rakipten %d geldi." % [duel_note, game.wave,
+				game.duel_state.sent, game.duel_state.got]
+		elif game.phase == "won":
+			if game.stage_id != "":
+				overlay_title.text = "%s Korundu!" % game.stage.name
+			else:
+				overlay_title.text = "Devlet-i Aliyye Muzaffer!" if game.country == "ottoman" else "%s Muzaffer!" % D.NATION_NAMES[game.country]
 			overlay_text.text = "%d seferin hepsini püskürttün. Surda %d sağlamlık kaldı." % [game.total_waves, game.wall]
 		else:
 			overlay_title.text = "Kale Düştü"
 			overlay_text.text = "%d. dalgada surlar yıkıldı.\nEn yüksek dalga: %d" % [game.wave, best_wave]
+		if honor_note != "":
+			overlay_text.text += "\n" + honor_note
 	overlay.visible = ended

@@ -17,6 +17,7 @@ var rng := RandomNumberGenerator.new()
 var people: Array = []
 var dervishes: Array = []
 var workers: Array = []
+var king := {}
 # sokaklar binaların arasındaki çizgilerdir: x tam sayılar, y üç sıra
 var xs := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
 var ys := []
@@ -49,18 +50,14 @@ func update(dt: float) -> void:
 		_step(p, dt)
 	_update_dervishes(dt)
 	_update_workers(dt)
+	_update_king(dt)
 
 
 func _add_person() -> void:
 	var woman := rng.randf() < 0.45
 	var ch: Dictionary
-	if woman:
-		ch = models.character("rogue_hooded", ["Rogue_Cape"], {"Body": Color(ROBES[rng.randi() % ROBES.size()]),
-			"Cape": Color(ROBES[rng.randi() % ROBES.size()]), "Head_Hooded": Color(SCARVES[rng.randi() % SCARVES.size()])}, 0.24)
-	else:
-		ch = models.character("mage", [], {"Body": Color(ROBES[rng.randi() % ROBES.size()]),
-			"Arm": Color(ROBES[rng.randi() % ROBES.size()]), "Leg": Color("#d9cfba")}, 0.25)
-		models.add_turban(ch, Color(SCARVES[rng.randi() % SCARVES.size()]))
+	var tint := {"Primary": Color(ROBES[rng.randi() % ROBES.size()]), "Secondary": Color(SCARVES[rng.randi() % SCARVES.size()])}
+	ch = models.ott_char("townswoman" if woman else "townsman", tint, 0.34 if woman else 0.36)
 	add_child(ch.root)
 	var n := Vector2i(rng.randi() % xs.size(), rng.randi() % ys.size())
 	var p := {"ch": ch, "node": n, "pos": _node_pos(n), "target": n, "wait": rng.randf_range(0.0, 2.0),
@@ -110,12 +107,7 @@ func _step(p: Dictionary, dt: float) -> void:
 func _update_dervishes(dt: float) -> void:
 	var lv: int = game.buildings.mosque
 	while dervishes.size() < lv:
-		var ch := models.character("mage", [], {"Body": Color("#f6f2ea"), "Arm": Color("#f6f2ea"), "Leg": Color("#f6f2ea")}, 0.2)
-		var h := models.attach(ch, "head")
-		h.position = Vector3(0, 0.7, 0)
-		models.cyl(h, 0.36, 0.42, 1.05, Vector3(0, 0.45, 0), models.mat(Color("#8a6a48")), 12)
-		# açılan tennure eteği
-		models.cyl(ch.root, 0.2, 1.1, 1.2, Vector3(0, 0.6, 0), models.mat(Color("#fbf8f0")), 16)
+		var ch := models.ott_char("semazen", {}, 0.32)
 		add_child(ch.root)
 		var s: Array = D.BUILDINGS.mosque.slot
 		var i := dervishes.size()
@@ -126,6 +118,49 @@ func _update_dervishes(dt: float) -> void:
 	for dv in dervishes:
 		dv.spin += dt * 5.0
 		dv.ch.root.rotation.y = dv.spin
+
+
+# ---------------------------------------------------------------- atlı hükümdar
+
+# Saray önünden çıkar, sokaklarda sekiz çizerek tur atar, yine saray önünde durup bekler.
+const KING_ROUTE := [Vector2(4.5, 13.55), Vector2(5.0, 13.1), Vector2(8.0, 13.1), Vector2(8.0, 15.0), Vector2(5.0, 15.0),
+	Vector2(5.0, 14.0), Vector2(4.0, 13.1), Vector2(1.0, 13.1), Vector2(1.0, 15.0), Vector2(4.0, 15.0), Vector2(4.0, 14.0)]
+
+
+func set_king(country: String, level: int) -> void:
+	if king:
+		king.root.queue_free()
+	king = models.king_rider(country, level)
+	add_child(king.root)
+	king.merge({"i": 0, "pos": KING_ROUTE[0], "wait": 3.0, "t": 0.0, "gait": 0.0})
+	king.root.position = world.to_world(king.pos.x, king.pos.y)
+
+
+func _update_king(dt: float) -> void:
+	if not king:
+		return
+	king.t += dt
+	var moving := false
+	if king.wait > 0.0:
+		king.wait -= dt
+		king.root.rotation.y = lerp_angle(king.root.rotation.y, 0.0, minf(1.0, dt * 3.0))
+	else:
+		var goal: Vector2 = KING_ROUTE[(king.i + 1) % KING_ROUTE.size()]
+		var d: Vector2 = goal - king.pos
+		if d.length() < 0.02:
+			king.i = (king.i + 1) % KING_ROUTE.size()
+			if king.i == 0:
+				king.wait = 6.0
+		else:
+			king.pos += d.normalized() * minf(d.length(), 0.32 * dt)
+			king.root.rotation.y = lerp_angle(king.root.rotation.y, atan2(d.x, d.y), minf(1.0, dt * 5.0))
+			moving = true
+	king.gait = move_toward(king.gait, 1.0 if moving else 0.0, dt * 3.0)
+	models.animate_horse(king.horse, king.t * 0.6, king.gait)
+	king.root.position = world.to_world(king.pos.x, king.pos.y, absf(sin(king.t * 5.4)) * 0.012 * king.gait)
+	# sancak direği elle gider ama hep dik durur; yürürken hafifçe sallanır
+	var yaw: float = king.root.rotation.y
+	king.pole.global_basis = Basis.from_euler(Vector3(sin(king.t * 2.7) * 0.04 * king.gait, yaw, 0))
 
 
 # ---------------------------------------------------------------- işçiler
@@ -155,23 +190,12 @@ func _route_out(kind: String) -> Array:
 
 func _add_worker(kind: String) -> void:
 	var vest := Color("#7a5232") if kind == "wood" else Color("#4a4c52")
-	var ch := models.character("barbarian", [], {"Body": vest, "Arm": Color("#c9a27e"), "Leg": Color("#5a4632")}, 0.25)
-	var h := models.attach(ch, "head")
-	h.position = Vector3(0, 0.7, 0)
-	models.cyl(h, 0.42, 0.46, 0.35, Vector3(0, 0.2, 0), models.mat(Color("#e8e0cc") if kind == "wood" else Color("#2c2c30")), 10)
-	var tool := models.attach(ch, "handslot_r")
-	if kind == "wood":
-		# balta
-		models.cyl(tool, 0.04, 0.04, 1.1, Vector3(0, 0.3, 0), models.mat(Models.WOOD), 6)
-		models.box(tool, Vector3(0.08, 0.3, 0.25), Vector3(0, 0.8, 0.12), models.mat(Models.IRON, 0.4, 0.7))
-	else:
-		# kazma
-		models.cyl(tool, 0.04, 0.04, 1.1, Vector3(0, 0.3, 0), models.mat(Models.WOOD), 6)
-		var pick := models.cyl(tool, 0.03, 0.06, 0.7, Vector3(0, 0.82, 0), models.mat(Models.IRON, 0.4, 0.7), 6)
-		pick.rotation.x = PI / 2
+	var ch := models.ott_char("woodcutter" if kind == "wood" else "miner", {"Primary": vest.lightened(0.15)}, 0.36)
 	# sırttaki yük (dönüşte görünür)
 	var load := Node3D.new()
-	load.position = Vector3(0, 1.75, -0.45)
+	# yük KayKit ölçüsünde çizilir; Blender askerinin ölçüsüne indirilir
+	load.position = Vector3(0, 0.62, -0.2)
+	load.scale = Vector3.ONE * 0.4
 	ch.root.add_child(load)
 	if kind == "wood":
 		for k in 3:

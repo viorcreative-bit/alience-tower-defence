@@ -1,8 +1,9 @@
 class_name Models
 extends RefCounted
 
-# 3D modeller: KayKit (CC0) yapı ve asker gövdeleri ile koddaki basit şekillerden kurulan
-# kuleler, atlar, kuşatma araçları ve Osmanlı yapıları. Ölçü birimi 1 kare.
+# 3D modeller: kuleler, surlar, binalar, askerler ve atlar Blender betikleriyle yapılmıştır
+# (tools/blender, assets/models/ottoman). Küçük süsler KayKit (CC0), kuşatma araçları koddaki basit şekillerden.
+# Ölçü birimi 1 kare.
 
 const D := preload("res://scripts/data.gd")
 
@@ -19,11 +20,13 @@ const BRONZE := Color("#b0813a")
 const IRON := Color("#3a3c42")
 
 var lib := {}
-var chars := {}
-var clips: AnimationLibrary
 var mats := {}
 var tex_cache := {}
 var flag_shader: Shader
+# Blender askerlerinin genel boy çarpanı (oyunda okunaklı olsun diye)
+const CHAR_SIZE := 1.3
+# Blender'da kodla yapılmış Osmanlı modelleri (tools/blender): ad -> PackedScene
+var ott := {}
 
 
 func _init() -> void:
@@ -33,15 +36,61 @@ func _init() -> void:
 		if n.ends_with("2") and not n.ends_with("_2"):
 			n = n.substr(0, n.length() - 1)
 		lib[n] = c
-	for f in ["knight", "barbarian", "rogue_hooded", "mage"]:
-		chars[f] = load("res://assets/models/%s.glb" % f)
-	var k: Node = chars.knight.instantiate()
-	var ap: AnimationPlayer = k.get_node("AnimationPlayer")
-	clips = ap.get_animation_library("")
-	for a in ["Idle", "Walking_A", "Running_A", "Sit_Chair_Idle", "Cheer"]:
-		clips.get_animation(a).loop_mode = Animation.LOOP_LINEAR
-	k.free()
 	flag_shader = load("res://shaders/flag.gdshader")
+	for f in DirAccess.get_files_at("res://assets/models/ottoman"):
+		var fn := f.trim_suffix(".remap").trim_suffix(".import")
+		if fn.ends_with(".glb") and not ott.has(fn.get_basename()):
+			var ps: PackedScene = load("res://assets/models/ottoman/" + fn)
+			_paint_mats(ps)
+			ott[fn.get_basename()] = ps
+
+
+# glTF içe aktarımı köşe rengini kullanmaz; renkler köşe renginde olduğu için paylaşılan malzemelerle değiştirilir
+func _paint_mats(ps: PackedScene) -> void:
+	var n := ps.instantiate()
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var mesh: Mesh = mi.mesh
+		for i in mesh.get_surface_count():
+			var old := mesh.surface_get_material(i)
+			var key := "paint|" + (old.resource_name if old else "Painted")
+			if not mats.has(key):
+				var m := StandardMaterial3D.new()
+				m.vertex_color_use_as_albedo = true
+				match key:
+					"paint|Metal":
+						# uyumluluk çiziminde yansıma ortamı zayıf; tam metal kararır
+						m.metallic = 0.25
+						m.roughness = 0.35
+						m.metallic_specular = 0.8
+					"paint|Glaze":
+						m.roughness = 0.4
+					_:
+						m.roughness = 0.92
+						m.metallic_specular = 0.3
+				mats[key] = m
+			mesh.surface_set_material(i, mats[key])
+	n.free()
+
+
+func ott_model(name: String) -> Node3D:
+	return ott[name].instantiate()
+
+
+# Modeldeki işaret noktası (Blender'daki boş nesne); yoksa sıfır
+func mark(model: Node3D, name: String) -> Vector3:
+	var n: Node3D = model.find_child(name, true, false)
+	if n == null:
+		return Vector3.ZERO
+	return model.to_local(n.global_position) if model.is_inside_tree() else _local_pos(model, n)
+
+
+func _local_pos(root: Node3D, n: Node3D) -> Vector3:
+	var t := Transform3D.IDENTITY
+	var c: Node = n
+	while c != null and c != root:
+		t = (c as Node3D).transform * t
+		c = c.get_parent()
+	return t.origin
 
 
 # ---------------------------------------------------------------- yardımcılar
@@ -70,31 +119,19 @@ func stone_mat(color := Color("#cdbb98"), brick := Vector2(0.16, 0.075)) -> Shad
 	return mats[key]
 
 
-# Yuvarlak taş burç: gövde, mazgallı taç, isteğe bağlı kurşun kubbe ve sancak
+# Yuvarlak taş burç (Blender modeli): kesme taş gövde, mazgallı taç, isteğe bağlı kaburgalı kurşun kubbe ve sancak.
+# Dönüş: tepe yüksekliği
 func round_tower(parent: Node3D, pos: Vector3, r: float, h: float, domed := true, flag_tex: Texture2D = null) -> float:
-	var st := stone_mat()
-	cyl(parent, r, r * 1.08, h, pos + Vector3(0, h / 2.0, 0), st, 18)
-	# taç: biraz taşan halka ve mazgallar
-	cyl(parent, r * 1.14, r * 1.06, 0.07, pos + Vector3(0, h + 0.035, 0), st, 18)
-	var n := maxi(8, int(r * 26.0))
-	for i in n:
-		var a := i * TAU / n
-		if i % 2 == 0:
-			var mb := box(parent, Vector3(r * 0.32, 0.09, 0.06), pos + Vector3(cos(a) * r * 1.08, h + 0.115, sin(a) * r * 1.08), st)
-			mb.rotation.y = -a + PI / 2
-	# mazgal pencereleri
-	for a in [0.4, 2.5, 4.6]:
-		var w := box(parent, Vector3(0.05, 0.12, 0.02), pos + Vector3(cos(a) * r * 1.03, h * 0.6, sin(a) * r * 1.03), mat(Color("#2a1e16")))
-		w.rotation.y = -a + PI / 2
-	var top := h + 0.07
-	if domed:
-		cyl(parent, r * 0.8, r * 0.8, 0.1, pos + Vector3(0, top + 0.05, 0), st, 16)
-		var d := sphere(parent, r * 0.82, pos + Vector3(0, top + 0.1, 0), mat(Color("#8a9bb2"), 0.4, 0.3), true, 18)
-		d.scale.y = 1.15
-		sphere(parent, 0.035, pos + Vector3(0, top + 0.1 + r * 0.95, 0), mat(GOLD, 0.3, 0.8), false, 8)
-		top += 0.1 + r * 0.95
+	var m := ott_model("burc_dome" if domed else "burc_open")
+	var r0 := 0.3 if domed else 0.25
+	var h0 := 1.0 if domed else 0.82
+	m.scale = Vector3(r / r0, h / h0, r / r0)
+	m.position = pos
+	m.rotation.y = randf() * TAU
+	parent.add_child(m)
+	var top := mark(m, "top").y * h / h0
 	if flag_tex:
-		pole_flag(parent, pos + Vector3(0, top, 0), 0.5, flag_tex, 0.4)
+		pole_flag(parent, pos + Vector3(0, top - (0.12 if domed else 0.0), 0), 0.5, flag_tex, 0.4)
 	return top
 
 
@@ -286,28 +323,30 @@ func nation_flag(nation: String) -> Texture2D:
 # ---------------------------------------------------------------- iskeletli askerler
 
 # Gövde: KayKit karakteri, verilen parçalar görünür, renkler çarpılır. Animasyonlar knight.glb'den gelir.
-func character(kind: String, keep: Array, tint := {}, scale := 0.3) -> Dictionary:
-	var root: Node3D = chars[kind].instantiate()
-	root.scale = Vector3.ONE * scale
+# Blender'da yapılmış iskeletli asker (assets/models/ottoman/ch_*.glb). "Primary" ve "Secondary" örgüleri
+# açık renktir; tint ile boyanır. Kemik adları (head, handslot_l/r) attach() ile kullanılabilir.
+func ott_char(kind: String, tint := {}, scale := 0.4) -> Dictionary:
+	var root: Node3D = ott["ch_" + kind].instantiate()
+	root.scale = Vector3.ONE * scale * CHAR_SIZE
 	for m in root.find_children("*", "MeshInstance3D", true, false):
-		var n := String(m.name)
-		var body_part := n.contains("Arm") or n.contains("Leg") or n.contains("Body") or n.contains("Head")
-		if not body_part and not (n in keep):
-			m.visible = false
-			continue
-		for key in tint:
-			if n.contains(key):
-				m.material_override = _tinted(m.get_active_material(0), tint[key])
-				break
-	var ap: AnimationPlayer = root.get_node_or_null("AnimationPlayer")
-	if ap == null:
-		ap = AnimationPlayer.new()
-		ap.name = "AnimationPlayer"
-		root.add_child(ap)
-	if not ap.has_animation_library(""):
-		ap.add_animation_library("", clips)
+		var key := String(m.name)
+		if tint.has(key):
+			m.material_override = _tinted(m.mesh.surface_get_material(0), tint[key])
+	var ap: AnimationPlayer = root.get_node("AnimationPlayer")
+	for a in ["Idle", "Walking_A", "Running_A", "Sit_Chair_Idle", "Cheer"]:
+		ap.get_animation(a).loop_mode = Animation.LOOP_LINEAR
 	ap.play("Idle")
+	ap.seek(randf() * 1.0, true)
 	return {"root": root, "anim": ap, "skeleton": root.get_node("Rig/Skeleton3D")}
+
+
+# Atlı: binicinin kalçası eyere oturur (binici at ölçeğinden bağımsız dünya ölçeğinde rs)
+func mount(hr: Dictionary, ch: Dictionary, rs := 0.3) -> void:
+	var k: float = rs * CHAR_SIZE / hr.scale
+	ch.root.scale = Vector3.ONE * k
+	ch.root.position = hr.saddle - Vector3(0, 0.4 * k, 0.05)
+	ch.anim.play("Sit_Chair_Idle")
+	hr.body.add_child(ch.root)
 
 
 func _tinted(base: Material, c: Color) -> Material:
@@ -336,81 +375,24 @@ func soft(c: Color, k := 0.35) -> Color:
 	return c.lerp(Color.WHITE, k)
 
 
-# Beyaz Yeniçeri börkü (kafa kemiğine)
-func add_bork(ch: Dictionary) -> void:
-	var h := attach(ch, "head")
-	h.position = Vector3(0, 0.75, 0)
-	cyl(h, 0.36, 0.42, 0.5, Vector3(0, 0.1, 0), mat(Color("#f4efe4")))
-	var fold := cyl(h, 0.3, 0.36, 0.9, Vector3(0, 0.25, -0.38), mat(Color("#f4efe4")))
-	fold.rotation.x = -1.1
-	cyl(h, 0.43, 0.43, 0.12, Vector3(0, -0.1, 0), mat(GOLD, 0.4, 0.6))
-
-
-func add_turban(ch: Dictionary, color: Color, big := false) -> void:
-	var h := attach(ch, "head")
-	h.position = Vector3(0, 0.7, 0)
-	var s := 0.62 if big else 0.5
-	var t := sphere(h, s, Vector3(0, 0.05, 0), mat(color))
-	t.scale = Vector3(1, 0.75 if big else 0.6, 1)
-	if big:
-		cyl(h, 0.12, 0.18, 0.4, Vector3(0, 0.45, 0), mat(OTTOMAN_RED))
-		sphere(h, 0.08, Vector3(0, 0.3, 0.6), mat(GOLD, 0.3, 0.8))
-
-
-func add_musket(ch: Dictionary) -> void:
-	var h := attach(ch, "handslot_r")
-	var g := Node3D.new()
-	g.rotation.x = 1.2
-	h.add_child(g)
-	cyl(g, 0.05, 0.05, 1.5, Vector3(0, 0.35, 0.1), mat(WOOD_DARK), 6)
-	cyl(g, 0.035, 0.035, 0.6, Vector3(0, 0.95, 0.1), mat(IRON, 0.4, 0.6), 6)
-
-
-func add_lance(ch: Dictionary, pennant: Color) -> void:
-	var h := attach(ch, "handslot_r")
-	cyl(h, 0.045, 0.045, 2.6, Vector3(0, 0.6, 0), mat(WOOD), 6)
-	cyl(h, 0.0, 0.09, 0.32, Vector3(0, 2.05, 0), mat(Color("#c9ced6"), 0.3, 0.7), 4)
-	box(h, Vector3(0.02, 0.2, 0.32), Vector3(0, 1.65, 0.16), mat(pennant))
-
-
-func add_bow(ch: Dictionary) -> void:
-	var h := attach(ch, "handslot_l")
-	var t := TorusMesh.new()
-	t.inner_radius = 0.38
-	t.outer_radius = 0.44
-	t.rings = 12
-	t.ring_segments = 4
-	var mi := _mi(h, t, Vector3(0, 0.2, 0), mat(WOOD_DARK))
-	mi.rotation.z = PI / 2
-	mi.scale = Vector3(1, 1, 0.5)
-
-
 # ---------------------------------------------------------------- at
 
-# Kutulardan at: gövde, boyun, baş, dört bacak (salınan eklemler), kuyruk. Burnu +z.
+# At (Blender modeli): gövde, örtü ("Primary"), dört bacak "leg0".."leg3" kalçadan döner. Burnu +z.
 func horse(color: Color, caparison: Color, s := 0.3) -> Dictionary:
 	var root := Node3D.new()
-	root.scale = Vector3.ONE * s
-	var body := mat(color)
-	var dark := mat(color.darkened(0.35))
-	box(root, Vector3(0.55, 0.5, 1.2), Vector3(0, 1.0, 0), body)
-	box(root, Vector3(0.6, 0.3, 0.9), Vector3(0, 1.05, -0.05), mat(caparison))
-	var neck := box(root, Vector3(0.3, 0.6, 0.3), Vector3(0, 1.4, 0.55), body)
-	neck.rotation.x = 0.5
-	var head := box(root, Vector3(0.26, 0.28, 0.55), Vector3(0, 1.72, 0.82), body)
-	head.rotation.x = 0.35
-	box(root, Vector3(0.08, 0.5, 0.3), Vector3(0, 1.5, 0.42), dark)
-	var tail := box(root, Vector3(0.1, 0.55, 0.12), Vector3(0, 1.0, -0.68), dark)
-	tail.rotation.x = -0.4
+	var m := ott_model("horse")
+	m.scale = Vector3.ONE * s
+	root.add_child(m)
+	var body: MeshInstance3D = m.get_node("Horse")
+	body.material_override = _tinted(body.mesh.surface_get_material(0), color)
 	var legs := []
-	for p in [Vector3(-0.18, 0.78, 0.45), Vector3(0.18, 0.78, 0.45), Vector3(-0.18, 0.78, -0.45), Vector3(0.18, 0.78, -0.45)]:
-		var pivot := Node3D.new()
-		pivot.position = p
-		root.add_child(pivot)
-		box(pivot, Vector3(0.13, 0.75, 0.13), Vector3(0, -0.38, 0), body)
-		box(pivot, Vector3(0.15, 0.1, 0.16), Vector3(0, -0.74, 0), dark)
-		legs.append(pivot)
-	return {"root": root, "legs": legs, "phase": randf() * TAU}
+	for i in 4:
+		var leg: MeshInstance3D = body.get_node("leg%d" % i)
+		leg.material_override = body.material_override
+		legs.append(leg)
+	var cap: MeshInstance3D = body.get_node("Primary")
+	cap.material_override = _tinted(cap.mesh.surface_get_material(0), caparison)
+	return {"root": root, "body": body, "legs": legs, "phase": randf() * TAU, "scale": s, "saddle": mark(body, "saddle")}
 
 
 func animate_horse(h: Dictionary, t: float, gait: float) -> void:
@@ -432,33 +414,25 @@ func enemy(type: String, nation: String) -> Dictionary:
 	var info := {"root": root, "type": type}
 	match type:
 		"infantry":
-			var ch := character("barbarian", ["1H_Axe", "Barbarian_Round_Shield"], {"Body": soft(p), "Arm": soft(p, 0.5), "Shield": soft(sec), "Cape": soft(p)}, 0.27)
+			var ch := ott_char("enemy_infantry", {"Primary": soft(p, 0.15), "Secondary": soft(sec, 0.1)}, 0.4)
 			root.add_child(ch.root)
 			info.char = ch
 			info.walk = "Walking_A"
-			_helmet(ch, metal, 0.5)
 		"knight":
-			var ch := character("knight", ["1H_Sword", "Rectangle_Shield", "Knight_Helmet", "Knight_Cape"], {"Body": soft(metal, 0.2), "Cape": soft(p, 0.15), "Shield": soft(p, 0.2), "Helmet": soft(metal, 0.1)}, 0.31)
+			var ch := ott_char("enemy_knight", {"Primary": soft(p, 0.1), "Secondary": soft(metal, 0.25)}, 0.44)
 			root.add_child(ch.root)
 			info.char = ch
 			info.walk = "Walking_A"
 		"light", "horseArcher", "commander":
 			var big := type == "commander"
-			var hs := 0.3 if not big else 0.4
-			var hr := horse(Color("#7a5232") if type != "horseArcher" else Color("#5a4636"), p, hs)
+			var hs := 0.3 if not big else 0.38
+			var hr := horse(Color("#8a5e3a") if type != "horseArcher" else Color("#6a5444"), p, hs)
 			root.add_child(hr.root)
-			var who := "rogue_hooded" if type != "commander" else "knight"
-			var keep := ["1H_Crossbow"] if type == "horseArcher" else (["Knight_Helmet", "Knight_Cape", "1H_Sword"] if big else ["Knight"])
-			var ch := character(who, keep, {"Body": soft(p), "Cape": soft(p, 0.15), "Head_Hooded": soft(sec, 0.2), "Helmet": soft(metal, 0.1)}, 0.27 if not big else 0.36)
-			ch.root.position = Vector3(0, 0.95 * hs - 0.02, -0.02)
-			ch.anim.play("Sit_Chair_Idle")
-			hr.root.add_child(ch.root)
-			ch.root.scale = Vector3.ONE * ((0.27 if not big else 0.36) / hs)
-			ch.root.position = Vector3(0, 0.85, -0.05)
-			if type == "light":
-				add_lance(ch, sec)
+			var kind: String = {"light": "enemy_rider", "horseArcher": "enemy_horse_archer", "commander": "enemy_commander"}[type]
+			var ch := ott_char(kind, {"Primary": soft(p, 0.15), "Secondary": soft(sec, 0.15)})
+			mount(hr, ch, 0.3 if not big else 0.38)
 			if big:
-				var f := pole_flag(hr.root, Vector3(-0.3, 1.0, -0.4), 2.2, nation_flag(nation), 0.9)
+				var f := pole_flag(hr.root, Vector3(-0.1, 0.3, -0.12), 0.65, nation_flag(nation), 0.27)
 				f.rotation.y = PI / 2
 			info.horse = hr
 			info.char = ch
@@ -468,15 +442,43 @@ func enemy(type: String, nation: String) -> Dictionary:
 		"siegeTower":
 			_build_siege_tower(root, p, nation)
 			info.rolls = true
+		"trebuchet", "elephant", "bossTower":
+			_build_boss(root, info, type, p, nation)
 	return info
 
 
-func _helmet(ch: Dictionary, metal: Color, s: float) -> void:
-	var h := attach(ch, "head")
-	h.position = Vector3(0, 0.75, 0)
-	var dm := sphere(h, s, Vector3.ZERO, mat(metal, 0.35, 0.7), true)
-	dm.scale = Vector3(1.05, 1, 1.05)
-	cyl(h, 0.02, 0.02, 0.35, Vector3(0, s + 0.1, 0), mat(metal, 0.35, 0.7), 6)
+# Patron modelleri (Blender, boss_*.glb): "Primary" millet rengine boyanır. Mancınıkta "arm" atış kolu,
+# filde "leg0".."leg3" ve "trunk", dev kulede "bridge" iniş köprüsü ve "flag" sancak yeri vardır.
+func _build_boss(root: Node3D, info: Dictionary, type: String, p: Color, nation: String) -> void:
+	var name: String = {"trebuchet": "boss_trebuchet", "elephant": "boss_elephant", "bossTower": "boss_tower"}[type]
+	var m := ott_model(name)
+	m.scale = Vector3.ONE * {"trebuchet": 0.9, "elephant": 0.85, "bossTower": 0.8}[type]
+	root.add_child(m)
+	for prim in m.find_children("Primary*", "MeshInstance3D", true, false):
+		prim.material_override = _tinted(prim.mesh.surface_get_material(0), soft(p, 0.1))
+	var wheels := []
+	for i in 4:
+		var w := m.find_child("wheel%d" % i, true, false)
+		if w:
+			wheels.append(w)
+	if wheels.size():
+		root.set_meta("wheels", wheels)
+	match type:
+		"trebuchet":
+			info.arm = m.find_child("arm", true, false)
+		"elephant":
+			var legs := []
+			for i in 4:
+				legs.append(m.find_child("leg%d" % i, true, false))
+			info.horse = {"legs": legs, "phase": randf() * TAU}
+			info.trunk = m.find_child("trunk", true, false)
+		"bossTower":
+			info.bridge = m.find_child("bridge", true, false)
+			if info.bridge:
+				info.bridge.rotation.x = -1.45
+			var fl := m.find_child("flag", true, false)
+			if fl:
+				pole_flag(m, _local_pos(m, fl), 0.5, nation_flag(nation), 0.3)
 
 
 func _build_ram(root: Node3D, p: Color, sec: Color) -> void:
@@ -533,45 +535,96 @@ func troop(kind: String) -> Dictionary:
 	var root := Node3D.new()
 	var info := {"root": root, "kind": kind}
 	match kind:
-		"janissary":
-			var ch := character("knight", ["1H_Sword"], {"Body": Color("#3e6fb5"), "Arm": Color("#c8423a"), "Leg": Color("#e8e0cc")}, 0.27)
-			add_bork(ch)
-			root.add_child(ch.root)
-			info.char = ch
-		"archer":
-			var ch := character("rogue_hooded", ["Rogue_Cape"], {"Body": Color("#4a8a4e"), "Cape": Color("#b3202a"), "Head_Hooded": Color("#e8e0cc")}, 0.26)
-			add_bow(ch)
+		"janissary", "archer", "sufi":
+			var ch := ott_char(kind, {}, 0.4)
 			root.add_child(ch.root)
 			info.char = ch
 		"sipahi":
-			var hr := horse(Color("#e8e2d6"), OTTOMAN_RED, 0.32)
+			var hr := horse(Color("#f2eee6"), OTTOMAN_RED, 0.32)
 			root.add_child(hr.root)
-			var ch := character("knight", ["Round_Shield"], {"Body": Color("#b3202a"), "Shield": GOLD, "Arm": Color("#b3202a")}, 0.3)
-			add_turban(ch, Color("#f4efe4"))
-			add_lance(ch, OTTOMAN_RED)
-			ch.anim.play("Sit_Chair_Idle")
-			ch.root.scale = Vector3.ONE * (0.3 / 0.32)
-			ch.root.position = Vector3(0, 0.85, -0.05)
-			hr.root.add_child(ch.root)
+			var ch := ott_char("sipahi")
+			mount(hr, ch, 0.32)
 			info.horse = hr
-			info.char = ch
-		"sufi":
-			# beyaz tennure, uzun keçe sikke, elinde asa
-			var ch := character("mage", [], {"Body": Color("#efe9dc"), "Arm": Color("#efe9dc"), "Leg": Color("#d9cfba")}, 0.26)
-			var h := attach(ch, "head")
-			h.position = Vector3(0, 0.7, 0)
-			cyl(h, 0.36, 0.42, 1.05, Vector3(0, 0.45, 0), mat(Color("#8a6a48")), 12)
-			var hs := attach(ch, "handslot_r")
-			cyl(hs, 0.04, 0.04, 1.9, Vector3(0, 0.35, 0), mat(WOOD), 6)
-			root.add_child(ch.root)
 			info.char = ch
 	return info
 
 
+# Kahraman komutan: kendi modeli (ch_<id>.glb) varsa o, yoksa geçici gövde; ayağının altında renkli halka
+func hero(id: String) -> Dictionary:
+	var h: Dictionary = D.HEROES[id]
+	var root := Node3D.new()
+	var own: bool = ott.has("ch_" + id)
+	var ch := ott_char(id if own else h.model, {}, 0.44 if own else 0.47)
+	root.add_child(ch.root)
+	var t := TorusMesh.new()
+	t.inner_radius = 0.17
+	t.outer_radius = 0.21
+	t.rings = 24
+	t.ring_segments = 4
+	var ring := MeshInstance3D.new()
+	ring.mesh = t
+	ring.material_override = glow_mat(Color(h.ring) * 1.6)
+	ring.position.y = 0.02
+	ring.scale.y = 0.2
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(ring)
+	return {"root": root, "kind": "hero", "char": ch}
+
+
 func sultan() -> Dictionary:
-	var ch := character("mage", [], {"Body": Color("#b3202a"), "Arm": Color("#b3202a"), "Leg": Color("#e0b24a")}, 0.27)
-	add_turban(ch, Color("#fbf8f0"), true)
+	return ott_char("sultan", {}, 0.42)
+
+
+# Oyuncunun hükümdarı (assets/models/ottoman/ch_king_*.glb). Seviye parçaları "L2".."L5" iskeletin altındadır:
+# L2 başlıkta mücevher, L3 pelerin, L4 kılıç ya da asa, L5 altın süsler. Seviyeyle biraz da büyür.
+func king(country: String, level: int) -> Dictionary:
+	var ch := ott_char("king_" + country, {}, 0.42 * (1.0 + 0.03 * (level - 1)))
+	for n in ch.skeleton.get_children():
+		var nm := String(n.name)
+		if nm.length() == 2 and nm.begins_with("L") and nm[1].is_valid_int():
+			n.visible = int(nm.substr(1)) <= level
 	return ch
+
+
+# Atlı hükümdar: beyaz at, devlet renginde örtü; sağ elinde sancak (oyuncunun sancak dokusu, Osmanlı'da
+# al sancak). Sancak direği "flag_holder" ile ele bağlıdır; Town her karede onu dik tutar.
+func king_rider(country: String, level: int) -> Dictionary:
+	var root := Node3D.new()
+	var cap: Color = OTTOMAN_RED if country == "ottoman" else Color(D.NATIONS[country].primary)
+	var hr := horse(Color("#f4f0e8"), cap, 0.42)
+	root.add_child(hr.root)
+	var ch := king(country, level)
+	mount(hr, ch, 0.5 * (1.0 + 0.03 * (level - 1)))
+	# sağ eldeki kılıç ya da asa sancağa yer açsın
+	var l4: Node3D = (ch.skeleton as Node).get_node_or_null("L4")
+	if l4:
+		l4.visible = false
+	var holder := attach(ch, "handslot_r")
+	var pole := Node3D.new()
+	holder.add_child(pole)
+	cyl(pole, 0.01, 0.012, 1.15, Vector3(0, 0.35, 0), mat(WOOD_DARK), 6)
+	sphere(pole, 0.025, Vector3(0, 0.94, 0), mat(GOLD, 0.3, 0.8), false, 8)
+	var f := flag(ottoman_flag(), 0.48, 0.32)
+	f.position = Vector3(0.01, 0.75, 0)
+	pole.add_child(f)
+	return {"root": root, "horse": hr, "char": ch, "pole": pole, "flag": f}
+
+
+# Surlardaki ve kulelerdeki sancaklar tek bir dokuyu paylaşır; oyuncu başka devlet seçince o dokunun resmi
+# değiştirilir, böylece bütün sancaklar yerinde güncellenir.
+func set_player_flag(country: String) -> void:
+	var tex: ImageTexture = ottoman_flag()
+	if not tex_cache.has("ottoman_img"):
+		tex_cache.ottoman_img = tex.get_image()
+	var img: Image = tex_cache.ottoman_img if country == "ottoman" else nation_flag(country).get_image()
+	tex.set_image(img)
+	# surlarda asılı sancaklar (assets/ui/banner*.png)
+	if mats.has("banner_mat"):
+		mats.banner_mat.albedo_texture = load("res://assets/ui/%s.png" % banner_name(country))
+
+
+static func banner_name(country: String) -> String:
+	return "banner" if country == "ottoman" else "banner_" + country
 
 
 # ---------------------------------------------------------------- kuleler
@@ -586,57 +639,38 @@ func tower(type: String, level: int) -> Dictionary:
 	root.add_child(body)
 	match type:
 		"archer":
-			# yuvarlak taş kule, mazgallı taç, tepede okçu
-			var top := round_tower(body, Vector3.ZERO, 0.27, 0.66, false)
+			# yuvarlak kesme taş kule (Blender modeli), taşan mazgallı taç, tepede okçu
+			var m := ott_model("archer_tower_%d" % level)
+			body.add_child(m)
 			var head := Node3D.new()
-			head.position = Vector3(0, top, 0)
+			head.position = mark(m, "top")
 			body.add_child(head)
-			var ch := character("rogue_hooded", ["Rogue_Cape"], {"Body": Color("#b3202a"), "Cape": Color("#7a1a20"), "Head_Hooded": Color("#e8e0cc")}, 0.22)
-			add_bow(ch)
+			var ch := ott_char("tower_archer", {}, 0.34)
 			head.add_child(ch.root)
 			info.head = head
 			info.char = ch
-			cyl(body, 0.3, 0.33, 0.06, Vector3(0, 0.03, 0), stone_mat(Color("#a89878")), 18)
+			info.flag = mark(m, "flag")
 			if level >= 2:
 				add_prop(body, "bucket_arrows", Vector3(0.3, 0, 0.22), 1.1)
 		"tar":
-			cyl(body, 0.32, 0.36, 0.22, Vector3(0, 0.11, 0), stone_mat(), 16)
-			cyl(body, 0.26, 0.2, 0.22, Vector3(0, 0.33, 0), mat(Color("#b8743a"), 0.35, 0.7), 14)
-			cyl(body, 0.25, 0.25, 0.02, Vector3(0, 0.44, 0), mat(Color("#141016"), 0.2), 14)
-			for a in [0.0, 2.1, 4.2]:
-				box(body, Vector3(0.05, 0.3, 0.05), Vector3(cos(a) * 0.3, 0.27, sin(a) * 0.3), mat(IRON, 0.4, 0.5))
-			info.smoke = Vector3(0, 0.5, 0)
-			info.fire = Vector3(0, 0.18, 0.2)
+			var m := ott_model("tar_tower")
+			body.add_child(m)
+			info.smoke = mark(m, "smoke")
+			info.fire = mark(m, "fire")
 		"cannon":
-			box(body, Vector3(0.62, 0.12, 0.62), Vector3(0, 0.06, 0), stone_mat())
-			var head := Node3D.new()
-			head.position = Vector3(0, 0.12, 0)
-			body.add_child(head)
-			box(head, Vector3(0.3, 0.14, 0.42), Vector3(0, 0.1, -0.04), mat(WOOD))
-			for x in [-0.17, 0.17]:
-				var w := cyl(head, 0.12, 0.12, 0.05, Vector3(x, 0.12, -0.02), mat(WOOD_DARK), 12)
-				w.rotation.z = PI / 2
-			var barrel := Node3D.new()
-			barrel.position = Vector3(0, 0.24, 0)
-			head.add_child(barrel)
-			var b := cyl(barrel, 0.06, 0.085, 0.6, Vector3(0, 0, 0.12), mat(BRONZE, 0.35, 0.8), 12)
-			b.rotation.x = PI / 2 - 0.12
-			sphere(barrel, 0.09, Vector3(0, -0.02, -0.18), mat(BRONZE, 0.35, 0.8), false, 10)
-			info.head = head
-			info.barrel = barrel
-			info.muzzle = Vector3(0, 0.38, 0.45)
+			# taş tabya; "head" (kundak) döner, "barrel" (tunç namlu) geri teper
+			var m := ott_model("cannon_tower")
+			body.add_child(m)
+			info.head = m.find_child("head", true, false)
+			info.barrel = m.find_child("barrel", true, false)
+			info.muzzle = Vector3(0, 0.17, 0.42)
 		"musket":
-			cyl(body, 0.36, 0.42, 0.26, Vector3(0, 0.13, 0), stone_mat(Color("#bfa982")), 16)
-			cyl(body, 0.37, 0.37, 0.05, Vector3(0, 0.27, 0), stone_mat(), 16)
-			for i in 8:
-				var a := i * TAU / 8.0
-				sphere(body, 0.07, Vector3(cos(a) * 0.33, 0.31, sin(a) * 0.33), mat(Color("#c9b38a")), false, 8)
+			var m := ott_model("musket_tower")
+			body.add_child(m)
 			var head := Node3D.new()
-			head.position = Vector3(0, 0.28, 0)
+			head.position = mark(m, "top")
 			body.add_child(head)
-			var ch := character("knight", [], {"Body": Color("#3e6fb5"), "Arm": Color("#c8423a"), "Leg": Color("#e8e0cc")}, 0.27)
-			add_bork(ch)
-			add_musket(ch)
+			var ch := ott_char("janissary_musket", {}, 0.4)
 			head.add_child(ch.root)
 			info.head = head
 			info.char = ch
@@ -644,11 +678,10 @@ func tower(type: String, level: int) -> Dictionary:
 	# seviye düğmeleri ve 3. seviyede sancak
 	for i in level:
 		sphere(root, 0.03, Vector3(-0.12 + i * 0.12, 0.03, 0.42), mat(GOLD, 0.3, 0.8), false, 8)
-	if level >= 3:
-		var top := 0.73 if type == "archer" else 0.6
-		pole_flag(root, Vector3(0.2, top, -0.1), 0.45, ottoman_flag(), 0.26)
-	elif type == "archer":
-		pole_flag(root, Vector3(0.2, 0.73, -0.1), 0.38, ottoman_flag(), 0.22)
+	if type == "archer":
+		pole_flag(body, info.flag, 0.42 if level >= 3 else 0.38, ottoman_flag(), 0.26 if level >= 3 else 0.22)
+	elif level >= 3:
+		pole_flag(root, Vector3(0.2, 0.6, -0.1), 0.45, ottoman_flag(), 0.26)
 	return info
 
 
@@ -659,139 +692,29 @@ func building(id: String, level: int) -> Node3D:
 	if level <= 0:
 		_empty_plot(root)
 		return root
-	var s: float = [0.0, 0.88, 1.0, 1.12][level]
+	# Blender modelleri arsanın ~%65'ini kaplar; 1.45 ile arsayı doldurup biraz taşar (heybetli dursun)
+	var s: float = [0.0, 0.95, 1.05, 1.12][level] * 1.45
 	var g := Node3D.new()
-	g.scale = Vector3.ONE * s
+	# Saray, Cami ve Medrese Blender'da yüksek yapıldı; ötekiler biraz yukarı uzatılır ki şehir daha heybetli dursun
+	g.scale = Vector3(s, s * (1.0 if id in ["palace", "mosque", "medrese"] else 1.2), s)
 	root.add_child(g)
-	match id:
-		"palace":
-			add_prop(g, "building_castle", Vector3(0, 0, -0.05), 0.42)
-			if level >= 2:
-				for x in [-0.42, 0.42]:
-					ottoman_block(g, Vector3(x, 0, 0.12), Vector3(0.3, 0.26, 0.3), 0.13)
-			if level >= 3:
-				minaret(g, Vector3(-0.42, 0, -0.32), 0.95)
-				minaret(g, Vector3(0.42, 0, -0.32), 0.95)
-				pole_flag(g, Vector3(0, 1.62, -0.05), 0.45, ottoman_flag(), 0.32)
-		"school":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.62, 0.3, 0.5), 0.17)
-			if level >= 2:
-				ottoman_block(g, Vector3(-0.08, 0, 0.36), Vector3(0.3, 0.2, 0.2), 0.0)
-			if level >= 3:
-				dome(g, Vector3(0.24, 0.36, -0.08), 0.1, 0.03)
-		"barracks":
-			add_prop(g, "building_barracks", Vector3.ZERO, 0.62, PI)
-			if level >= 2:
-				add_prop(g, "weaponrack", Vector3(-0.35, 0, 0.36), 1.4)
-			if level >= 3:
-				pole_flag(g, Vector3(0.38, 0.2, 0.36), 0.7, ottoman_flag(), 0.3)
-		"archery":
-			add_prop(g, "building_archeryrange", Vector3.ZERO, 0.55, PI / 2)
-			if level >= 2:
-				add_prop(g, "target", Vector3(0.3, 0, 0.38), 1.3, PI)
-			if level >= 3:
-				add_prop(g, "bucket_arrows", Vector3(-0.3, 0, 0.38), 1.4)
-		"hospital":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.7, 0.3, 0.55), 0.2)
-			if level >= 2:
-				ottoman_block(g, Vector3(0, 0, 0.36), Vector3(0.5, 0.18, 0.18), 0.0)
-			if level >= 3:
-				dome(g, Vector3(-0.25, 0.36, 0), 0.09, 0.02)
-				dome(g, Vector3(0.25, 0.36, 0), 0.09, 0.02)
-		"cavalry":
-			add_prop(g, "building_tavern", Vector3(0, 0, -0.1), 0.5, PI)
-			for x in [-0.38, -0.12, 0.14, 0.4]:
-				box(g, Vector3(0.04, 0.16, 0.04), Vector3(x, 0.08, 0.38), mat(WOOD_DARK))
-			box(g, Vector3(0.82, 0.03, 0.03), Vector3(0, 0.13, 0.38), mat(WOOD))
-			if level >= 2:
-				var hr := horse(Color("#e8e2d6"), OTTOMAN_RED, 0.18)
-				hr.root.position = Vector3(0.25, 0, 0.25)
-				hr.root.rotation.y = 1.2
-				g.add_child(hr.root)
-			if level >= 3:
-				pole_flag(g, Vector3(-0.38, 0.16, 0.38), 0.6, ottoman_flag(), 0.26)
-		"science":
-			cyl(g, 0.24, 0.27, 0.5, Vector3(0, 0.25, 0), mat(WHITEWASH), 16)
-			box(g, Vector3(0.56, 0.06, 0.56), Vector3(0, 0.03, 0), mat(STONE_DARK))
-			cyl(g, 0.255, 0.255, 0.03, Vector3(0, 0.42, 0), mat(IZNIK, 0.4), 16)
-			dome(g, Vector3(0, 0.5, 0), 0.22, 0.0)
-			if level >= 2:
-				ottoman_block(g, Vector3(0.0, 0, 0.36), Vector3(0.5, 0.16, 0.16), 0.0)
-			if level >= 3:
-				var tel := cyl(g, 0.03, 0.04, 0.4, Vector3(0.15, 0.82, 0.1), mat(BRONZE, 0.35, 0.8), 8)
-				tel.rotation.x = 0.8
-		"religion":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.6, 0.32, 0.5), 0.18)
-			if level >= 2:
-				for x in [-0.33, 0.33]:
-					dome(g, Vector3(x, 0.38, 0.14), 0.07, 0.02)
-			if level >= 3:
-				pole_flag(g, Vector3(0.3, 0.38, -0.2), 0.45, ottoman_flag(), 0.24)
-		"court":
-			ottoman_block(g, Vector3(0, 0, 0), Vector3(0.66, 0.34, 0.52), 0.0)
-			# revak sütunları
-			for x in [-0.27, -0.09, 0.09, 0.27]:
-				cyl(g, 0.025, 0.025, 0.28, Vector3(x, 0.2, 0.33), mat(WHITEWASH), 8)
-			box(g, Vector3(0.7, 0.04, 0.18), Vector3(0, 0.36, 0.3), mat(Color("#c4553a")))
-			if level >= 2:
-				dome(g, Vector3(0, 0.62, 0), 0.12, 0.04)
-			if level >= 3:
-				cyl(g, 0.08, 0.09, 0.5, Vector3(-0.3, 0.45, -0.18), mat(WHITEWASH), 10)
-				cyl(g, 0.0, 0.1, 0.2, Vector3(-0.3, 0.8, -0.18), mat(LEAD, 0.5, 0.3), 10)
-		"market":
-			# Çarşı: kubbeli bedesten, önünde tenteli tezgâhlar; seviyeyle tezgâh ve mal artar
-			add_prop(g, "building_market", Vector3(0, 0, -0.1), 0.4, PI)
-			var tents := [[OTTOMAN_RED, Vector3(-0.22, 0, 0.26)]]
-			if level >= 2:
-				tents.append([IZNIK, Vector3(0.05, 0, 0.3)])
-			if level >= 3:
-				tents.append([Color("#3d7a3a"), Vector3(0.28, 0, 0.26)])
-				dome(g, Vector3(0.0, 0.42, -0.1), 0.1, 0.03)
-			for t in tents:
-				var tp: Vector3 = t[1]
-				for c in [Vector3(-0.08, 0, -0.06), Vector3(0.08, 0, -0.06), Vector3(-0.08, 0, 0.06), Vector3(0.08, 0, 0.06)]:
-					cyl(g, 0.008, 0.008, 0.22, tp + c + Vector3(0, 0.11, 0), mat(WOOD), 5)
-				box(g, Vector3(0.2, 0.015, 0.16), tp + Vector3(0, 0.23, 0), mat(t[0]))
-				box(g, Vector3(0.17, 0.05, 0.08), tp + Vector3(0, 0.07, 0.03), mat(WOOD_DARK))
-				sphere(g, 0.025, tp + Vector3(-0.04, 0.11, 0.03), mat(GOLD, 0.3, 0.8), false, 6)
-				sphere(g, 0.025, tp + Vector3(0.04, 0.11, 0.03), mat(Color("#b3202a")), false, 6)
-		"workshop":
-			# Odun-Demir Ocağı: demirhane, odun yığını, örs; seviyeyle kereste atölyesi ve ocak eklenir
-			add_prop(g, "building_blacksmith", Vector3(0.08, 0, -0.06), 0.36, PI)
-			add_prop(g, "resource_lumber", Vector3(-0.24, 0.0, 0.22), 0.5, 0.3)
-			box(g, Vector3(0.08, 0.06, 0.05), Vector3(0.2, 0.09, 0.3), mat(IRON, 0.4, 0.7))
-			cyl(g, 0.03, 0.04, 0.06, Vector3(0.2, 0.03, 0.3), mat(WOOD_DARK), 6)
-			for k in 3:
-				sphere(g, 0.035, Vector3(-0.02 + k * 0.05, 0.035, 0.32), mat(Color("#4a4440"), 0.6, 0.5), false, 6)
-			if level >= 2:
-				add_prop(g, "resource_lumber", Vector3(-0.3, 0.0, -0.05), 0.45, 1.6)
-				add_prop(g, "wheelbarrow", Vector3(0.32, 0, 0.12), 0.3, 0.6)
-			if level >= 3:
-				add_prop(g, "resource_stone", Vector3(-0.05, 0.0, 0.33), 0.45, 0.9)
-				pole_flag(g, Vector3(-0.32, 0, -0.3), 0.55, ottoman_flag(), 0.22)
-		"kitchen":
-			# Yemekhane: uzun yapı, ocak bacası, önünde kazanlar
-			ottoman_block(g, Vector3(0, 0, -0.08), Vector3(0.66, 0.3, 0.42), 0.0)
-			box(g, Vector3(0.1, 0.32, 0.1), Vector3(0.24, 0.5, -0.18), mat(STONE_DARK))
-			var pots := [Vector3(-0.18, 0, 0.28)]
-			if level >= 2:
-				pots.append(Vector3(0.05, 0, 0.3))
-			if level >= 3:
-				pots.append(Vector3(0.27, 0, 0.27))
-				dome(g, Vector3(-0.15, 0.36, -0.08), 0.1, 0.03)
-			for pp in pots:
-				cyl(g, 0.07, 0.05, 0.08, pp + Vector3(0, 0.04, 0), mat(STONE_DARK), 8)
-				cyl(g, 0.075, 0.06, 0.09, pp + Vector3(0, 0.12, 0), mat(IRON, 0.5, 0.6), 10)
-		"mosque":
-			box(g, Vector3(0.62, 0.06, 0.62), Vector3(0, 0.03, 0), mat(STONE_DARK))
-			box(g, Vector3(0.5, 0.3, 0.5), Vector3(0, 0.21, 0), mat(WHITEWASH))
-			box(g, Vector3(0.51, 0.03, 0.51), Vector3(0, 0.3, 0), mat(IZNIK, 0.4))
-			dome(g, Vector3(0, 0.36, 0), 0.24, 0.05)
-			for x in [-0.2, 0.2]:
-				dome(g, Vector3(x, 0.36, 0.2), 0.08, 0.0)
-			var spots := [Vector3(-0.3, 0, 0.3), Vector3(0.3, 0, 0.3), Vector3(-0.3, 0, -0.3), Vector3(0.3, 0, -0.3)]
-			for i in D.CITY.minarets[level]:
-				minaret(g, spots[i], 0.95)
+	# Blender modeli: gövde + "L2", "L3" parçaları; Cami'de minareler "M1".."M4"
+	# kendi modeli henüz yoksa (Medrese) Mektep'in gövdesi
+	var m := ott_model("b_" + id if ott.has("b_" + id) else "b_school")
+	g.add_child(m)
+	for c in m.find_children("*", "Node3D", true, false):
+		var n := String(c.name)
+		if n == "L2" or n == "L3":
+			c.visible = level >= int(n.substr(1))
+		elif n.length() == 2 and n.begins_with("M"):
+			c.visible = int(n.substr(1)) <= D.CITY.minarets[level]
+	if level >= 3 and m.find_child("flag", true, false):
+		pole_flag(g, mark(m, "flag"), 0.4, ottoman_flag(), 0.24)
+	if id == "cavalry" and level >= 2:
+		var hr := horse(Color("#e8e2d6"), OTTOMAN_RED, 0.16)
+		hr.root.position = Vector3(0.05, 0, 0.12)
+		hr.root.rotation.y = 1.2
+		g.add_child(hr.root)
 	# seviye düğmeleri
 	for i in level:
 		sphere(root, 0.028, Vector3(-0.1 + i * 0.1, 0.03, 0.46), mat(GOLD, 0.3, 0.8), false, 8)

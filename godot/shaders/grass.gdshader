@@ -5,6 +5,8 @@ render_mode cull_disabled, diffuse_burley;
 uniform vec3 root_col : source_color = vec3(0.20, 0.38, 0.10);
 uniform vec3 tip_col : source_color = vec3(0.52, 0.74, 0.24);
 uniform float wind = 1.0;
+uniform vec3 tint : source_color = vec3(1.0);
+uniform float snow = 0.0;
 
 varying float h;
 
@@ -19,7 +21,7 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = mix(root_col, tip_col, h) * COLOR.rgb;
+	ALBEDO = mix(mix(root_col, tip_col, h) * COLOR.rgb * tint, vec3(0.92, 0.94, 0.97), snow * (0.3 + 0.7 * h));
 	ROUGHNESS = 0.9;
 	SPECULAR = 0.1;
 }

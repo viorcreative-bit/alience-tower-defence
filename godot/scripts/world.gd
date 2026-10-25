@@ -19,6 +19,14 @@ var camp_nation := ""
 var fire_mat: StandardMaterial3D
 var rng := RandomNumberGenerator.new()
 var blocked := {}
+var path_key := ""  # kurulduğu yol (main, kuşatma değişince yeniden kurar)
+var ground_mat: ShaderMaterial
+var grass_mat: ShaderMaterial
+var weather_key := ""  # gösterilen mevsim|hava
+var weather_dim := 1.0  # yağmurda ve siste güneş kısılır
+var fog_near := false
+var rain: CPUParticles3D
+var snowfall: CPUParticles3D
 
 const LIGHTS := [
 	{"sun_rot": Vector3(-58, -150, 0), "sun_col": Color(1.0, 0.95, 0.86), "sun_e": 2.4,
@@ -37,6 +45,7 @@ func setup(m: Models, g: Game) -> void:
 	models = m
 	game = g
 	rng.seed = D.MAP.seed
+	path_key = game.map_key()
 	fire_mat = StandardMaterial3D.new()
 	fire_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	fire_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -52,6 +61,7 @@ func setup(m: Models, g: Game) -> void:
 	_build_work_sites()
 	_build_camp()
 	_build_decor()
+	_build_weather()
 	apply_light(true)
 
 
@@ -123,7 +133,7 @@ func apply_light(instant := false) -> void:
 	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(sun, "rotation_degrees", p.sun_rot, dur)
 	tw.tween_property(sun, "light_color", p.sun_col, dur)
-	tw.tween_property(sun, "light_energy", p.sun_e, dur)
+	tw.tween_property(sun, "light_energy", p.sun_e * weather_dim, dur)
 	tw.tween_property(sky_mat, "sky_top_color", p.top, dur)
 	tw.tween_property(sky_mat, "sky_horizon_color", p.hor, dur)
 	tw.tween_property(sky_mat, "ground_horizon_color", p.hor, dur)
@@ -132,7 +142,87 @@ func apply_light(instant := false) -> void:
 	tw.tween_property(env, "ambient_light_color", p.amb_col, dur)
 	tw.tween_property(env, "fog_light_color", p.fog, dur)
 	tw.tween_property(env, "tonemap_exposure", p.exp, dur)
+	tw.tween_property(env, "fog_depth_begin", 20.0 if fog_near else 34.0, dur)
+	tw.tween_property(env, "fog_depth_end", 58.0 if fog_near else 80.0, dur)
 	tw.tween_method(func(v): torch_level = v, torch_level, p.torch, dur)
+
+
+# ---------------------------------------------------------------- hava ve mevsim
+
+func _build_weather() -> void:
+	# tween başlangıç değeri okuyabilsin diye gölgelendirici değerleri baştan yazılır
+	for m in [ground_mat, grass_mat]:
+		m.set_shader_parameter("snow", 0.0)
+	ground_mat.set_shader_parameter("season_tint", Vector3.ONE)
+	grass_mat.set_shader_parameter("tint", Vector3.ONE)
+	rain = CPUParticles3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(0.025, 0.45)
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rm.albedo_color = Color(0.82, 0.88, 1.0, 0.7)
+	rm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	q.material = rm
+	rain.mesh = q
+	rain.amount = 900
+	rain.lifetime = 0.7
+	rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	rain.emission_box_extents = Vector3(7.0, 0.1, 10.5)
+	rain.direction = Vector3(0.1, -1, 0)
+	rain.spread = 3
+	rain.gravity = Vector3(0, -6, 0)
+	rain.initial_velocity_min = 9.0
+	rain.initial_velocity_max = 11.0
+	rain.position = Vector3(0, 7.5, 0)
+	rain.emitting = false
+	rain.visibility_aabb = AABB(Vector3(-9, -9, -12), Vector3(18, 10, 24))
+	add_child(rain)
+	snowfall = CPUParticles3D.new()
+	var sq := QuadMesh.new()
+	sq.size = Vector2(0.1, 0.1)
+	var smat := StandardMaterial3D.new()
+	smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	smat.albedo_texture = soft_dot()
+	smat.albedo_color = Color(1, 1, 1, 0.9)
+	smat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	sq.material = smat
+	snowfall.mesh = sq
+	snowfall.amount = 700
+	snowfall.lifetime = 5.0
+	snowfall.preprocess = 5.0
+	snowfall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	snowfall.emission_box_extents = Vector3(7.0, 0.1, 10.5)
+	snowfall.direction = Vector3(0, -1, 0)
+	snowfall.spread = 25
+	snowfall.gravity = Vector3(0.25, -0.35, 0)
+	snowfall.initial_velocity_min = 0.8
+	snowfall.initial_velocity_max = 1.3
+	snowfall.scale_amount_min = 0.5
+	snowfall.scale_amount_max = 1.4
+	snowfall.position = Vector3(0, 6.0, 0)
+	snowfall.emitting = false
+	snowfall.visibility_aabb = AABB(Vector3(-9, -9, -12), Vector3(18, 10, 24))
+	add_child(snowfall)
+
+
+# Mevsim zemini ve çimi boyar, havaya göre yağmur, kar ve sis açar
+func set_weather(season: String, weather: String, instant := false) -> void:
+	weather_key = season + "|" + weather
+	var s: Dictionary = D.SEASONS[season]
+	var dur := 0.01 if instant else 2.0
+	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(ground_mat, "shader_parameter/season_tint", Vector3(s.tint.r, s.tint.g, s.tint.b), dur)
+	tw.tween_property(ground_mat, "shader_parameter/snow", s.snow if weather == "snow" or season == "winter" else 0.0, dur)
+	tw.tween_property(grass_mat, "shader_parameter/tint", Vector3(s.tint.r, s.tint.g, s.tint.b), dur)
+	tw.tween_property(grass_mat, "shader_parameter/snow", s.snow if weather == "snow" or season == "winter" else 0.0, dur)
+	grass_mat.set_shader_parameter("wind", 2.2 if weather == "rain" else 1.0)
+	rain.emitting = weather == "rain"
+	snowfall.emitting = weather == "snow"
+	weather_dim = {"rain": 0.55, "fog": 0.7, "snow": 0.8}.get(weather, 1.0)
+	fog_near = weather == "fog"
+	apply_light(instant)
 
 
 func fire(parent: Node3D, pos: Vector3, size := 1.0, light := true) -> CPUParticles3D:
@@ -201,6 +291,10 @@ func _build_ground() -> void:
 	mat.set_shader_parameter("pts", pts)
 	mat.set_shader_parameter("count", pts.size())
 	mat.set_shader_parameter("wall_z", to_world(0, game.wall_row + 0.5).z)
+	ground_mat = mat
+	var ground: Dictionary = game.stage.get("ground", {})
+	for k in ground:
+		mat.set_shader_parameter(k, ground[k])
 	var g := MeshInstance3D.new()
 	g.mesh = pm
 	g.material_override = mat
@@ -278,6 +372,7 @@ func _build_grass() -> void:
 	mi.multimesh = mm
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/grass.gdshader")
+	grass_mat = sm
 	mi.material_override = sm
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
@@ -298,30 +393,10 @@ func _build_walls() -> void:
 		_wall_run(Vector3(s * 0.62, 0, z), Vector3(s * (half - 0.1), 0, z), h, t, st)
 		_wall_run(Vector3(s * (half + 0.1), 0, z + 0.1), Vector3(s * (half + 0.1), 0, zb - 0.1), h * 0.9, t, st)
 	_wall_run(Vector3(-half, 0, zb), Vector3(half, 0, zb), h * 0.9, t, st)
-	# kapı: iki ayak, üstte kemerli taç ve altın hilal; açık ahşap kanatlar
-	for s in [-1, 1]:
-		models.box(self, Vector3(0.3, 0.95, 0.5), Vector3(s * 0.45, 0.475, z), st)
-		var door := models.box(self, Vector3(0.3, 0.6, 0.04), Vector3(s * 0.42, 0.3, z - 0.32), models.mat(Color("#6a4224")))
-		door.rotation.y = s * 1.1
-	models.box(self, Vector3(1.2, 0.32, 0.5), Vector3(0, 0.95, z), st)
-	models.box(self, Vector3(0.64, 0.05, 0.52), Vector3(0, 0.66, z), models.mat(Color("#8a6a3a")))
-	# kemer: koyu iç, altın kenar
-	var arch := models.cyl(self, 0.3, 0.3, 0.52, Vector3(0, 0.66, z), models.mat(Color("#2a1e16")), 16)
-	arch.rotation.x = PI / 2
-	arch.scale = Vector3(1.0, 1.0, 0.55)
-	for k in 7:
-		var x := -1.0 + k * (2.0 / 6.0)
-		models.box(self, Vector3(0.12, 0.1, 0.08), Vector3(x * 0.52, 1.16, z - 0.21), st)
-	models.box(self, Vector3(1.24, 0.03, 0.06), Vector3(0, 0.84, z - 0.27), models.mat(Models.GOLD, 0.35, 0.7))
-	var cr := TorusMesh.new()
-	cr.inner_radius = 0.06
-	cr.outer_radius = 0.085
-	var m := MeshInstance3D.new()
-	m.mesh = cr
-	m.material_override = models.mat(Models.GOLD, 0.3, 0.8)
-	m.position = Vector3(0, 1.02, z - 0.27)
-	m.rotation = Vector3(PI / 2, 0, 0.8)
-	add_child(m)
+	# kapı (Blender modeli): kemer taşlı geçit, açık ahşap kanatlar, altın kitabe
+	var gate := models.ott_model("gate")
+	gate.position = Vector3(0, 0, z)
+	add_child(gate)
 	# kapı burçları ve köşe burçları: kubbeli, sancaklı
 	for s in [-1, 1]:
 		models.round_tower(self, Vector3(s * 0.95, 0, z), 0.3, 1.05, true, flag)
@@ -342,39 +417,38 @@ func _build_walls() -> void:
 	fire(self, Vector3(0.95, 1.12, z - 0.3), 0.8)
 
 
-# a'dan b'ye düz sur: gövde, iki yanda mazgallar, üstte yürüme yolu
-func _wall_run(a: Vector3, b: Vector3, h: float, t: float, st: Material) -> void:
+# a'dan b'ye düz sur: Blender'daki 1 karelik sur parçası (kesme taş, mazgal dişleri dışa bakar) dizilir.
+# Parçanın dış yüzü -z'dir; dış yön şehrin merkezinden uzağa doğru seçilir.
+func _wall_run(a: Vector3, b: Vector3, h: float, t: float, _st: Material) -> void:
 	var d := b - a
 	var len := d.length()
-	var mid := (a + b) / 2.0
 	var along_x := absf(d.x) > absf(d.z)
-	var size := Vector3(len, h, t) if along_x else Vector3(t, h, len)
-	models.box(self, size, mid + Vector3(0, h / 2.0, 0), st)
-	# kaide
-	var base := Vector3(len, 0.08, t + 0.08) if along_x else Vector3(t + 0.08, 0.08, len)
-	models.box(self, base, mid + Vector3(0, 0.04, 0), models.stone_mat(Color("#a89878")))
-	var n := int(len / 0.2)
+	var n := maxi(1, int(round(len)))
+	var city_z := (to_world(0, game.wall_row).z + game.rows / 2.0) / 2.0
+	var rot := 0.0
+	if along_x:
+		rot = 0.0 if a.z < city_z else PI
+	else:
+		rot = -PI / 2 if a.x > 0 else PI / 2
 	for i in n:
-		if i % 2 == 1:
-			continue
-		var k := (i + 0.5) / n - 0.5
-		for side in [-1, 1]:
-			var off := Vector3(k * len, h + 0.05, side * (t / 2.0 - 0.04)) if along_x else Vector3(side * (t / 2.0 - 0.04), h + 0.05, k * len)
-			var mb := Vector3(0.1, 0.1, 0.07) if along_x else Vector3(0.07, 0.1, 0.1)
-			models.box(self, mb, mid + off, st)
+		var seg := models.ott_model("wall_segment")
+		seg.position = a + d * ((i + 0.5) / n)
+		seg.rotation.y = rot
+		seg.scale = Vector3(len / n, h / 0.62, t / 0.34)
+		add_child(seg)
 
 
-# Şehrin boş kareleri: şadırvan, çarşı, bahçeler, servi ağaçları ve cumbalı Osmanlı evleri.
-# Bina arsaları ve kapıdan Saray'a giden yol boş kalır; halk kare kenarlarındaki sokaklarda yürür.
+# Şehrin boş kareleri: şadırvan köşkü, çarşı çadırları ve tezgâhlar, bahçeler, servi avlusu, cephane köşesi ve
+# cumbalı Osmanlı evleri (assets/models/ottoman/city_*.glb). Bina arsaları ve kapıdan Saray'a giden yol boş kalır;
+# halk ve atlı hükümdar kare kenarlarındaki sokaklarda dolaşır.
 const CITY_DECOR := {
-	Vector2i(6, 13): "fountain",
-	Vector2i(2, 13): "bazaar", Vector2i(3, 13): "bazaar",
-	Vector2i(2, 14): "garden", Vector2i(3, 14): "garden", Vector2i(5, 14): "pool", Vector2i(7, 14): "cypress",
-	Vector2i(4, 15): "palace_garden",
-	Vector2i(0, 13): "house", Vector2i(8, 13): "house", Vector2i(0, 15): "house", Vector2i(8, 15): "house",
-	Vector2i(3, 15): "house", Vector2i(5, 15): "house",
+	Vector2i(6, 13): "city_fountain",
+	Vector2i(2, 13): "city_tent", Vector2i(5, 15): "city_tent_red",
+	Vector2i(2, 14): "city_stalls", Vector2i(1, 14): "city_supplies",
+	Vector2i(3, 14): "city_garden", Vector2i(5, 14): "city_pool", Vector2i(7, 14): "city_cypress",
+	Vector2i(4, 15): "city_palace_garden",
+	Vector2i(0, 13): "house", Vector2i(0, 15): "house", Vector2i(8, 15): "house",
 }
-const AWNINGS := [["#b3202a", "#f2ece0"], ["#2f6fb0", "#f2ece0"], ["#3d7a3a", "#e8d48a"], ["#c47a1e", "#f2ece0"]]
 
 
 func _build_city_decor() -> void:
@@ -382,31 +456,30 @@ func _build_city_decor() -> void:
 	for id in D.BUILDINGS:
 		var s: Array = D.BUILDINGS[id].slot
 		slots[Vector2i(s[0], s[1])] = true
+	var houses := 0
 	for k in CITY_DECOR:
 		if slots.has(k):
 			continue
-		var g := Node3D.new()
-		g.position = to_world(k.x + 0.5, k.y + 0.5)
-		add_child(g)
-		match CITY_DECOR[k]:
-			"fountain":
-				_fountain(g)
-			"bazaar":
-				_stall(g, Vector3(-0.17, 0, 0), k.x * 2)
-				_stall(g, Vector3(0.17, 0, 0.05), k.x * 2 + 1)
-			"garden":
-				_garden(g, false)
-			"pool":
-				_garden(g, true)
-			"cypress":
-				for c in [Vector3(-0.22, 0, -0.2), Vector3(0.22, 0, -0.2), Vector3(-0.22, 0, 0.22), Vector3(0.22, 0, 0.22)]:
-					_cypress(g, c, rng.randf_range(0.55, 0.7))
-				_lantern(g, Vector3(0, 0, 0), true)
-			"palace_garden":
-				for x in [-0.3, -0.1, 0.1, 0.3]:
-					_cypress(g, Vector3(x, 0, 0.25), 0.6)
-			"house":
-				_house(g, rng.randi() % 4 * PI / 2)
+		var kind: String = CITY_DECOR[k]
+		if kind == "house":
+			kind = "city_house_%d" % (houses % 4)
+			houses += 1
+		var m := models.ott_model(kind)
+		m.position = to_world(k.x + 0.5, k.y + 0.5)
+		# evlerin önü sokağa, çadırların önü meydana baksın
+		if kind.begins_with("city_house"):
+			m.rotation.y = PI / 2 if k.x == 0 else -PI / 2
+		add_child(m)
+		_city_extras(m)
+	# kapıdan saraya giden yolun iki yanında sancak direkleri
+	for t in [Vector2(3.82, 13.2), Vector2(5.18, 13.2), Vector2(3.82, 13.8), Vector2(5.18, 13.8)]:
+		var pole := models.ott_model("city_banner_pole")
+		pole.position = to_world(t.x, t.y)
+		add_child(pole)
+		var f := models.flag(models.ottoman_flag(), 0.32, 0.21)
+		f.position = models.mark(pole, "flag") + Vector3(0.012, -0.1, 0)
+		f.rotation.y = PI / 2 if t.x < 4.5 else -PI / 2
+		pole.add_child(f)
 	# güney surunun ardında tarlalar, bağlar ve bir yel değirmeni
 	var zb: float = to_world(0, game.rows).z
 	var wheat := models.mat(Color("#d8b44a"))
@@ -424,11 +497,58 @@ func _build_city_decor() -> void:
 	# sokak fenerleri (ışıklı olan az; web'de ucuz kalsın)
 	var lit := 0
 	for t in [Vector2(3.0, 14.0), Vector2(6.0, 14.0), Vector2(2.0, 15.0), Vector2(7.0, 15.0), Vector2(1.0, 14.0), Vector2(8.0, 14.0)]:
-		var lg := Node3D.new()
+		var lg := models.ott_model("city_lantern")
 		lg.position = to_world(t.x, t.y)
 		add_child(lg)
-		_lantern(lg, Vector3.ZERO, lit < 3)
+		if lit < 3:
+			_lamp(lg, models.mark(lg, "light"))
 		lit += 1
+
+
+# Modeldeki su yüzeyleri parlak suya döner; şadırvanda fıskiye, servi avlusunda fener ışığı yanar
+func _city_extras(m: Node3D) -> void:
+	for w in m.find_children("Water", "MeshInstance3D", true, false):
+		(w as MeshInstance3D).material_override = water_mat()
+	if m.find_child("spout", true, false) != null:
+		var p := CPUParticles3D.new()
+		var q := SphereMesh.new()
+		q.radius = 0.012
+		q.height = 0.024
+		q.material = water_mat()
+		p.mesh = q
+		p.amount = 40
+		p.lifetime = 0.7
+		p.direction = Vector3.UP
+		p.spread = 25
+		p.initial_velocity_min = 0.5
+		p.initial_velocity_max = 0.7
+		p.gravity = Vector3(0, -2.4, 0)
+		p.position = models.mark(m, "spout")
+		m.add_child(p)
+	if m.find_child("light", true, false) != null:
+		_lamp(m, models.mark(m, "light"))
+
+
+func water_mat() -> StandardMaterial3D:
+	if not models.mats.has("city_water"):
+		var water := StandardMaterial3D.new()
+		water.albedo_color = Color(0.25, 0.55, 0.78, 0.88)
+		water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		water.roughness = 0.05
+		water.metallic = 0.3
+		models.mats.city_water = water
+	return models.mats.city_water
+
+
+func _lamp(g: Node3D, pos: Vector3) -> void:
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.7, 0.4)
+	l.light_energy = 0.0
+	l.omni_range = 1.3
+	l.omni_attenuation = 1.4
+	l.position = pos
+	g.add_child(l)
+	torches.append({"light": l, "phase": rng.randf() * 10.0, "base": 0.9})
 
 
 # Odun-Demir Ocağı işçilerinin gittiği yerler: surların önünde solda kesim alanı, sağda demir madeni
@@ -463,133 +583,6 @@ func _build_work_sites() -> void:
 	models.add_prop(m, "wheelbarrow", Vector3(-0.28, 0, 0.25), 0.3, 2.2)
 
 
-func _fountain(g: Node3D) -> void:
-	var stone := models.mat(Models.STONE)
-	var marble := models.mat(Models.WHITEWASH, 0.4)
-	models.cyl(g, 0.34, 0.36, 0.05, Vector3(0, 0.025, 0), models.mat(Models.STONE_DARK), 8)
-	models.cyl(g, 0.27, 0.27, 0.12, Vector3(0, 0.08, 0), marble, 8)
-	var water := StandardMaterial3D.new()
-	water.albedo_color = Color(0.25, 0.55, 0.75, 0.85)
-	water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	water.roughness = 0.05
-	water.metallic = 0.3
-	models.cyl(g, 0.24, 0.24, 0.02, Vector3(0, 0.14, 0), water, 8)
-	# sekiz sütunlu, kurşun kubbeli çatı
-	for i in 8:
-		var a := i * TAU / 8.0 + PI / 8.0
-		models.cyl(g, 0.018, 0.018, 0.42, Vector3(cos(a) * 0.3, 0.26, sin(a) * 0.3), stone, 6)
-	models.cyl(g, 0.38, 0.38, 0.04, Vector3(0, 0.49, 0), models.mat(Models.IZNIK, 0.4), 8)
-	models.cyl(g, 0.02, 0.4, 0.2, Vector3(0, 0.6, 0), models.mat(Models.LEAD, 0.5, 0.3), 8)
-	models.sphere(g, 0.03, Vector3(0, 0.72, 0), models.mat(Models.GOLD, 0.3, 0.8), false, 8)
-	models.cyl(g, 0.04, 0.05, 0.14, Vector3(0, 0.2, 0), marble, 8)
-	# fıskiye
-	var p := CPUParticles3D.new()
-	var q := SphereMesh.new()
-	q.radius = 0.012
-	q.height = 0.024
-	q.material = water
-	p.mesh = q
-	p.amount = 40
-	p.lifetime = 0.7
-	p.direction = Vector3.UP
-	p.spread = 25
-	p.initial_velocity_min = 0.5
-	p.initial_velocity_max = 0.7
-	p.gravity = Vector3(0, -2.4, 0)
-	p.position = Vector3(0, 0.27, 0)
-	g.add_child(p)
-
-
-func _stall(g: Node3D, pos: Vector3, i: int) -> void:
-	var col: Array = AWNINGS[i % AWNINGS.size()]
-	var wood := models.mat(Models.WOOD)
-	for c in [Vector3(-0.11, 0, -0.1), Vector3(0.11, 0, -0.1), Vector3(-0.11, 0, 0.1), Vector3(0.11, 0, 0.1)]:
-		models.cyl(g, 0.01, 0.01, 0.3, pos + c + Vector3(0, 0.15, 0), wood, 5)
-	models.box(g, Vector3(0.24, 0.07, 0.12), pos + Vector3(0, 0.1, 0.06), models.mat(Models.WOOD_DARK))
-	# çizgili tente
-	for k in 4:
-		var stripe := models.box(g, Vector3(0.065, 0.015, 0.3), pos + Vector3(-0.0975 + k * 0.065, 0.32, 0.01),
-			models.mat(Color(col[k % 2])))
-		stripe.rotation.x = 0.22
-	var goods := [Color("#d9a441"), Color("#b3202a"), Color("#6a8f3a"), Color("#e8dcc0")]
-	for k in 3:
-		models.sphere(g, 0.03, pos + Vector3(-0.07 + k * 0.07, 0.15, 0.08), models.mat(goods[(i + k) % goods.size()]), false, 8)
-	models.add_prop(g, ["sack", "barrel", "crate_B_small"][i % 3], pos + Vector3(0.0, 0, -0.17), 0.35)
-
-
-func _garden(g: Node3D, pool: bool) -> void:
-	var grass := models.box(g, Vector3(0.74, 0.03, 0.74), Vector3(0, 0.015, 0), models.mat(Color("#4f7d36")))
-	grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# taş kenar
-	for s in [-1, 1]:
-		models.box(g, Vector3(0.78, 0.05, 0.03), Vector3(0, 0.025, s * 0.38), models.mat(Models.STONE))
-		models.box(g, Vector3(0.03, 0.05, 0.78), Vector3(s * 0.38, 0.025, 0), models.mat(Models.STONE))
-	if pool:
-		var water := StandardMaterial3D.new()
-		water.albedo_color = Color(0.22, 0.5, 0.7)
-		water.roughness = 0.05
-		water.metallic = 0.4
-		models.box(g, Vector3(0.44, 0.04, 0.3), Vector3(0, 0.03, 0), models.mat(Models.WHITEWASH, 0.4))
-		models.box(g, Vector3(0.38, 0.042, 0.24), Vector3(0, 0.032, 0), water)
-		for x in [-0.3, 0.3]:
-			_cypress(g, Vector3(x, 0, -0.25), 0.6)
-			_cypress(g, Vector3(x, 0, 0.25), 0.55)
-	else:
-		_cypress(g, Vector3(-0.24, 0, -0.24), 0.65)
-		_cypress(g, Vector3(0.24, 0, 0.24), 0.6)
-		var flowers := [Color("#d6455a"), Color("#f2c94c"), Color("#e8e0f0"), Color("#c25ab8")]
-		for k in 14:
-			var fp := Vector3(rng.randf_range(-0.3, 0.3), 0.045, rng.randf_range(-0.3, 0.3))
-			models.sphere(g, 0.022, fp, models.mat(flowers[k % flowers.size()]), false, 6)
-		# bank
-		models.box(g, Vector3(0.24, 0.03, 0.07), Vector3(0.05, 0.08, -0.05), models.mat(Models.WOOD))
-		for x in [-0.05, 0.15]:
-			models.box(g, Vector3(0.03, 0.06, 0.06), Vector3(x, 0.045, -0.05), models.mat(Models.WOOD_DARK))
-
-
-func _cypress(g: Node3D, pos: Vector3, h: float) -> void:
-	models.cyl(g, 0.015, 0.02, 0.08, pos + Vector3(0, 0.04, 0), models.mat(Models.WOOD_DARK), 5)
-	var c := models.sphere(g, 0.07, pos + Vector3(0, 0.08 + h * 0.45, 0), models.mat(Color("#2d5a2e")), false, 10)
-	c.scale = Vector3(1, h / 0.14 * 0.95, 1)
-
-
-func _lantern(g: Node3D, pos: Vector3, light: bool) -> void:
-	models.cyl(g, 0.012, 0.016, 0.42, pos + Vector3(0, 0.21, 0), models.mat(Models.IRON, 0.5, 0.5), 6)
-	models.cyl(g, 0.03, 0.025, 0.06, pos + Vector3(0, 0.45, 0), models.glow_mat(Color(1.0, 0.7, 0.35)), 6)
-	models.cyl(g, 0.0, 0.04, 0.04, pos + Vector3(0, 0.5, 0), models.mat(Models.IRON, 0.5, 0.5), 6)
-	if light:
-		var l := OmniLight3D.new()
-		l.light_color = Color(1.0, 0.7, 0.4)
-		l.light_energy = 0.0
-		l.omni_range = 1.3
-		l.omni_attenuation = 1.4
-		l.position = pos + Vector3(0, 0.46, 0)
-		g.add_child(l)
-		torches.append({"light": l, "phase": rng.randf() * 10.0, "base": 0.9})
-
-
-# Cumbalı Osmanlı evi: badanalı alt kat, ahşap çıkmalı üst kat, kiremit çatı
-func _house(g: Node3D, rot: float) -> void:
-	var h := Node3D.new()
-	h.rotation.y = rot
-	g.add_child(h)
-	var wall := models.mat(Models.WHITEWASH)
-	var timber := models.mat(Color("#8a5a34"))
-	models.box(h, Vector3(0.5, 0.22, 0.42), Vector3(0, 0.11, 0), wall)
-	models.box(h, Vector3(0.58, 0.2, 0.5), Vector3(0, 0.32, 0.03), models.mat(Color("#efe2c8")))
-	# ahşap kuşaklar ve pencereler
-	models.box(h, Vector3(0.6, 0.025, 0.52), Vector3(0, 0.225, 0.03), timber)
-	models.box(h, Vector3(0.6, 0.025, 0.52), Vector3(0, 0.42, 0.03), timber)
-	for x in [-0.17, 0.0, 0.17]:
-		models.box(h, Vector3(0.07, 0.09, 0.01), Vector3(x, 0.33, 0.285), models.mat(Color("#3a2a1e")))
-	models.box(h, Vector3(0.1, 0.15, 0.01), Vector3(0, 0.075, 0.215), timber)
-	# kırma çatı
-	var roof := models.cyl(h, 0.0, 0.46, 0.2, Vector3(0, 0.53, 0.03), models.mat(Color("#b4472e")), 4)
-	roof.rotation.y = PI / 4
-	roof.scale = Vector3(1.0, 1.0, 0.85)
-	models.box(h, Vector3(0.05, 0.12, 0.05), Vector3(0.16, 0.6, -0.08), models.mat(Models.STONE_DARK))
-
-
 # ---------------------------------------------------------------- ordugâh
 
 func _build_camp() -> void:
@@ -597,7 +590,11 @@ func _build_camp() -> void:
 	camp.position = to_world(game.path_points[0].x, -1.1)
 	add_child(camp)
 	for t in [[-1.1, -0.5, 0.4], [1.1, -0.3, -0.5], [-0.6, -1.4, 0.9], [0.9, -1.4, -0.2], [2.1, -0.9, 0.2]]:
-		models.add_prop(camp, "tent", Vector3(t[0], 0, t[1]), 1.5, t[2])
+		var tent := models.ott_model("camp_tent" if rng.randf() < 0.6 else "camp_tent_b")
+		tent.position = Vector3(t[0], 0, t[1])
+		tent.rotation.y = t[2]
+		tent.scale = Vector3.ONE * 1.6
+		camp.add_child(tent)
 	for t in [[-0.6, 0.5], [0.7, 0.4], [1.6, 0.1]]:
 		models.add_prop(camp, ["barrel", "crate_A_big", "sack"][rng.randi() % 3], Vector3(t[0], 0, t[1]), 1.6, rng.randf() * TAU)
 	models.add_prop(camp, "weaponrack", Vector3(-1.5, 0, 0.2), 1.6, 0.3)

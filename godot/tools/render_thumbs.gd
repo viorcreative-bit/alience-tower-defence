@@ -1,7 +1,7 @@
 extends SceneTree
 
 # Bina ve kule kartlarındaki küçük resimleri modellerden çizer (assets/thumbs/*.png).
-# Kullanım (ekranlı ortam gerekir): godot --rendering-driver opengl3 --script tools/render_thumbs.gd
+# Kullanım (ekranlı ortam gerekir): godot --rendering-driver opengl3 --script tools/render_thumbs.gd [-- b_medrese ...]
 const D := preload("res://scripts/data.gd")
 const SIZE := 192
 
@@ -42,7 +42,11 @@ func _run() -> void:
 		items.append(["b_" + id, models.building(id, 2)])
 	for t in D.TOWER_ORDER:
 		items.append(["t_" + t, models.tower(t, 2).root])
+	# `-- b_medrese t_archer` yalnız verilenleri çizer
+	var only := OS.get_cmdline_user_args()
 	for it in items:
+		if only.size() and not it[0] in only:
+			continue
 		var n: Node3D = it[1]
 		vp.add_child(n)
 		await process_frame
