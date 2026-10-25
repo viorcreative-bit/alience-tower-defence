@@ -337,6 +337,13 @@ func _build_panel() -> void:
 	btn_charge.add_theme_color_override("font_color", C_GOLD)
 
 
+func _passthrough(n: Node) -> void:
+	if n is Control:
+		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in n.get_children():
+		_passthrough(c)
+
+
 func _ctrl(parent: Control, text: String, w: float, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -718,17 +725,17 @@ func _build_view_button() -> void:
 	var bv := VBoxContainer.new()
 	bv.add_theme_constant_override("separation", 4)
 	boss_box.add_child(bv)
-	boss_name = _label("", 22, C_DANGER, font_title)
+	boss_name = _label("", 18, C_DANGER, font_title)
 	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bv.add_child(boss_name)
 	var bbg := ColorRect.new()
 	bbg.color = Color(0.1, 0.05, 0.02, 0.9)
-	bbg.custom_minimum_size = Vector2(400, 16)
+	bbg.custom_minimum_size = Vector2(320, 10)
 	bv.add_child(bbg)
 	boss_fill = ColorRect.new()
 	boss_fill.color = C_DANGER
 	boss_fill.position = Vector2(2, 2)
-	boss_fill.size = Vector2(396, 12)
+	boss_fill.size = Vector2(316, 6)
 	bbg.add_child(boss_fill)
 	root.add_child(boss_box)
 	# mevsim ve hava: haritanın sol üstünde
@@ -746,10 +753,14 @@ func _build_view_button() -> void:
 	duel_chip.custom_minimum_size = Vector2(0, 58)
 	duel_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	duel_chip.visible = false
-	lbl_duel = _label("", 21, C_DANGER, font_bold)
+	lbl_duel = _label("", 19, C_DANGER, font_bold)
 	lbl_duel.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	duel_chip.add_child(lbl_duel)
 	root.add_child(duel_chip)
+	# haritanın üstündeki bilgi kutuları dokunmayı yutmaz: altlarındaki kareye kule kurulabilsin
+	for n in [boss_box, weather_chip, duel_chip]:
+		_passthrough(n)
+		n.modulate.a = 0.88
 	# kahramanın yeteneği: haritanın sol altında, alt panelin hemen üstünde
 	btn_hero = Button.new()
 	btn_hero.custom_minimum_size = Vector2(230, 74)
@@ -1066,12 +1077,21 @@ func refresh(sound_label: String, light_name: String) -> void:
 	boss_box.visible = boss != null
 	if boss != null:
 		boss_name.text = "%s · %s" % [D.ENEMY_NAMES[boss.type], D.NATION_NAMES[boss.nation]]
-		boss_fill.size.x = 396.0 * clampf(boss.hp / boss.max_hp, 0.0, 1.0)
-		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, btn_view.position.y + (140 if game.duel or game.pvp != "" else 70))
+		boss_fill.size.x = 316.0 * clampf(boss.hp / boss.max_hp, 0.0, 1.0)
 	duel_chip.visible = (game.duel or game.pvp != "") and duel_text != ""
+	var below := btn_view.position.y + 70
 	if duel_chip.visible:
 		lbl_duel.text = duel_text
-		duel_chip.position = Vector2((root.size.x - duel_chip.size.x) / 2.0, btn_view.position.y + 70)
+		# sığarsa hava kutusuyla Menü düğmesinin arasına, sığmazsa onların altına
+		var left := weather_chip.position.x + weather_chip.size.x + 8
+		var right := btn_menu.position.x - 8
+		if duel_chip.size.x <= right - left:
+			duel_chip.position = Vector2((left + right - duel_chip.size.x) / 2.0, btn_view.position.y)
+		else:
+			duel_chip.position = Vector2((root.size.x - duel_chip.size.x) / 2.0, below)
+			below += 66
+	if boss != null:
+		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, below)
 	lbl_weather.text = "%s · %s" % [D.SEASONS[game.season].name, D.WEATHER[game.weather].name]
 	lbl_weather.add_theme_color_override("font_color", C_TEXT if game.weather == "clear" else Color("#9fd0f0"))
 	btn_hero.visible = game.hero_id != ""

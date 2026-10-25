@@ -1212,7 +1212,7 @@ func _debug_hooks() -> void:
 		debug_link.begin("TEST", false)
 		get_tree().create_timer(2.0).timeout.connect(func():
 			debug_def.pvp_state.loot = 2000
-			for k in ["ram", "knight", "knight", "infantry", "light", "horseArcher"]:
+			for k in ["trebuchet", "ram", "knight", "knight", "infantry", "light", "horseArcher"]:
 				debug_def.atk_send(k, GameUI.atk_batch(k)))
 		return
 	if "--siege-demo" in args:
