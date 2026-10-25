@@ -614,3 +614,171 @@ def _woodcutter(c):
 @ctype("miner", "none")
 def _miner(c):
 	_worker(c, "pick")
+
+
+# ---------------------------------------------------------------- ülke kralları
+# Her kral sabit renklidir. "L2".."L5" örgüleri kral seviyesi yükseldikçe görünür:
+# L2 başlıkta mücevher, L3 pelerin, L4 kılıç ya da asa, L5 altın süsler ve daha görkemli taç.
+
+PURPLE = srgb("#5a2a78")
+CRIMSON = srgb("#9e1c24")
+ERMINE = srgb("#f4f1ea")
+GREEN_D = srgb("#2f6a3a")
+BLACK_A = srgb("#2a2a30")
+STEEL = srgb("#b9bcc4")
+
+
+def crown(c, z, r, col=P["gold"], points=8, h=0.07, group="Gear"):
+	b = c.b("head", group)
+	b.cyl((0, 0, z), r, r, 0.04, col, seg=16, mat=1)
+	for i in range(points or 0):
+		a = i * 2 * math.pi / points
+		b.cyl((math.cos(a) * r * 0.95, math.sin(a) * r * 0.95, z + 0.035), 0.016, 0.0, h, col, seg=4, mat=1)
+
+
+def jewels(c, z, r, cols=(P["red"], P["iznik"], GREEN_D), n=6, group="L2"):
+	b = c.b("head", group)
+	for i in range(n):
+		a = -math.pi / 2 + (i - (n - 1) / 2) * 0.5
+		b.sphere((math.cos(a) * r, math.sin(a) * r, z), 0.016, cols[i % len(cols)], seg=6, rings=4)
+
+
+def royal_cape(c, col, lining=ERMINE, length=0.6, group="L3"):
+	g = c.b("spine", group)
+	g.box((0, 0.12, 0.74 - length / 2), (0.3, 0.025, length), col, rot=(-0.14, 0, 0), bevel=0.01)
+	g.box((0, 0.105, 0.74 - length / 2), (0.28, 0.01, length - 0.02), lining, rot=(-0.14, 0, 0))
+	g.cyl((0, 0.02, 0.73), 0.16, 0.13, 0.05, lining, seg=12)
+	for k in range(5):
+		g.box((-0.1 + k * 0.05, 0.135, 0.5), (0.008, 0.004, 0.02), P["black"])
+
+
+def scepter(c, top=P["gold"], group="L4"):
+	b = c.b("handslot_l", group)
+	b.cyl((0.155, -0.02, 0.2), 0.012, 0.012, 0.42, P["gold"], seg=6, mat=1)
+	b.sphere((0.155, -0.02, 0.64), 0.03, top, seg=8, rings=5, mat=1)
+
+
+def king_sword(c, curved, group="L4"):
+	b = c.b("handslot_r", group)
+	x = -0.155
+	b.box((x, -0.02, 0.36), (0.02, 0.08, 0.02), P["gold"], mat=1)
+	b.box((x, -0.02, 0.33), (0.016, 0.016, 0.05), CRIMSON)
+	for k in range(5):
+		b.box((x, -0.025 - k * 0.014 * (1 if curved else 0), 0.42 + k * 0.065), (0.012, 0.035, 0.07), STEEL, mat=1, rot=(-0.12 * k if curved else 0, 0, 0))
+
+
+def gold_trim(c, skirt=0.0, group="L5"):
+	"""Kaftan yakası, bel ve etek kenarında altın şeritler, omuzlukta altın düğmeler."""
+	g = c.b("spine", group)
+	g.cyl((0, 0, 0.5), 0.128, 0.128, 0.035, P["gold"], seg=12, mat=1)
+	for k in range(4):
+		g.sphere((0, -0.122, 0.56 + k * 0.045), 0.012, P["gold"], seg=6, rings=4, mat=1)
+	h = c.b("hips", group)
+	if skirt > 0:
+		r = 0.12 + skirt * 1.6 + 0.006
+		h.cyl((0, 0, 0.195), r, r - 0.004, 0.03, P["gold"], seg=10, mat=1, cap_top=False, cap_bot=False)
+	else:
+		h.cyl((0, 0, 0.37), 0.127, 0.127, 0.03, P["gold"], seg=10, mat=1)
+
+
+@ctype("king_ottoman", "none")
+def _k_ottoman(c):
+	"""Fatih: kırmızı kaftan, beyaz kavuk, sakal."""
+	base_body(c, CRIMSON, P["gold"], boots=P["gold"], coat_group="Gear", skirt=0.09, sash=P["gold"])
+	c.b("spine").box((0, -0.12, 0.6), (0.05, 0.02, 0.26), P["gold"], mat=1)
+	head(c, beard=True, mustache=srgb("#5a3a22"))
+	turban(c, P["white"], big=True, cap=P["red"])
+	jewels(c, 1.03, 0.19, n=3)
+	b = c.b("head", "L2")
+	b.box((0, -0.18, 1.12), (0.01, 0.01, 0.1), P["white"])
+	royal_cape(c, GREEN_D, lining=P["gold"])
+	king_sword(c, True)
+	gold_trim(c, 0.09)
+	c.b("head", "L5").cyl((0, 0, 1.0), 0.19, 0.19, 0.025, P["gold"], seg=14, mat=1)
+
+
+@ctype("king_byzantium", "none")
+def _k_byz(c):
+	"""XI. Konstantinos: mor kaftan, kubbeli taç, mor pelerin."""
+	base_body(c, PURPLE, P["gold"], boots=CRIMSON, coat_group="Gear", skirt=0.08)
+	c.b("spine").box((0, -0.12, 0.58), (0.12, 0.02, 0.28), P["gold"], mat=1)
+	head(c, beard=True, mustache=srgb("#3a2a1e"))
+	crown(c, 0.95, 0.14, points=0)
+	c.b("head").sphere((0, 0, 1.0), 0.13, P["gold"], seg=12, rings=6, hemi=True, scale=(1, 1, 0.6), mat=1)
+	c.b("head").box((0, 0, 1.1), (0.012, 0.012, 0.06), P["gold"], mat=1)
+	jewels(c, 0.97, 0.145)
+	for s in (-1, 1):
+		c.b("head", "L2").box((s * 0.14, -0.02, 0.88), (0.01, 0.01, 0.12), P["white"])
+	royal_cape(c, PURPLE, lining=P["gold"])
+	scepter(c, top=P["red"])
+	gold_trim(c, 0.08)
+	c.b("head", "L5").box((0, 0, 1.15), (0.06, 0.012, 0.012), P["gold"], mat=1)
+
+
+@ctype("king_venice", "none")
+def _k_venice(c):
+	"""Venedik Doçu: kırmızı kaftan, arkası yükselen corno ducale, beyaz kürk yaka."""
+	base_body(c, CRIMSON, CRIMSON, boots=CRIMSON, coat_group="Gear", skirt=0.1)
+	head(c, beard=True, mustache=srgb("#d8d2c4"))
+	h = c.b("head")
+	h.cyl((0, 0, 0.93), 0.14, 0.13, 0.08, CRIMSON, seg=12)
+	h.sphere((0, 0.05, 1.03), 0.11, CRIMSON, seg=12, rings=6, scale=(0.9, 1.0, 1.1))
+	h.cyl((0, 0, 0.92), 0.145, 0.145, 0.025, P["gold"], seg=12, mat=1)
+	c.b("spine").cyl((0, 0, 0.7), 0.15, 0.13, 0.06, ERMINE, seg=12)
+	jewels(c, 0.94, 0.15, cols=(P["red"], P["white"]))
+	royal_cape(c, CRIMSON, lining=ERMINE)
+	scepter(c, top=P["gold"])
+	gold_trim(c, 0.1)
+	c.b("head", "L5").sphere((0, 0.05, 1.03), 0.112, P["gold"], seg=12, rings=6, scale=(0.9, 1.0, 1.1), mat=1)
+
+
+@ctype("king_safavid", "none")
+def _k_safavid(c):
+	"""Şah İsmail: yeşil kaftan, sarık içinden yükselen kırmızı on iki dilimli kızılbaş külahı, sorguç."""
+	base_body(c, GREEN_D, CRIMSON, boots=P["red_dark"], coat_group="Gear", skirt=0.08, sash=P["gold"])
+	head(c, mustache=P["dark"])
+	h = c.b("head")
+	h.lathe([(0.09, 0.0), (0.075, 0.15), (0.035, 0.27), (0.0, 0.3)], (0, 0, 0.98), CRIMSON, seg=12, smooth=False, ribs=(P["red_dark"], 2))
+	for i in range(3):
+		h.cyl((0, 0, 0.93 + i * 0.03), 0.15 - i * 0.015, 0.15 - i * 0.015, 0.035, P["white"], seg=12, smooth=True)
+	b = c.b("head", "L2")
+	b.box((0.04, -0.14, 1.06), (0.01, 0.01, 0.16), P["white"], rot=(0, 0.2, 0))
+	b.sphere((0, -0.15, 1.0), 0.02, P["red"], seg=6, rings=4)
+	royal_cape(c, CRIMSON, lining=P["gold"])
+	king_sword(c, True)
+	gold_trim(c, 0.08)
+	c.b("head", "L5").sphere((0, 0, 1.29), 0.025, P["gold"], seg=8, rings=5, mat=1)
+
+
+@ctype("king_habsburg", "none")
+def _k_habsburg(c):
+	"""V. Karl: plaka zırh, siyah-altın kaftan, kapalı imparator tacı."""
+	base_body(c, STEEL, BLACK_A, boots=STEEL, coat_group="Gear")
+	c.b("spine").box((0, -0.005, 0.56), (0.25, 0.25, 0.2), BLACK_A)
+	c.b("spine").box((0, -0.13, 0.6), (0.02, 0.01, 0.16), P["gold"], mat=1)
+	head(c, beard=True, mustache=srgb("#6a4a2a"))
+	crown(c, 0.95, 0.14, points=8)
+	c.b("head").box((0, 0, 1.05), (0.012, 0.25, 0.012), P["gold"], mat=1)
+	jewels(c, 0.97, 0.145)
+	c.b("head", "L2").box((0, 0, 1.09), (0.012, 0.012, 0.06), P["gold"], mat=1)
+	royal_cape(c, BLACK_A, lining=P["gold"])
+	king_sword(c, False)
+	gold_trim(c, 0.0)
+	c.b("head", "L5").sphere((0, 0, 1.13), 0.022, P["iznik"], seg=8, rings=5)
+
+
+@ctype("king_mamluk", "none")
+def _k_mamluk(c):
+	"""Kayıtbay: beyaz-sarı kaftan, boynuzlu büyük Memlük sarığı."""
+	base_body(c, srgb("#e7c25a"), P["white"], boots=P["red_dark"], coat_group="Gear", skirt=0.09, sash=P["red"])
+	head(c, beard=True, mustache=srgb("#e8e4da"))
+	h = c.b("head")
+	h.sphere((0, 0, 1.0), 0.19, P["white"], seg=14, rings=8, scale=(1.1, 1.0, 0.7))
+	for s in (-1, 1):
+		h.cyl((s * 0.14, 0, 1.03), 0.035, 0.012, 0.16, P["white"], seg=6, rot=(0, s * 0.7, 0))
+	h.cyl((0, 0, 1.1), 0.05, 0.04, 0.05, CRIMSON, seg=8)
+	jewels(c, 1.0, 0.2, n=3)
+	royal_cape(c, CRIMSON, lining=P["white"])
+	king_sword(c, True)
+	gold_trim(c, 0.09)
+	c.b("head", "L5").cyl((0, 0, 0.94), 0.205, 0.205, 0.025, P["gold"], seg=14, mat=1)
