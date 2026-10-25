@@ -692,10 +692,11 @@ func building(id: String, level: int) -> Node3D:
 	if level <= 0:
 		_empty_plot(root)
 		return root
-	# Blender modelleri arsanın ~%65'ini kaplar; 1.3 ile arsayı doldurur
-	var s: float = [0.0, 0.88, 1.0, 1.12][level] * 1.3
+	# Blender modelleri arsanın ~%65'ini kaplar; 1.45 ile arsayı doldurup biraz taşar (heybetli dursun)
+	var s: float = [0.0, 0.95, 1.05, 1.12][level] * 1.45
 	var g := Node3D.new()
-	g.scale = Vector3.ONE * s
+	# Saray, Cami ve Medrese Blender'da yüksek yapıldı; ötekiler biraz yukarı uzatılır ki şehir daha heybetli dursun
+	g.scale = Vector3(s, s * (1.0 if id in ["palace", "mosque", "medrese"] else 1.2), s)
 	root.add_child(g)
 	# Blender modeli: gövde + "L2", "L3" parçaları; Cami'de minareler "M1".."M4"
 	# kendi modeli henüz yoksa (Medrese) Mektep'in gövdesi
