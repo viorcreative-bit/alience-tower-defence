@@ -13,7 +13,7 @@ const C_GOLD := GameUI.C_GOLD
 const C_COIN := GameUI.C_COIN
 
 signal start(country: String, king_level: int, stage: String)
-signal duel_join(code: String)
+signal duel_join(code: String, creator: bool, mode: String, role: String)
 signal duel_cancel
 
 var ui: GameUI  # yazı tipleri, çerçeveler ve tema için
@@ -28,6 +28,7 @@ var stage := ""  # haritada seçili kuşatma
 var net: Net
 var duel_label: Label  # düello bekleme satırı (main yazar)
 var code_edit: LineEdit
+var duel_pick := "attack"  # odayı kurarken seçilen: attack | defend | duel
 
 
 func _init(u: GameUI, m: Models, p: Profiles, n: Net) -> void:
@@ -223,11 +224,11 @@ func _show_countries() -> void:
 		profiles.set_v("country", selected)
 		_show_campaign(), true, 84)
 	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var du := _button(row, "Düello", func():
+	var du := _button(row, "Çok Oyunculu", func():
 		profiles.set_v("country", selected)
 		show_duel(), false, 84)
 	du.custom_minimum_size.x = 190
-	du.add_theme_font_size_override("font_size", 28)
+	du.add_theme_font_size_override("font_size", 24)
 	du.add_theme_color_override("font_color", C_GOLD)
 	go.icon = load("res://assets/ui/swords.png")
 	go.add_theme_constant_override("icon_max_width", 36)
@@ -710,18 +711,38 @@ func show_duel() -> void:
 		duel_cancel.emit()
 		_show_countries())
 	top.add_child(back)
-	var h := ui._label("DÜELLO", 32, C_GOLD, ui.font_title)
+	var h := ui._label("ÇOK OYUNCULU", 32, C_GOLD, ui.font_title)
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	top.add_child(h)
 	top.add_child(_flag_rect(selected, 64))
 	var v := _panel()
-	v.add_child(ui._label("İki komutan, iki kale", 28, C_TEXT, ui.font_title))
-	var d := ui._label("Rakibinle aynı anda savaşırsın. Dalgalar kendiliğinden gelir ve bitmez. Yendiğin düşmanlar " +
-		"rakibine ek asker olarak gider; patron yenersen kuşatma kulesi yollarsın. Suru önce düşen kaybeder. " +
-		"Zafer %d, yenilgi %d şeref getirir." % [D.DUEL.honor_win, D.DUEL.honor_lose], 20, C_DIM)
+	v.add_child(ui._label("Odayı kuran oyunu seçer", 26, C_TEXT, ui.font_title))
+	var picks := HBoxContainer.new()
+	picks.add_theme_constant_override("separation", 8)
+	v.add_child(picks)
+	for p in [["attack", "Saldıran"], ["defend", "Savunan"], ["duel", "Düello"]]:
+		var b := Button.new()
+		b.text = p[1]
+		b.custom_minimum_size = Vector2(0, 58)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 22)
+		var on: bool = p[0] == duel_pick
+		b.add_theme_stylebox_override("normal", ui._frame("card_hot" if on else "card", 12, 8))
+		b.add_theme_color_override("font_color", C_GOLD if on else C_TEXT)
+		b.pressed.connect(func():
+			duel_pick = p[0]
+			show_duel())
+		picks.add_child(b)
+	var texts := {
+		"attack": "Sen saldırırsın, arkadaşın kalesini savunur. Kalesini canlı izlersin; akçenle hangi birliği göndereceğini seçer, askerlerinin canını, gücünü ve hızını yükseltirsin. Askerlerin yol kenarındaki kulelere vurur; kule yıktıkça ve sura vurdukça ganimet kazanırsın. Suru yıkarsan kazanırsın.",
+		"defend": "Sen savunursun, arkadaşın saldırır. Düşmanları o seçip gönderir. Kulelerinin canı var, saldıranlar yıkabilir. %d dakika dayanırsan kazanırsın." % roundi(D.PVP.duration / 60.0),
+		"duel": "İkiniz de kendi kalenizi savunursunuz. Dalgalar kendiliğinden gelir ve bitmez; yendiğin düşmanlar rakibine ek asker olarak gider. Suru önce düşen kaybeder.",
+	}
+	var d := ui._label(texts[duel_pick] + " Katılan arkadaşın öteki rolü alır.", 19, C_DIM)
 	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(d)
+	v.add_child(ui._label("Zafer %d, yenilgi %d şeref." % [D.PVP.honor_win, D.PVP.honor_lose], 19, C_COIN, ui.font_bold))
 	v.add_child(_hero_row(show_duel))
 	if not Net.configured():
 		var n := ui._label("Çevrimiçi sunucu henüz bağlanmadı; düello çok yakında açılacak.", 22, C_COIN, ui.font_bold)
@@ -731,7 +752,7 @@ func show_duel() -> void:
 	var host := _button(v, "Oda Kur", func():
 		var r := RandomNumberGenerator.new()
 		r.randomize()
-		_wait_duel(DuelLink.make_code(r)), true, 76)
+		_wait_duel(DuelLink.make_code(r), true), true, 76)
 	host.icon = load("res://assets/ui/swords.png")
 	host.add_theme_constant_override("icon_max_width", 32)
 	v.add_child(ui._label("ya da arkadaşının oda koduyla katıl:", 20, C_DIM))
@@ -764,11 +785,11 @@ func _join_code(t: String) -> void:
 		code_edit.placeholder_text = "%d harf" % D.DUEL.code_len
 		code_edit.grab_focus()
 		return
-	_wait_duel(c)
+	_wait_duel(c, false)
 
 
 # Odaya girildi; rakip gelince main oyunu başlatır
-func _wait_duel(code: String) -> void:
+func _wait_duel(code: String, creator: bool) -> void:
 	_clear()
 	page.add_child(_spacer(120))
 	var v := _panel()
@@ -783,7 +804,8 @@ func _wait_duel(code: String) -> void:
 	_button(v, "Vazgeç", func():
 		duel_cancel.emit()
 		show_duel(), false, 66)
-	duel_join.emit(code)
+	var mode := "duel" if duel_pick == "duel" else "siege"
+	duel_join.emit(code, creator, mode, duel_pick if mode == "siege" else "")
 
 
 func duel_status(text: String) -> void:

@@ -403,12 +403,66 @@ func _render_strip() -> void:
 		b.add_child(l)
 
 
+# Saldıranın paneli: akçe ve ganimet, gönderilecek birlikler ve asker yükseltmeleri
+func _render_attack() -> void:
+	var head := HBoxContainer.new()
+	context.add_child(head)
+	var st: Dictionary = game.pvp_state
+	var info := "Akçe %d · ganimet %d" % [game.atk_gold(), st.loot]
+	if not game.atk_ready():
+		info += " · hazırlık %d sn" % ceili(D.PVP.prep - st.def_time)
+	var l := _label(info, 22, C_COIN, font_bold)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(l)
+	head.add_child(_label("Kule yık, sura vur: ganimet", 18, C_DIM))
+	var grid := GridContainer.new()
+	grid.columns = 5
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	context.add_child(grid)
+	for type in D.PVP.unit_order:
+		var n := atk_batch(type)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 66)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = true
+		b.add_theme_font_size_override("font_size", 17)
+		b.text = "%s%s\n%d" % ["%d " % n if n > 1 else "", D.ENEMY_NAMES[type], game.atk_cost(type, n)]
+		b.disabled = not game.can_send(type, n)
+		var boss: bool = D.ENEMIES[type].get("boss", false)
+		b.add_theme_stylebox_override("normal", _frame("red" if boss else "card", 12, 6))
+		b.add_theme_stylebox_override("disabled", _frame("panel", 12, 6))
+		b.pressed.connect(func(): action.emit("send", type))
+		grid.add_child(b)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	context.add_child(row)
+	for k in D.PVP.up_order:
+		var lv: int = st.up[k]
+		var c := game.up_cost(k)
+		var b := Button.new()
+		b.custom_minimum_size = Vector2(0, 54)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 19)
+		b.text = ("%s %d/%d · %d" % [D.PVP.up_names[k], lv, D.PVP.up_max, c]) if c > 0 else "%s en üst" % D.PVP.up_names[k]
+		b.disabled = not game.can_upgrade_army(k)
+		b.pressed.connect(func(): action.emit("army_up", k))
+		row.add_child(b)
+
+
+# Ucuz birlikler (piyade, süvari, atlı okçu) üçerli gider
+static func atk_batch(type: String) -> int:
+	return 3 if D.PVP.units[type] < 20 else 1
+
+
 func _render_idle() -> void:
 	if city_view:
 		_render_strip()
 		return
 	var lines := []
-	if game.phase == "wave":
+	if game.pvp == "defend":
+		lines.append("Düşmanları rakibin seçip gönderiyor. Askerleri yanından geçtikleri kulelere vurur; savaş durunca kuleler kendini onarır, yükseltilen kulenin canı dolar. Süre bitene kadar dayan!")
+	elif game.phase == "wave":
 		lines.append("Ani baskın! Akıncıları kapıya varmadan durdur." if game.raid else "Dalga sürerken de kule ve bina kurabilirsin.")
 	else:
 		lines.append("Yolun dışındaki boş kareye dokunup kule kur. Surların içindeki arsalara dokunup şehri geliştir; Kışla, Okçu Ocağı ve Sipahi Ocağı surların önüne asker yetiştirir.")
@@ -711,7 +765,11 @@ func _build_view_button() -> void:
 func set_country(c: String) -> void:
 	lbl_country.text = D.COUNTRIES[c].short
 	top_flag.texture = load("res://assets/ui/%s.png" % Models.banner_name(c))
-	lbl_stage.text = ("%s %d" % [game.stage.name, game.stage.year]).to_upper() if game.stage_id != "" else ("DÜELLO" if game.duel else "SERBEST SAVAŞ")
+	lbl_stage.text = ("%s %d" % [game.stage.name, game.stage.year]).to_upper() if game.stage_id != "" else \
+		{"attack": "SALDIRAN", "defend": "SAVUNAN"}.get(game.pvp, "DÜELLO" if game.duel else "SERBEST SAVAŞ")
+	# üst şeritteki dalga başlığı Saldıran ve Savunan'da kalan süreyi gösterir
+	var head: Label = lbl_wave.get_parent().get_parent().get_child(0)
+	head.text = "SÜRE" if game.pvp != "" else "DALGA"
 	last_key = ""
 
 
@@ -952,17 +1010,24 @@ func _build_overlay() -> void:
 func refresh(sound_label: String, light_name: String) -> void:
 	btn_view.position = Vector2(root.size.x - btn_view.size.x - 14, top_bottom() + 12)
 	btn_menu.position = Vector2(btn_view.position.x - btn_menu.size.x - 10, btn_view.position.y)
-	lbl_gold.text = str(game.gold)
+	lbl_gold.text = str(game.atk_gold() if game.pvp == "attack" else game.gold)
 	lbl_wall.text = str(game.wall)
-	lbl_wave.text = str(game.wave) if game.duel else "%d/%d" % [game.wave, game.total_waves]
+	if game.pvp != "":
+		var left := ceili(game.pvp_state.get("time_left", 0.0))
+		lbl_wave.text = "%d:%02d" % [left / 60, left % 60]
+	else:
+		lbl_wave.text = str(game.wave) if game.duel else "%d/%d" % [game.wave, game.total_waves]
 	for k in lbl_res:
-		lbl_res[k].text = str(game.res[k])
+		lbl_res[k].text = "-" if game.pvp == "attack" else str(game.res[k])
 	lbl_wall.add_theme_color_override("font_color", C_DANGER if game.wall <= 5 else C_WALL)
 
 	var sel = game.selected
 	var tower = game.selected_tower()
 	var mode := "idle"
-	if sel != null:
+	if game.pvp == "attack":
+		mode = "attack"
+		sel = null
+	elif sel != null:
 		mode = "building" if sel.has("building") else ("tower" if tower != null else "build")
 	var tkey := ""
 	if mode == "building":
@@ -971,7 +1036,9 @@ func refresh(sound_label: String, light_name: String) -> void:
 			var tr := game.training_of(kind)
 			tkey = "%d,%d" % [game.troop_count(kind), tr.queue]
 	var key := "|".join([mode, game.phase, game.raid, game.wave, game.gold, str(game.res.values()), sel.c if sel else -1, sel.r if sel else -1,
-		tower.level if tower else 0, str(game.buildings.values()), tkey, game.researching.get("id", ""), game.research.size()])
+		tower.level if tower else 0, str(game.buildings.values()), tkey, game.researching.get("id", ""), game.research.size(),
+		game.atk_gold() if game.pvp == "attack" else 0, str(game.pvp_state.get("up", {})), game.atk_ready() if game.pvp == "attack" else false,
+		ceili(D.PVP.prep - game.pvp_state.get("def_time", 0.0)) if game.pvp == "attack" and not game.atk_ready() else 0])
 	if key != last_key:
 		last_key = key
 		_clear_context()
@@ -982,6 +1049,8 @@ func refresh(sound_label: String, light_name: String) -> void:
 				_render_build()
 			"building":
 				_render_building(sel.building)
+			"attack":
+				_render_attack()
 			_:
 				_render_idle()
 	if train_bar and is_instance_valid(train_bar):
@@ -998,10 +1067,10 @@ func refresh(sound_label: String, light_name: String) -> void:
 	if boss != null:
 		boss_name.text = "%s · %s" % [D.ENEMY_NAMES[boss.type], D.NATION_NAMES[boss.nation]]
 		boss_fill.size.x = 396.0 * clampf(boss.hp / boss.max_hp, 0.0, 1.0)
-		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, btn_view.position.y + (140 if game.duel else 70))
-	duel_chip.visible = game.duel and duel_text != ""
+		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, btn_view.position.y + (140 if game.duel or game.pvp != "" else 70))
+	duel_chip.visible = (game.duel or game.pvp != "") and duel_text != ""
 	if duel_chip.visible:
-		lbl_duel.text = "Rakip: " + duel_text
+		lbl_duel.text = duel_text
 		duel_chip.position = Vector2((root.size.x - duel_chip.size.x) / 2.0, btn_view.position.y + 70)
 	lbl_weather.text = "%s · %s" % [D.SEASONS[game.season].name, D.WEATHER[game.weather].name]
 	lbl_weather.add_theme_color_override("font_color", C_TEXT if game.weather == "clear" else Color("#9fd0f0"))
@@ -1024,6 +1093,8 @@ func refresh(sound_label: String, light_name: String) -> void:
 	if ch.level:
 		cstate = str(ceili(ch.cooldown)) if ch.cooldown > 0.0 else ("ready" if game.can_charge() else "idle")
 	var countdown := ceili(game.duel_state.get("build", 0.0)) if game.duel and game.phase == "build" else -1
+	if game.pvp == "attack":
+		countdown = int(game.atk_ready())
 	var ckey := "|".join([game.speed, game.phase, game.raid, game.wave, sound_label, cstate, ch.active > 0.0, light_name, countdown])
 	if ckey != last_controls:
 		last_controls = ckey
@@ -1033,8 +1104,15 @@ func refresh(sound_label: String, light_name: String) -> void:
 		btn_charge.visible = ch.level > 0
 		btn_charge.disabled = not game.can_charge()
 		btn_charge.text = ("%d sn" % ceili(ch.cooldown)) if ch.cooldown > 0.0 and ch.active <= 0.0 else "Allah Allah!"
-		btn_primary.disabled = game.phase != "build"
-		if game.phase == "wave":
+		btn_primary.disabled = game.phase != "build" or game.pvp != ""
+		btn_speed.visible = game.pvp == ""
+		btn_charge.visible = btn_charge.visible and game.pvp != "attack"
+		btn_view.visible = game.pvp != "attack"
+		if game.pvp == "attack":
+			btn_primary.text = "Saldırı hazırlığı" if not game.atk_ready() else "Kuşatma sürüyor"
+		elif game.pvp == "defend":
+			btn_primary.text = "Saldırı geliyor!" if game.phase == "wave" else "Saldırı bekleniyor"
+		elif game.phase == "wave":
 			btn_primary.text = "Ani baskın!" if game.raid else "%d. dalga sürüyor" % game.wave
 		elif countdown >= 0:
 			btn_primary.text = "%d. Dalga · %d sn" % [game.wave + 1, countdown]
@@ -1044,9 +1122,18 @@ func refresh(sound_label: String, light_name: String) -> void:
 	_refresh_tech()
 	var ended := game.phase == "won" or game.phase == "lost"
 	if ended and not overlay.visible:
-		overlay_again.text = "Yeni Düello" if game.duel else "Yeniden Oyna"
-		overlay_map.text = "Ana Menü" if game.duel else "Sefer Haritası"
-		if game.duel:
+		var online := game.duel or game.pvp != ""
+		overlay_again.text = "Yeni Düello" if online else "Yeniden Oyna"
+		overlay_map.text = "Ana Menü" if online else "Sefer Haritası"
+		if game.pvp != "":
+			var won := game.phase == "won"
+			overlay_title.text = ("Kale Senin!" if won else "Kuşatma Başarısız") if game.pvp == "attack" else ("Kale Dayandı!" if won else "Kale Düştü")
+			overlay_text.text = duel_note
+			if game.pvp == "attack":
+				overlay_text.text += "\n%d asker gönderdin, %d ganimet topladın." % [game.pvp_state.sent, game.pvp_state.loot]
+			else:
+				overlay_text.text += "\n%d saldırı karşıladın, surda %d kaldı." % [game.pvp_state.attacks, game.wall]
+		elif game.duel:
 			overlay_title.text = "Düello Kazanıldı!" if game.phase == "won" else "Düello Kaybedildi"
 			overlay_text.text = "%s\n%d. dalgaya kadar dayandın. Rakibe %d asker yolladın, rakipten %d geldi." % [duel_note, game.wave,
 				game.duel_state.sent, game.duel_state.got]

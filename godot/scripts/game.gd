@@ -53,6 +53,10 @@ var stats := {}
 # out rakibe gidecek askerler (bağlantı boşaltır), pending sıradaki dalgaya eklenecek rakip askerleri
 var duel := false
 var duel_state := {}
+# Saldıran ve Savunan: pvp "defend" (bu oyun gerçek savaştır) ya da "attack" (bu oyun savunanın
+# görüntüsüdür, apply_snap ile dolar). pvp_state: kalan süre, ganimet, saldıranın akçesi ve yükseltmeleri.
+var pvp := ""
+var pvp_state := {}
 var streak := 0
 var wave_wall := 0
 var buildings := {}
@@ -92,6 +96,15 @@ func set_duel(on: bool) -> void:
 		total_waves = 999
 
 
+# Saldıran ve Savunan oyununu açar (set_duel gibi, reset'ten önce)
+func set_pvp(role: String) -> void:
+	pvp = role
+	if role != "":
+		duel = false
+		set_stage("")
+		total_waves = 999
+
+
 # Serbest savaşta dalganın WAVES dizini; düelloda 12'den sonra son dört dalga döner
 func _wi(i: int) -> int:
 	var n: int = D.WAVES.size()
@@ -117,6 +130,8 @@ func wave_groups(i: int) -> Array:
 
 # n. dalgada (1'den) düşman canı çarpanı
 func difficulty(n: int) -> float:
+	if pvp != "":
+		return 1.0  # saldıranın askerleri yalnız yükseltmeyle güçlenir
 	return D.difficulty(n) * stage.get("hp", 1.0)
 
 
@@ -170,6 +185,9 @@ func reset() -> void:
 	stats = {}
 	duel_state = {"build": D.DUEL.first_build, "pressure": 0, "out": [], "pending": [], "sent": 0, "got": 0,
 		"nation": duel_state.get("nation", ""), "result": ""}
+	pvp_state = {"time_left": D.PVP.duration, "loot": 0, "income": D.PVP.def_every, "attacks": 0, "sent": 0,
+		"spent": 0, "up": {"hp": 0, "dmg": 0, "spd": 0}, "out": [], "def_time": 0.0, "result": "",
+		"nation": pvp_state.get("nation", "")}
 	streak = 0
 	selected = null
 	time = 0.0
@@ -353,7 +371,7 @@ func build_tower(type: String) -> void:
 	var cost: int = D.TOWERS[type].cost
 	gold -= cost
 	towers.append({"id": _id(), "type": type, "c": selected.c, "r": selected.r, "x": selected.c + 0.5, "y": selected.r + 0.5,
-		"level": 1, "spent": cost, "cooldown": 0.0, "angle": -PI / 2, "recoil": 0.0})
+		"level": 1, "spent": cost, "cooldown": 0.0, "angle": -PI / 2, "recoil": 0.0, "hp": D.tower_hp(type, 1), "max_hp": D.tower_hp(type, 1)})
 	stat("towers")
 	sound("build")
 
@@ -378,6 +396,8 @@ func upgrade_tower() -> void:
 	gold -= cost
 	t.spent += cost
 	t.level += 1
+	t.max_hp = D.tower_hp(t.type, t.level)
+	t.hp = t.max_hp
 	sound("build")
 
 
@@ -710,7 +730,7 @@ func trigger_charge() -> void:
 # ---------------------------------------------------------------- dalgalar
 
 func start_wave() -> void:
-	if phase != "build" or wave >= total_waves:
+	if phase != "build" or wave >= total_waves or pvp != "":
 		return
 	wave += 1
 	phase = "wave"
@@ -759,11 +779,16 @@ func _update_spawner(dt: float) -> void:
 		_spawn_enemy(n.type, n.nation)
 		if n.get("duel", false):
 			enemies[-1].from_duel = true
+		if n.has("up"):
+			_boost(enemies[-1], n.up)
 		spawn_timer += n.gap
 
 
 func _check_wave_end() -> bool:
 	if phase != "wave" or spawn_queue.size() or enemies.size():
+		return false
+	if pvp != "":
+		phase = "build"
 		return false
 	if raid:
 		raid = false
@@ -818,7 +843,7 @@ func _reset_raid_timer() -> void:
 
 
 func _update_raid(dt: float) -> void:
-	if duel or phase != "build" or wave < D.RAID.first_wave or wave >= total_waves:
+	if duel or pvp != "" or phase != "build" or wave < D.RAID.first_wave or wave >= total_waves:
 		return
 	raid_timer -= dt
 	if raid_timer > 0.0:
@@ -867,7 +892,10 @@ func _update_movement(dt: float) -> void:
 			if fortify > 0.0:
 				text(e.x, e.y - 0.4, "Sur sağlam!", "#e0c070")
 			else:
-				wall = maxi(0, wall - e.def.damage)
+				var dmg := roundi(e.def.damage * e.get("dmg_mult", 1.0))
+				if pvp != "":
+					pvp_state.loot += mini(wall, dmg) * D.PVP.loot_wall
+				wall = maxi(0, wall - dmg)
 			events.append({"kind": "shake", "time": D.RULES.shake_time})
 			sound("wallHit")
 			if wall <= 0:
@@ -1373,6 +1401,8 @@ func step(dt: float) -> bool:
 		duel_state.build -= dt
 		if duel_state.build <= 0.0:
 			start_wave()
+	if pvp == "defend":
+		_update_pvp(dt)
 	_update_raid(dt)
 	_update_market(dt)
 	_update_research(dt)
@@ -1454,3 +1484,270 @@ func duel_end(win: bool, why: String) -> void:
 	else:
 		sound("defeat")
 	banner(why, "#f2c94c" if win else "#ff5b4d", 3.0)
+
+
+# ---------------------------------------------------------------- saldıran ve savunan
+
+# Saldıranın yükseltmeleri askerin canını, gücünü (sura ve kuleye vuruşu) ve hızını artırır
+func _boost(e: Dictionary, up: Dictionary) -> void:
+	var k: float = 1.0 + D.PVP.up.hp * int(up.get("hp", 0))
+	e.hp *= k
+	e.max_hp *= k
+	e.speed *= 1.0 + D.PVP.up.spd * int(up.get("spd", 0))
+	e.dmg_mult = 1.0 + D.PVP.up.dmg * int(up.get("dmg", 0))
+	e.pvp = true
+
+
+func _update_pvp(dt: float) -> void:
+	pvp_state.time_left = maxf(0.0, pvp_state.time_left - dt)
+	if pvp_state.time_left <= 0.0 and is_active():
+		pvp_state.result = "win"
+		phase = "won"
+		stat("duel_wins")
+		banner("Kale dayandı! Zafer senin", "#f2c94c", 3.0)
+		sound("chant", {"voices": 16, "loud": 1})
+		return
+	# savunanın geliri: her def_every saniyede şehir vergisi ve onarım
+	pvp_state.income -= dt
+	if pvp_state.income <= 0.0:
+		pvp_state.income = D.PVP.def_every
+		var inc := city_income()
+		gold += D.PVP.def_gold + inc.tax + inc.endowment + inc.palace_tax
+		wall = mini(max_wall, wall + inc.repair)
+		for k in D.RES_ORDER:
+			res[k] += inc[k]
+	# saldıran askerler yanından geçtikleri kuleye vurur; savaş yoksa kuleler kendini onarır
+	var down := []
+	for t in towers:
+		if not t.has("hp"):
+			continue
+		if enemies.is_empty():
+			t.hp = minf(t.max_hp, t.hp + t.max_hp * D.PVP.tower_regen * dt)
+	for e in enemies:
+		if e.dead or not e.get("pvp", false) or e.y >= wall_row:
+			continue
+		var reach: float = D.PVP.reach.get(e.type, D.PVP.tower_reach)
+		if reach <= 0.0:
+			continue
+		var best = null
+		var bd: float = reach + e.radius
+		for t in towers:
+			var d := Vector2(t.x - e.x, t.y - e.y).length()
+			if d <= bd and t.hp > 0.0:
+				bd = d
+				best = t
+		if best != null:
+			best.hp -= maxf(1.0, e.def.damage) * D.PVP.tower_dps * e.get("dmg_mult", 1.0) * dt
+			e.swing = maxf(e.swing, 0.7)
+			if best.hp <= 0.0 and not best in down:
+				down.append(best)
+	for t in down:
+		towers.erase(t)
+		if selected != null and selected.get("c") == t.c and selected.get("r") == t.r:
+			selected = null
+		pvp_state.loot += D.PVP.loot_tower * t.level
+		particles(t.x, t.y, "#8a7a68", 30, 2.4, 0.09, 0.7)
+		particles(t.x, t.y, "#e8dcc0", 16, 1.6, 0.12, 0.8)
+		text(t.x, t.y - 0.5, "Kule yıkıldı!", "#ff5b4d")
+		events.append({"kind": "shake", "time": 0.15})
+		sound("crash")
+
+
+# Saldırandan gelen birlikler hemen yola çıkar
+func pvp_receive(type: String, count: int, up: Dictionary) -> void:
+	if pvp != "defend" or not is_active() or not D.PVP.units.has(type):
+		return
+	count = clampi(count, 1, D.PVP.batch)
+	var nat: String = pvp_state.nation if D.NATIONS.has(pvp_state.nation) else nation
+	for i in count:
+		spawn_queue.append({"type": type, "gap": D.PVP.gap, "nation": nat, "up": up})
+	if phase == "build":
+		phase = "wave"
+		spawn_timer = 0.3
+		sound("waveStart")
+	pvp_state.attacks += 1
+	banner("%d %s geliyor!" % [count, D.ENEMY_NAMES[type]], "#ff5b4d", 1.4)
+
+
+# Saldıran ya da sürenin dolması dışında biten oyun (rakip yenildi/ayrıldı)
+func pvp_end(win: bool, why: String) -> void:
+	if pvp == "" or not is_active():
+		return
+	pvp_state.result = "win" if win else "lose"
+	phase = "won" if win else "lost"
+	if win:
+		stat("duel_wins")
+		sound("chant", {"voices": 16, "loud": 1})
+	else:
+		sound("defeat")
+	banner(why, "#f2c94c" if win else "#ff5b4d", 3.0)
+
+
+# ---- savunanın kalesinin görüntüsü (saldıranın tarafı)
+
+static func _r(v: float) -> float:
+	return snappedf(v, 0.01)
+
+
+# Savunanın durumundan kısa bir görüntü: kuleler, düşmanlar, askerler, mermiler
+func snapshot() -> Dictionary:
+	var tw := []
+	for t in towers:
+		tw.append([t.id, t.type, t.level, t.c, t.r, _r(t.angle), roundi(t.hp), roundi(t.max_hp), 1 if t.get("stun", 0.0) > 0.0 else 0])
+	var en := []
+	for e in enemies:
+		if not e.dead:
+			en.append([e.id, e.type, e.nation, _r(e.dist), roundi(e.hp), roundi(e.max_hp), _r(e.speed * (1.0 - e.slow) * (1.0 - wx().slow)),
+				1 if e.blocker != null else 0, _r(e.act)])
+	var un := []
+	for u in units:
+		if not u.dead:
+			un.append([u.id, u.kind, _r(u.x), _r(u.y), _r(u.angle), roundi(u.hp), roundi(u.max_hp), 1 if u.moving else 0, _r(u.swing)])
+	var pr := []
+	for p in projectiles.slice(0, 24):
+		pr.append([p.id, p.type, _r(p.x), _r(p.y), _r(p.tx), _r(p.ty), p.from])
+	return {"tw": tw, "en": en, "un": un, "pr": pr, "wall": wall, "max_wall": max_wall, "time": _r(time),
+		"left": _r(pvp_state.time_left), "loot": pvp_state.loot, "b": buildings.duplicate(), "season": season,
+		"weather": weather, "hero": hero_id, "phase": phase}
+
+
+# Saldıranın tarafında savunanın görüntüsünü kurar; kimliği aynı kalanlar yerinde güncellenir
+func apply_snap(m: Dictionary) -> void:
+	var old := {}
+	for list in [towers, enemies, units, projectiles]:
+		for o in list:
+			old[o.id] = o
+	towers = []
+	for a in m.get("tw", []):
+		var t: Dictionary = old.get(int(a[0]), {"id": int(a[0]), "recoil": 0.0, "cooldown": 0.0})
+		t.merge({"type": str(a[1]), "level": int(a[2]), "c": int(a[3]), "r": int(a[4]), "x": int(a[3]) + 0.5, "y": int(a[4]) + 0.5,
+			"angle": float(a[5]), "hp": float(a[6]), "max_hp": maxf(1.0, float(a[7])), "stun": 1.0 if int(a[8]) else 0.0}, true)
+		towers.append(t)
+	enemies = []
+	for a in m.get("en", []):
+		var type := str(a[1])
+		if not D.ENEMIES.has(type):
+			continue
+		var id := int(a[0])
+		var e: Dictionary = old.get(id, {})
+		if e.is_empty():
+			e = {"id": id, "def": D.ENEMIES[type], "type": type, "radius": D.ENEMIES[type].radius, "flash": 0.0, "swing": 0.0,
+				"slow": 0.0, "dead": false, "dist": float(a[3]), "armor": 0}
+		e.nation = str(a[2]) if D.NATIONS.has(str(a[2])) else "byzantium"
+		if float(a[4]) < e.get("hp", float(a[4])):
+			e.flash = D.RULES.hit_flash
+		e.hp = float(a[4])
+		e.max_hp = maxf(1.0, float(a[5]))
+		e.speed = float(a[6])
+		e.target_dist = float(a[3])
+		e.blocker = true if int(a[7]) else null
+		e.act = float(a[8])
+		enemies.append(e)
+	units = []
+	for a in m.get("un", []):
+		var kind := str(a[1])
+		var id := int(a[0])
+		var u: Dictionary = old.get(id, {"id": id, "kind": kind, "x": float(a[2]), "y": float(a[3]), "engaged": 0, "ready": true, "dead": false})
+		u.tx = float(a[2])
+		u.ty = float(a[3])
+		u.angle = float(a[4])
+		u.hp = float(a[5])
+		u.max_hp = maxf(1.0, float(a[6]))
+		u.moving = int(a[7]) == 1
+		u.swing = float(a[8])
+		units.append(u)
+	projectiles = []
+	for a in m.get("pr", []):
+		var id := int(a[0])
+		var p: Dictionary = old.get(id, {"id": id, "type": str(a[1]), "from": str(a[6])})
+		p.merge({"x": float(a[2]), "y": float(a[3]), "tx": float(a[4]), "ty": float(a[5])}, true)
+		projectiles.append(p)
+	wall = int(m.get("wall", wall))
+	max_wall = int(m.get("max_wall", max_wall))
+	pvp_state.def_time = float(m.get("time", 0.0))
+	pvp_state.time_left = float(m.get("left", pvp_state.time_left))
+	pvp_state.loot = int(m.get("loot", pvp_state.loot))
+	var b = m.get("b")
+	if b is Dictionary:
+		for k in b:
+			if buildings.has(k):
+				buildings[k] = int(b[k])
+	season = str(m.get("season", season)) if D.SEASONS.has(str(m.get("season", ""))) else season
+	weather = str(m.get("weather", weather)) if D.WEATHER.has(str(m.get("weather", ""))) else weather
+	hero_id = str(m.get("hero", "")) if D.HEROES.has(str(m.get("hero", ""))) else ""
+	var ph := str(m.get("phase", "build"))
+	if ph in ["build", "wave"] and is_active():
+		phase = ph
+
+
+# Görüntülerin arasında düşmanlar yolda yürümeye, askerler hedeflerine kaymaya devam eder
+func mirror_step(dt: float) -> void:
+	time += dt
+	for e in enemies:
+		var want: float = e.get("target_dist", e.dist)
+		if e.blocker == null:
+			e.dist += e.speed * dt
+		# görüntüden çok saparsa ona doğru çekilir
+		e.dist = lerpf(e.dist, want, minf(1.0, dt * 3.0)) if absf(e.dist - want) > 0.05 else e.dist
+		e.dist = minf(e.dist, path_length)
+		var p := point_at(e.dist)
+		e.x = p.x
+		e.y = p.y
+		e.angle = p.z
+		e.flash = maxf(0.0, e.flash - dt)
+		e.swing = maxf(0.0, e.swing - dt * 2.0)
+	for u in units:
+		u.x = lerpf(u.x, u.tx, minf(1.0, dt * 8.0))
+		u.y = lerpf(u.y, u.ty, minf(1.0, dt * 8.0))
+	for p in projectiles:
+		p.x = lerpf(p.x, p.tx, minf(1.0, dt * 4.0))
+		p.y = lerpf(p.y, p.ty, minf(1.0, dt * 4.0))
+
+
+# ---- saldıranın akçesi, birlikleri ve yükseltmeleri
+
+func atk_gold() -> int:
+	var t: float = pvp_state.def_time
+	var earned: float = D.PVP.atk_start + D.PVP.atk_income * t + D.PVP.atk_growth * t * t / 2.0 + pvp_state.loot
+	return int(earned) - int(pvp_state.spent)
+
+
+func atk_ready() -> bool:
+	return pvp == "attack" and is_active() and pvp_state.def_time >= D.PVP.prep
+
+
+func atk_cost(type: String, n := 1) -> int:
+	return D.PVP.units[type] * n
+
+
+func can_send(type: String, n := 1) -> bool:
+	return atk_ready() and atk_gold() >= atk_cost(type, n)
+
+
+func atk_send(type: String, n := 1) -> bool:
+	if not can_send(type, n):
+		return false
+	pvp_state.spent += atk_cost(type, n)
+	pvp_state.sent += n
+	pvp_state.out.append({"type": type, "n": n, "up": pvp_state.up.duplicate()})
+	sound("horn")
+	return true
+
+
+func up_cost(kind: String) -> int:
+	var lv: int = pvp_state.up[kind]
+	return D.PVP.up_cost[lv] if lv < D.PVP.up_max else -1
+
+
+func can_upgrade_army(kind: String) -> bool:
+	var c := up_cost(kind)
+	return pvp == "attack" and is_active() and c > 0 and atk_gold() >= c
+
+
+func upgrade_army(kind: String) -> bool:
+	if not can_upgrade_army(kind):
+		return false
+	pvp_state.spent += up_cost(kind)
+	pvp_state.up[kind] += 1
+	sound("build")
+	return true

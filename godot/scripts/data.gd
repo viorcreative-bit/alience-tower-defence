@@ -92,6 +92,28 @@ const BOSS_WAVES := {3: ["trebuchet"], 7: ["elephant"], 11: ["bossTower"]}
 const DUEL := {"first_build": 35.0, "build": 20.0, "cost": 40, "boss_send": "siegeTower", "gap": 0.7,
 	"send": [[1, "infantry"], [3, "light"], [5, "knight"], [8, "ram"]], "honor_win": 150, "honor_lose": 30,
 	"timeout": 45.0, "code_len": 4}
+
+# Saldıran ve Savunan: savunan bildiği oyunu oynar ama düşmanları saldıran gönderir. Saldıranın akçesi
+# atk_start + her saniye atk_income (zamanla atk_growth kadar artar) + ganimettir (yıkılan kule başına loot_tower × seviye, sura vurulan her
+# puan için loot_wall). İlk prep saniyesinde asker gönderilemez. Saldıran askerleri yol kenarındaki kulelere
+# (merkezden tower_reach kadar) saniyede damage × tower_dps vurur. Savunan duration saniye dayanırsa kazanır.
+# up: yükseltme başına can, güç ve hız artışı; up_cost: sıradaki seviyenin bedeli.
+const PVP := {"duration": 600.0, "prep": 40.0, "snap": 0.2, "atk_start": 90, "atk_income": 4.0, "atk_growth": 0.012,
+	"def_every": 30.0, "def_gold": 30, "loot_tower": 45, "loot_wall": 12, "tower_dps": 4.0, "tower_reach": 1.15,
+	"tower_regen": 0.03, "gap": 0.55, "batch": 5,
+	"units": {"infantry": 10, "light": 14, "horseArcher": 18, "knight": 32, "ram": 55, "siegeTower": 180,
+		"commander": 330, "trebuchet": 380, "elephant": 420, "bossTower": 520},
+	"unit_order": ["infantry", "light", "horseArcher", "knight", "ram", "siegeTower", "commander", "trebuchet", "elephant", "bossTower"],
+	"reach": {"horseArcher": 2.2, "trebuchet": 0.0},
+	"up": {"hp": 0.15, "dmg": 0.2, "spd": 0.06}, "up_order": ["hp", "dmg", "spd"],
+	"up_names": {"hp": "Can", "dmg": "Güç", "spd": "Hız"}, "up_max": 5, "up_cost": [60, 100, 160, 240, 340],
+	"honor_win": 150, "honor_lose": 30}
+# Kulelerin canı (yalnız Saldıran ve Savunan oyununda azalır); her seviye %50 artar
+const TOWER_HP := {"archer": 220, "tar": 240, "cannon": 320, "musket": 260}
+
+
+static func tower_hp(type: String, level: int) -> float:
+	return TOWER_HP.get(type, 150) * (1.0 + 0.5 * (level - 1))
 const BOSS_GAP := 3.0  # patron, dalganın son birliğinden bu kadar sonra çıkar
 const ENEMY_MELEE := {"rate": 1.0, "growth": 0.08}
 

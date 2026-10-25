@@ -47,6 +47,8 @@ var debug_hero := ""  # `--hero=sinan` (geliştirme)
 var net: Net  # Supabase: çevrimiçi sıralama ve düello odaları
 var link: DuelLink  # süren düello (yoksa null)
 var net_state := ""  # odanın bağlantı durumu
+var debug_def: Game  # `--siege-demo`: aynı süreçte koşan sahte savunan
+var debug_link: DuelLink
 
 
 func _ready() -> void:
@@ -113,17 +115,21 @@ func _place_king(country: String, level: int) -> void:
 	add_child(sultan.root)
 
 
-func _start_game(country: String, level: int, stage := "", duel := false) -> void:
-	if not duel:
+func _start_game(country: String, level: int, stage := "", duel := false, pvp := "") -> void:
+	if not duel and pvp == "":
 		_duel_leave()
 	game.country = country
 	game.king_level = level
 	game.set_stage(stage)
 	game.duel = false
+	game.pvp = ""
 	if duel:
 		game.duel_state.nation = link.opp.get("country", "")
 		game.set_duel(true)
-	game.hero_id = debug_hero if debug_hero != "" else profiles.hero()
+	elif pvp != "":
+		game.pvp_state.nation = link.opp.get("country", "")
+		game.set_pvp(pvp)
+	game.hero_id = "" if pvp == "attack" else (debug_hero if debug_hero != "" else profiles.hero())
 	if world.path_key != game.map_key():
 		_rebuild_world()
 	models.set_player_flag(country)
@@ -134,7 +140,11 @@ func _start_game(country: String, level: int, stage := "", duel := false) -> voi
 	in_menu = false
 	ui.visible = true
 	set_city_view(false)
-	if game.duel:
+	if pvp == "attack":
+		game.banner("%s'in kalesine saldır!" % link.opp.get("name", "Rakip"), "#e0b24a", 2.6)
+	elif pvp == "defend":
+		game.banner("%s saldırıyor, kaleni koru!" % link.opp.get("name", "Rakip"), "#e0b24a", 2.6)
+	elif game.duel:
 		game.banner("Düello: %s" % link.opp.get("name", "Rakip"), "#e0b24a", 2.4)
 	elif game.stage_id != "":
 		game.banner("%s Kuşatması" % game.stage.name, "#e0b24a", 2.4)
@@ -189,7 +199,7 @@ func _device() -> String:
 
 # ---------------------------------------------------------------- düello
 
-func _duel_join(code: String) -> void:
+func _duel_join(code: String, creator := true, mode := "duel", role := "") -> void:
 	_duel_leave()
 	var r := RandomNumberGenerator.new()
 	r.randomize()
@@ -197,7 +207,7 @@ func _duel_join(code: String) -> void:
 	link.outgoing.connect(net.send)
 	link.started.connect(_duel_start)
 	link.changed.connect(_duel_status)
-	link.begin(code)
+	link.begin(code, creator, mode, role)
 	net_state = ""
 	net.join(code)
 	_duel_status()
@@ -214,7 +224,10 @@ func _duel_start(sd: int) -> void:
 	seed(sd)
 	link.game = game
 	menu.visible = false
-	_start_game(profiles.country(), profiles.king_level(profiles.country()), "", true)
+	if link.mode == "siege":
+		_start_game(profiles.country(), profiles.king_level(profiles.country()), "", false, link.role)
+	else:
+		_start_game(profiles.country(), profiles.king_level(profiles.country()), "", true)
 
 
 # Menüdeki bekleme satırı
@@ -227,7 +240,8 @@ func _duel_status() -> void:
 	elif not net.joined:
 		t = "Sunucuya bağlanılıyor…"
 	elif link.opp.has("id"):
-		t = "Rakip bulundu: %s. Düello başlıyor…" % link.opp.name
+		var r := {"attack": " Sen saldıransın.", "defend": " Sen savunansın."}.get(link.role, "") as String
+		t = "Rakip bulundu: %s.%s Başlıyor…" % [link.opp.name, r]
 	else:
 		t = "Oda kodu %s. Rakibin bu kodla katılsın; bekleniyor…" % link.room
 	menu.duel_status(t)
@@ -251,7 +265,10 @@ func _award_honor() -> void:
 		honored_wave += 1
 		n += honored_wave * D.KING.honor_per_wave
 	var stage_note := ""
-	if game.duel and (game.phase == "won" or game.phase == "lost") and honored_wave <= game.total_waves:
+	if game.pvp != "" and (game.phase == "won" or game.phase == "lost") and honored_wave <= game.total_waves:
+		honored_wave = game.total_waves + 1
+		n += D.PVP.honor_win if game.phase == "won" else D.PVP.honor_lose
+	elif game.duel and (game.phase == "won" or game.phase == "lost") and honored_wave <= game.total_waves:
 		honored_wave = game.total_waves + 1
 		n += D.DUEL.honor_win if game.phase == "won" else D.DUEL.honor_lose
 	elif game.phase == "won" and honored_wave <= game.total_waves:
@@ -396,7 +413,8 @@ func _center(target: Vector3, dir: Vector3, d: float, corners: Array[Vector3], w
 # ---------------------------------------------------------------- dokunma
 
 func _unhandled_input(event: InputEvent) -> void:
-	if in_menu:
+	if in_menu or game.pvp == "attack":
+		hover_tile.visible = false
 		return
 	if event is InputEventMouseMotion:
 		var t := _tile_under(event.position)
@@ -452,6 +470,8 @@ func _on_action(name: String, arg: String) -> void:
 			var s: Array = D.BUILDINGS[arg].slot
 			game.select_tile(s[0], s[1])
 		"speed":
+			if game.pvp != "":
+				return
 			var list: Array = D.RULES.speeds
 			game.speed = list[(list.find(game.speed) + 1) % list.size()]
 		"charge":
@@ -469,8 +489,12 @@ func _on_action(name: String, arg: String) -> void:
 			world.cycle_light()
 			save.set_value("settings", "light", world.time_of_day)
 			save.save(SAVE_PATH)
+		"send":
+			game.atk_send(arg, GameUI.atk_batch(arg))
+		"army_up":
+			game.upgrade_army(arg)
 		"restart":
-			if game.duel:
+			if game.duel or game.pvp != "":
 				_duel_leave()
 				_open_menu()
 				menu.show_duel()
@@ -481,10 +505,13 @@ func _on_action(name: String, arg: String) -> void:
 			if game.duel and game.is_active():
 				game.duel_end(false, "Düellodan çekildin")
 				_award_honor()
+			elif game.pvp != "" and game.is_active():
+				game.pvp_end(false, "Savaştan çekildin")
+				_award_honor()
 			_duel_leave()
 			_open_menu()
 		"map":
-			var was_duel := game.duel
+			var was_duel := game.duel or game.pvp != ""
 			_duel_leave()
 			_open_menu(not was_duel)
 
@@ -509,6 +536,13 @@ func _restart() -> void:
 func _process(delta: float) -> void:
 	if link:
 		link.tick(delta)
+	if debug_link:
+		debug_link.tick(delta)
+		if debug_link.state == "playing":
+			if debug_def.pvp == "attack":
+				debug_def.mirror_step(delta)
+			else:
+				debug_def.advance(delta)
 	if in_menu:
 		town.update(delta)
 		# menüde şehir sesi ve ağır ney ezgisi
@@ -516,7 +550,11 @@ func _process(delta: float) -> void:
 		audio.set_boss(false)
 		audio.set_ambience("city", "", false)
 		return
-	if game.advance(delta) or game.phase == "lost":
+	if game.pvp == "attack":
+		game.mirror_step(delta)
+		if not game.is_active():
+			_award_honor()
+	elif game.advance(delta) or game.phase == "lost" or (game.pvp != "" and game.phase == "won"):
 		_save_best()
 		_award_honor()
 	_handle_events()
@@ -534,9 +572,14 @@ func _process(delta: float) -> void:
 	var wx := {"rain": "rain", "snow": "wind", "fog": "wind"}
 	audio.set_ambience(game.stage.get("ambience", "city"), wx.get(game.weather, ""), game.phase == "wave")
 	ui.duel_text = ""
-	if game.duel and link and link.opp.has("id"):
+	if link and link.opp.has("id"):
 		var o: Dictionary = link.opp
-		ui.duel_text = "%s · Sur %d/%d · %d. dalga" % [o.name, o.wall, o.max_wall, o.wave]
+		if game.pvp == "attack":
+			ui.duel_text = "Savunan: %s · Sur %d/%d" % [o.name, game.wall, game.max_wall]
+		elif game.pvp == "defend":
+			ui.duel_text = "Saldıran: %s" % o.name
+		elif game.duel:
+			ui.duel_text = "Rakip: %s · Sur %d/%d · %d. dalga" % [o.name, o.wall, o.max_wall, o.wave]
 		ui.duel_note = link.why
 	ui.refresh(audio.mode_name(), world.light_name())
 	if shake > 0.0 and not (cam_tween and cam_tween.is_running()):
@@ -592,12 +635,21 @@ func _sync_towers(dt: float) -> void:
 		if t.recoil > 0.9 and rec.recoil <= 0.0 and info.has("muzzle"):
 			_muzzle(info)
 		rec.recoil = t.recoil
+		# Saldıran ve Savunan'da kulelerin canı azalır
+		var frac: float = t.get("hp", 1.0) / t.get("max_hp", 1.0)
+		_bar(t.id, info.root.position + Vector3(0, 1.25, 0), frac, Color("#e0b24a") if frac > 0.4 else Color("#ff5b4d"), frac < 0.999)
 	for id in tower_nodes.keys():
 		if not seen.has(id):
 			var root: Node3D = tower_nodes[id].info.root
 			_burst(root.position + Vector3(0, 0.1, 0), Color(0.85, 0.75, 0.55, 0.7), 18, 1.0, 0.2, 0.7, 0.3)
+			if game.pvp == "attack":
+				# saldıranın ekranında yıkılan kule
+				_burst(root.position + Vector3(0, 0.3, 0), Color(0.55, 0.48, 0.4, 0.8), 30, 2.0, 0.25, 0.9, -1.0)
+				audio.play("crash")
+				shake = 0.15
 			root.queue_free()
 			tower_nodes.erase(id)
+			_drop_bar(id)
 
 
 func _muzzle(info: Dictionary) -> void:
@@ -634,7 +686,7 @@ func _sync_enemies(dt: float) -> void:
 		root.position = world.to_world(e.x, e.y)
 		var moving: bool = e.blocker == null
 		var yaw := _yaw(e.angle)
-		if not moving and e.blocker != null:
+		if not moving and e.blocker is Dictionary:
 			yaw = _yaw(atan2(e.blocker.y - e.y, e.blocker.x - e.x))
 		root.rotation.y = lerp_angle(root.rotation.y, yaw, minf(1.0, dt * 10.0))
 		var spd: float = e.speed * (1.0 - e.slow) * game.speed
@@ -1132,6 +1184,66 @@ func _debug_hooks() -> void:
 	# `--country=venice --king=3` ya da `--demo`/`--city` menüyü atlayıp doğrudan oyunu açar
 	debug_hero = _arg(args, "--hero=", "")
 	var cn := _arg(args, "--country=", "")
+	# `--siege-demo` saldıranın ekranını açar; savunan aynı süreçte koşan ikinci bir oyundur
+	# `--siege-defend`: savunanın ekranı; saldıran aynı süreçte koşan ve birlik yollayan bir görüntüdür
+	if "--siege-defend" in args:
+		if profiles.current == "":
+			profiles.login("Ali")
+		debug_def = Game.new()
+		debug_link = DuelLink.new("b", "Veli", "hungary")
+		link = DuelLink.new("a", profiles.current, "ottoman")
+		link.outgoing.connect(func(m): debug_link.handle(JSON.parse_string(JSON.stringify(m))))
+		debug_link.outgoing.connect(func(m):
+			if link:
+				link.handle(JSON.parse_string(JSON.stringify(m))))
+		debug_link.started.connect(func(_s):
+			debug_def.set_pvp("attack")
+			debug_def.reset()
+			debug_link.game = debug_def)
+		link.started.connect(func(sd):
+			_duel_start(sd)
+			game.time = D.PVP.prep
+			game.gold = 9999
+			for spot in [[3, 3], [5, 4], [3, 9], [5, 9], [0, 1], [8, 6], [6, 2]]:
+				game.select_tile(spot[0], spot[1])
+				game.build_tower(["archer", "cannon", "musket", "tar"][randi() % 4])
+			game.selected = null)
+		link.begin("TEST", true, "siege", "defend")
+		debug_link.begin("TEST", false)
+		get_tree().create_timer(2.0).timeout.connect(func():
+			debug_def.pvp_state.loot = 2000
+			for k in ["ram", "knight", "knight", "infantry", "light", "horseArcher"]:
+				debug_def.atk_send(k, GameUI.atk_batch(k)))
+		return
+	if "--siege-demo" in args:
+		if profiles.current == "":
+			profiles.login("Ali")
+		debug_def = Game.new()
+		debug_link = DuelLink.new("b", "Veli", "hungary")
+		link = DuelLink.new("a", profiles.current, "ottoman")
+		link.outgoing.connect(func(m): debug_link.handle(JSON.parse_string(JSON.stringify(m))))
+		debug_link.outgoing.connect(func(m):
+			if link:
+				link.handle(JSON.parse_string(JSON.stringify(m))))
+		debug_link.started.connect(func(_s):
+			var g := debug_def
+			g.pvp_state.nation = "ottoman"
+			g.set_pvp("defend")
+			g.reset()
+			g.time = D.PVP.prep + 1.0
+			g.gold = 9999
+			for spot in [[3, 3], [5, 4], [3, 9], [5, 9], [0, 1], [8, 6]]:
+				g.select_tile(spot[0], spot[1])
+				g.build_tower(["archer", "cannon", "musket", "tar"][randi() % 4])
+			g.selected = null
+			debug_link.game = g)
+		link.started.connect(_duel_start)
+		link.begin("TEST", true, "siege", "attack")
+		debug_link.begin("TEST", false)
+		get_tree().create_timer(2.5).timeout.connect(func():
+			for k in ["knight", "infantry", "ram", "light"]:
+				game.atk_send(k, GameUI.atk_batch(k)))
+		return
 	# `--duel` sahte bir rakiple düelloyu açar (yalnız görünüş; ileti gitmez)
 	if "--duel" in args:
 		link = DuelLink.new("a", profiles.current if profiles.current != "" else "Ali", "ottoman")

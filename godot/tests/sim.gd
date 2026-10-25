@@ -3,6 +3,12 @@ extends SceneTree
 # Oyun mantığını görüntüsüz oynatır: kule kurar, şehri geliştirir, asker yetiştirir, 12 dalgayı koşturur.
 # Kullanım: godot --headless --script tests/sim.gd
 func _init() -> void:
+	# `-- --siege` yalnız Saldıran ve Savunan sınamasını koşar
+	if "--siege" in OS.get_cmdline_user_args():
+		_siege(4)
+		_siege(10, true)
+		quit()
+		return
 	var g := Game.new()
 	g.gold = 99999
 	var spots := [[3, 3], [5, 4], [3, 9], [5, 9], [0, 1], [8, 6], [4, 7], [1, 10], [6, 11], [3, 1]]
@@ -53,6 +59,8 @@ func _init() -> void:
 	_bosses()
 	_progress()
 	_duel()
+	_siege(4)
+	_siege(10, true)
 	quit()
 
 
@@ -370,3 +378,113 @@ func _duel() -> void:
 	var rng := RandomNumberGenerator.new()
 	assert(DuelLink.make_code(rng).length() == D.DUEL.code_len)
 	print("düello tamam")
+
+
+# Saldıran ve Savunan: savunan kule kurar; saldıran (basit yapay zekâ) parası yettikçe en pahalı
+# birliği gönderir ve arada yükseltir. Görüntü saldırana ulaşır, ganimet birikir, oyun bir tarafın zaferiyle biter.
+func _siege(towers: int, smart := false) -> void:
+	var D := GameData
+	var spots := []
+	var gd := Game.new()
+	var ga := Game.new()
+	var ld := DuelLink.new("b2", "Kale", "ottoman")
+	var la := DuelLink.new("a1", "Akıncı", "hungary")
+	var to_a := []
+	var to_d := []
+	ld.outgoing.connect(func(m): to_a.append(JSON.parse_string(JSON.stringify(m))))
+	la.outgoing.connect(func(m): to_d.append(JSON.parse_string(JSON.stringify(m))))
+	ld.started.connect(func(_s):
+		assert(ld.role == "defend", "katılan savunan olmalı: " + ld.role)
+		gd.pvp_state.nation = "hungary"
+		gd.set_pvp("defend")
+		gd.reset()
+		gd.gold = 99999
+		gd.res = {"wood": 9999, "iron": 9999, "food": 9999}
+		for b in ["school", "barracks", "archery"]:
+			gd.upgrade_building(b)
+		var n := 0
+		for r in range(0, 11):
+			for c in gd.cols:
+				if n < towers and not gd.is_path_tile(c, r) and not gd.is_work_site(c, r) and (gd.is_path_tile(c, r - 1) or gd.is_path_tile(c, r + 1)):
+					spots.append([c, r])
+					if not smart:
+						gd.select_tile(c, r)
+						gd.build_tower(["archer", "cannon", "musket", "tar"][n % 4])
+					n += 1
+		gd.selected = null
+		# akıllı savunan gerçek oyuncu gibi başlangıç akçesiyle kendisi kurar
+		gd.gold = D.RULES.start_gold if smart else 150
+		ld.game = gd)
+	la.started.connect(func(_s):
+		ga.set_pvp("attack")
+		ga.reset()
+		la.game = ga)
+	la.begin("KALE", true, "siege", "attack")
+	ld.begin("KALE", false)
+	var t := 0.0
+	var snaps := 0
+	var min_tower_hp := 1.0
+	var max_towers := 0
+	while t < 900.0 and not (la.state == "over" and ld.state == "over"):
+		la.tick(0.05)
+		ld.tick(0.05)
+		for m in to_a:
+			if m.t == "snap":
+				snaps += 1
+			la.handle(m)
+		for m in to_d:
+			ld.handle(m)
+		to_a.clear()
+		to_d.clear()
+		if ld.state == "playing":
+			gd.step(0.05)
+			# savunanın yapay zekâsı: her saniye boş kareye kule kurar ya da en zayıf kuleyi yükseltir, asker yetiştirir
+			if smart and fmod(t, 1.0) < 0.05:
+				var free := []
+				for sp in spots:
+					if gd.tower_at(sp[0], sp[1]) == null:
+						free.append(sp)
+				if free.size() and gd.towers.size() < 8:
+					gd.select_tile(free[0][0], free[0][1])
+					var ty: String = ["archer", "cannon", "archer", "tar", "musket"][gd.towers.size() % 5]
+					if not gd.is_tower_unlocked(ty):
+						ty = "archer"
+					if gd.can_build(ty):
+						gd.build_tower(ty)
+				elif gd.gold > 150:
+					for tw in gd.towers:
+						gd.select_tile(tw.c, tw.r)
+						if gd.can_upgrade_tower(tw):
+							gd.upgrade_tower()
+							break
+				gd.selected = null
+				for k in ["janissary", "archer"]:
+					if gd.gold > 250 and gd.can_train(k):
+						gd.train_troop(k)
+		if la.state == "playing":
+			ga.mirror_step(0.05)
+			# saldıranın yapay zekâsı: 25 saniyede bir biriktirdiğini harcar; önce yükseltir, sonra pahalıdan ucuza gönderir
+			if fmod(t, 25.0) < 0.05 and ga.atk_ready():
+				for k in D.PVP.up_order:
+					if ga.pvp_state.def_time > 100.0 and ga.can_upgrade_army(k):
+						ga.upgrade_army(k)
+				var order: Array = D.PVP.unit_order.duplicate()
+				order.reverse()
+				for u in order:
+					while ga.can_send(u, GameUI.atk_batch(u)) and ga.atk_gold() > D.PVP.units[u] * 2:
+						ga.atk_send(u, GameUI.atk_batch(u))
+				while ga.can_send("infantry", 3):
+					ga.atk_send("infantry", 3)
+		max_towers = maxi(max_towers, gd.towers.size())
+		for tw in gd.towers:
+			min_tower_hp = minf(min_tower_hp, tw.hp / tw.max_hp)
+		t += 0.05
+	assert(la.mode == "siege" and ld.mode == "siege" and la.role == "attack")
+	assert(snaps > 50, "görüntü gelmedi")
+	assert(gd.pvp_state.attacks > 0, "saldırı ulaşmadı")
+	assert(ga.pvp_state.loot == gd.pvp_state.loot or la.state == "over")
+	assert(la.state == "over" and ld.state == "over", "oyun bitmedi")
+	assert((la.result == "win") != (ld.result == "win"), "tek kazanan olmalı: %s/%s" % [la.result, ld.result])
+	print("saldır-savun (%d kule%s): %.0f sn, kazanan %s, savunan sur %d, kule %d/%d, en düşük kule canı %%%d, ganimet %d, saldırı %d, yükseltme %s" % [
+		towers, ", akıllı savunan" if smart else "", t, "saldıran" if la.result == "win" else "savunan", gd.wall, gd.towers.size(), max_towers, roundi(min_tower_hp * 100),
+		gd.pvp_state.loot, gd.pvp_state.attacks, str(ga.pvp_state.up)])
