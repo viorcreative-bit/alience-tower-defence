@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://egty6a00tuci"
-path="res://.godot/imported/mage.glb-b23223d80c473bff6e0924614e8c8ed2.scn"
+uid="uid://dxlysgb4p0bre"
+path="res://.godot/imported/ch_enemy_commander.glb-2c2e87dc20d29de17a1f7c97ed37aae0.scn"
 
 [deps]
 
-source_file="res://assets/models/mage.glb"
-dest_files=["res://.godot/imported/mage.glb-b23223d80c473bff6e0924614e8c8ed2.scn"]
+source_file="res://assets/models/ottoman/ch_enemy_commander.glb"
+dest_files=["res://.godot/imported/ch_enemy_commander.glb-2c2e87dc20d29de17a1f7c97ed37aae0.scn"]
 
 [params]
 

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://u1c1f3yvx1ca"
-path="res://.godot/imported/barbarian.glb-7e43b5b9154b50bb8aa2e24ff8a5e928.scn"
+uid="uid://djo6sjcmmccad"
+path="res://.godot/imported/ch_townsman.glb-f84d5849de51245bec46737b71d35558.scn"
 
 [deps]
 
-source_file="res://assets/models/barbarian.glb"
-dest_files=["res://.godot/imported/barbarian.glb-7e43b5b9154b50bb8aa2e24ff8a5e928.scn"]
+source_file="res://assets/models/ottoman/ch_townsman.glb"
+dest_files=["res://.godot/imported/ch_townsman.glb-f84d5849de51245bec46737b71d35558.scn"]
 
 [params]
 

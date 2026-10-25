@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://m3ljbkkvdywm"
-path="res://.godot/imported/rogue_hooded.glb-07904ee70aa028f69b186a322dc7fae2.scn"
+uid="uid://c3b0igvvveyt5"
+path="res://.godot/imported/ch_archer.glb-5cc528f4b4f1b36ca8aa47d619e12252.scn"
 
 [deps]
 
-source_file="res://assets/models/rogue_hooded.glb"
-dest_files=["res://.godot/imported/rogue_hooded.glb-07904ee70aa028f69b186a322dc7fae2.scn"]
+source_file="res://assets/models/ottoman/ch_archer.glb"
+dest_files=["res://.godot/imported/ch_archer.glb-5cc528f4b4f1b36ca8aa47d619e12252.scn"]
 
 [params]
 

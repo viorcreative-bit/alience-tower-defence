@@ -54,13 +54,8 @@ func update(dt: float) -> void:
 func _add_person() -> void:
 	var woman := rng.randf() < 0.45
 	var ch: Dictionary
-	if woman:
-		ch = models.character("rogue_hooded", ["Rogue_Cape"], {"Body": Color(ROBES[rng.randi() % ROBES.size()]),
-			"Cape": Color(ROBES[rng.randi() % ROBES.size()]), "Head_Hooded": Color(SCARVES[rng.randi() % SCARVES.size()])}, 0.24)
-	else:
-		ch = models.character("mage", [], {"Body": Color(ROBES[rng.randi() % ROBES.size()]),
-			"Arm": Color(ROBES[rng.randi() % ROBES.size()]), "Leg": Color("#d9cfba")}, 0.25)
-		models.add_turban(ch, Color(SCARVES[rng.randi() % SCARVES.size()]))
+	var tint := {"Primary": Color(ROBES[rng.randi() % ROBES.size()]), "Secondary": Color(SCARVES[rng.randi() % SCARVES.size()])}
+	ch = models.ott_char("townswoman" if woman else "townsman", tint, 0.34 if woman else 0.36)
 	add_child(ch.root)
 	var n := Vector2i(rng.randi() % xs.size(), rng.randi() % ys.size())
 	var p := {"ch": ch, "node": n, "pos": _node_pos(n), "target": n, "wait": rng.randf_range(0.0, 2.0),
@@ -110,12 +105,7 @@ func _step(p: Dictionary, dt: float) -> void:
 func _update_dervishes(dt: float) -> void:
 	var lv: int = game.buildings.mosque
 	while dervishes.size() < lv:
-		var ch := models.character("mage", [], {"Body": Color("#f6f2ea"), "Arm": Color("#f6f2ea"), "Leg": Color("#f6f2ea")}, 0.2)
-		var h := models.attach(ch, "head")
-		h.position = Vector3(0, 0.7, 0)
-		models.cyl(h, 0.36, 0.42, 1.05, Vector3(0, 0.45, 0), models.mat(Color("#8a6a48")), 12)
-		# açılan tennure eteği
-		models.cyl(ch.root, 0.2, 1.1, 1.2, Vector3(0, 0.6, 0), models.mat(Color("#fbf8f0")), 16)
+		var ch := models.ott_char("semazen", {}, 0.32)
 		add_child(ch.root)
 		var s: Array = D.BUILDINGS.mosque.slot
 		var i := dervishes.size()
@@ -155,23 +145,12 @@ func _route_out(kind: String) -> Array:
 
 func _add_worker(kind: String) -> void:
 	var vest := Color("#7a5232") if kind == "wood" else Color("#4a4c52")
-	var ch := models.character("barbarian", [], {"Body": vest, "Arm": Color("#c9a27e"), "Leg": Color("#5a4632")}, 0.25)
-	var h := models.attach(ch, "head")
-	h.position = Vector3(0, 0.7, 0)
-	models.cyl(h, 0.42, 0.46, 0.35, Vector3(0, 0.2, 0), models.mat(Color("#e8e0cc") if kind == "wood" else Color("#2c2c30")), 10)
-	var tool := models.attach(ch, "handslot_r")
-	if kind == "wood":
-		# balta
-		models.cyl(tool, 0.04, 0.04, 1.1, Vector3(0, 0.3, 0), models.mat(Models.WOOD), 6)
-		models.box(tool, Vector3(0.08, 0.3, 0.25), Vector3(0, 0.8, 0.12), models.mat(Models.IRON, 0.4, 0.7))
-	else:
-		# kazma
-		models.cyl(tool, 0.04, 0.04, 1.1, Vector3(0, 0.3, 0), models.mat(Models.WOOD), 6)
-		var pick := models.cyl(tool, 0.03, 0.06, 0.7, Vector3(0, 0.82, 0), models.mat(Models.IRON, 0.4, 0.7), 6)
-		pick.rotation.x = PI / 2
+	var ch := models.ott_char("woodcutter" if kind == "wood" else "miner", {"Primary": vest.lightened(0.15)}, 0.36)
 	# sırttaki yük (dönüşte görünür)
 	var load := Node3D.new()
-	load.position = Vector3(0, 1.75, -0.45)
+	# yük KayKit ölçüsünde çizilir; Blender askerinin ölçüsüne indirilir
+	load.position = Vector3(0, 0.62, -0.2)
+	load.scale = Vector3.ONE * 0.4
 	ch.root.add_child(load)
 	if kind == "wood":
 		for k in 3:

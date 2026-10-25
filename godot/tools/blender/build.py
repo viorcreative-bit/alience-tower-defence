@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import kit
 import buildings
+import chars
 import towers
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "models", "ottoman")
@@ -28,6 +29,18 @@ ASSETS = {
 	"camp_tent_b": lambda: towers.camp_tent("iznik", "camp_tent_b"),
 }
 ASSETS.update(buildings.ALL)
+
+
+def _char(name):
+	f, hold = chars.TYPES[name]
+	c = chars.Char(name)
+	f(c)
+	return chars.build_char(c, hold)
+
+
+for _n in chars.TYPES:
+	ASSETS["ch_" + _n] = (lambda n: lambda: _char(n))(_n)
+ASSETS["horse"] = chars.horse
 
 
 def main(names):

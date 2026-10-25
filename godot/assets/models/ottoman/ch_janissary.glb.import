@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c2qsbevcr7obq"
-path="res://.godot/imported/knight.glb-3575ea5bc2aefe6ac916d8cbd56e5c76.scn"
+uid="uid://bk5nb8lrgjvnq"
+path="res://.godot/imported/ch_janissary.glb-e5a47bd8910e8eceb0ecbd982c2808a1.scn"
 
 [deps]
 
-source_file="res://assets/models/knight.glb"
-dest_files=["res://.godot/imported/knight.glb-3575ea5bc2aefe6ac916d8cbd56e5c76.scn"]
+source_file="res://assets/models/ottoman/ch_janissary.glb"
+dest_files=["res://.godot/imported/ch_janissary.glb-e5a47bd8910e8eceb0ecbd982c2808a1.scn"]
 
 [params]
 

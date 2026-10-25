@@ -390,6 +390,7 @@ def bake_ao(objs, samples=24, dist=0.25):
 
 
 def export(path, objs=None):
+	# canlandırmalar NLA izlerinden: her iz ayrı glTF canlandırması
 	bpy.ops.object.select_all(action="DESELECT")
 	objs = objs or list(bpy.context.scene.objects)
 	for o in objs:
@@ -408,6 +409,9 @@ def export(path, objs=None):
 		export_materials="EXPORT",
 		export_extras=False,
 		export_animations=True,
+		export_animation_mode="NLA_TRACKS",
+		export_force_sampling=True,
+		export_optimize_animation_size=True,
 	)
 
 

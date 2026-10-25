@@ -35,12 +35,12 @@ Geliştirme için ekran görüntüsü: `godot --write-movie /tmp/kare.png --fixe
 - `scripts/ui.gd`: üst şerit, alt panel, sancak yazıları, oyun sonu ekranı
 - `scripts/audio.gd`: ses efektleri ve mehter
 - `scripts/main.gd`: hepsini birbirine bağlar, efektleri ve kamerayı yönetir
-- `tools/blender/`: kuleleri, surları, kapıyı, binaları ve çadırları kodla kuran Blender betikleri (`assets/models/ottoman/*.glb`)
+- `tools/blender/`: kuleleri, surları, kapıyı, binaları, çadırları, askerleri ve atı kodla kuran Blender betikleri (`assets/models/ottoman/*.glb`)
 - `shaders/`: zemin (çim, yol, kaldırım), rüzgârda çim, dalgalanan sancak
 
 ## 3B modeller (Blender)
 
-Kuleler, burçlar, surlar, kapı, 13 şehir binası ve ordugâh çadırları `tools/blender/` betikleriyle üretilir. Taşlar tek tek örülür, renkler köşe rengine yazılır, ortam gölgesi Cycles ile pişirilir; doku dosyası yoktur. Binaların "L2" ve "L3" parçaları seviye yükselince görünür, Cami'nin minareleri "M1".."M4".
+Kuleler, burçlar, surlar, kapı, 13 şehir binası, ordugâh çadırları, askerler, düşmanlar, şehir halkı ve at `tools/blender/` betikleriyle üretilir. Askerlerin iskeleti ve canlandırmaları (Idle, Walking_A, Running_A, Sit_Chair_Idle, Cheer, 1H_Melee_Attack_Chop) de betikte kurulur. Taşlar tek tek örülür, renkler köşe rengine yazılır, ortam gölgesi Cycles ile pişirilir; doku dosyası yoktur. Binaların "L2" ve "L3" parçaları seviye yükselince görünür, Cami'nin minareleri "M1".."M4".
 
 ```
 pip install bpy            # Blender'ın Python modülü (ayrı Blender kurulumu gerekmez)
@@ -53,5 +53,5 @@ Sonra `godot --headless --import` ve küçük resimler için `tools/render_thumb
 ## Kaynaklar
 
 - Osmanlı yapıları ve kuleler: bu depodaki Blender betikleri.
-- Askerler ve bazı süsler: [KayKit Medieval Hexagon Pack ve Adventurers](https://kaylousberg.itch.io/) — Kay Lousberg, CC0. Godot `KHR_mesh_quantization` desteklemediği için `gltf-transform dequantize` ile açılmış kopyalardır.
+- Bazı küçük süsler: [KayKit Medieval Hexagon Pack ve Adventurers](https://kaylousberg.itch.io/) — Kay Lousberg, CC0. Godot `KHR_mesh_quantization` desteklemediği için `gltf-transform dequantize` ile açılmış kopyalardır.
 - Yazı tipleri: Cinzel ve Barlow Semi Condensed, SIL Open Font License 1.1 (`assets/fonts/OFL-*.txt`).
