@@ -438,17 +438,17 @@ func _wall_run(a: Vector3, b: Vector3, h: float, t: float, _st: Material) -> voi
 		add_child(seg)
 
 
-# Şehrin boş kareleri: şadırvan, çarşı, bahçeler, servi ağaçları ve cumbalı Osmanlı evleri.
-# Bina arsaları ve kapıdan Saray'a giden yol boş kalır; halk kare kenarlarındaki sokaklarda yürür.
+# Şehrin boş kareleri: şadırvan köşkü, çarşı çadırları ve tezgâhlar, bahçeler, servi avlusu, cephane köşesi ve
+# cumbalı Osmanlı evleri (assets/models/ottoman/city_*.glb). Bina arsaları ve kapıdan Saray'a giden yol boş kalır;
+# halk ve atlı hükümdar kare kenarlarındaki sokaklarda dolaşır.
 const CITY_DECOR := {
-	Vector2i(6, 13): "fountain",
-	Vector2i(2, 13): "bazaar", Vector2i(3, 13): "bazaar",
-	Vector2i(2, 14): "garden", Vector2i(3, 14): "garden", Vector2i(5, 14): "pool", Vector2i(7, 14): "cypress",
-	Vector2i(4, 15): "palace_garden",
-	Vector2i(0, 13): "house", Vector2i(8, 13): "house", Vector2i(0, 15): "house", Vector2i(8, 15): "house",
-	Vector2i(3, 15): "house", Vector2i(5, 15): "house",
+	Vector2i(6, 13): "city_fountain",
+	Vector2i(2, 13): "city_tent", Vector2i(5, 15): "city_tent_red",
+	Vector2i(2, 14): "city_stalls", Vector2i(1, 14): "city_supplies",
+	Vector2i(3, 14): "city_garden", Vector2i(5, 14): "city_pool", Vector2i(7, 14): "city_cypress",
+	Vector2i(4, 15): "city_palace_garden",
+	Vector2i(0, 13): "house", Vector2i(0, 15): "house", Vector2i(8, 15): "house",
 }
-const AWNINGS := [["#b3202a", "#f2ece0"], ["#2f6fb0", "#f2ece0"], ["#3d7a3a", "#e8d48a"], ["#c47a1e", "#f2ece0"]]
 
 
 func _build_city_decor() -> void:
@@ -456,31 +456,30 @@ func _build_city_decor() -> void:
 	for id in D.BUILDINGS:
 		var s: Array = D.BUILDINGS[id].slot
 		slots[Vector2i(s[0], s[1])] = true
+	var houses := 0
 	for k in CITY_DECOR:
 		if slots.has(k):
 			continue
-		var g := Node3D.new()
-		g.position = to_world(k.x + 0.5, k.y + 0.5)
-		add_child(g)
-		match CITY_DECOR[k]:
-			"fountain":
-				_fountain(g)
-			"bazaar":
-				_stall(g, Vector3(-0.17, 0, 0), k.x * 2)
-				_stall(g, Vector3(0.17, 0, 0.05), k.x * 2 + 1)
-			"garden":
-				_garden(g, false)
-			"pool":
-				_garden(g, true)
-			"cypress":
-				for c in [Vector3(-0.22, 0, -0.2), Vector3(0.22, 0, -0.2), Vector3(-0.22, 0, 0.22), Vector3(0.22, 0, 0.22)]:
-					_cypress(g, c, rng.randf_range(0.55, 0.7))
-				_lantern(g, Vector3(0, 0, 0), true)
-			"palace_garden":
-				for x in [-0.3, -0.1, 0.1, 0.3]:
-					_cypress(g, Vector3(x, 0, 0.25), 0.6)
-			"house":
-				_house(g, rng.randi() % 4 * PI / 2)
+		var kind: String = CITY_DECOR[k]
+		if kind == "house":
+			kind = "city_house_%d" % (houses % 4)
+			houses += 1
+		var m := models.ott_model(kind)
+		m.position = to_world(k.x + 0.5, k.y + 0.5)
+		# evlerin önü sokağa, çadırların önü meydana baksın
+		if kind.begins_with("city_house"):
+			m.rotation.y = PI / 2 if k.x == 0 else -PI / 2
+		add_child(m)
+		_city_extras(m)
+	# kapıdan saraya giden yolun iki yanında sancak direkleri
+	for t in [Vector2(3.82, 13.2), Vector2(5.18, 13.2), Vector2(3.82, 13.8), Vector2(5.18, 13.8)]:
+		var pole := models.ott_model("city_banner_pole")
+		pole.position = to_world(t.x, t.y)
+		add_child(pole)
+		var f := models.flag(models.ottoman_flag(), 0.32, 0.21)
+		f.position = models.mark(pole, "flag") + Vector3(0.012, -0.1, 0)
+		f.rotation.y = PI / 2 if t.x < 4.5 else -PI / 2
+		pole.add_child(f)
 	# güney surunun ardında tarlalar, bağlar ve bir yel değirmeni
 	var zb: float = to_world(0, game.rows).z
 	var wheat := models.mat(Color("#d8b44a"))
@@ -498,11 +497,58 @@ func _build_city_decor() -> void:
 	# sokak fenerleri (ışıklı olan az; web'de ucuz kalsın)
 	var lit := 0
 	for t in [Vector2(3.0, 14.0), Vector2(6.0, 14.0), Vector2(2.0, 15.0), Vector2(7.0, 15.0), Vector2(1.0, 14.0), Vector2(8.0, 14.0)]:
-		var lg := Node3D.new()
+		var lg := models.ott_model("city_lantern")
 		lg.position = to_world(t.x, t.y)
 		add_child(lg)
-		_lantern(lg, Vector3.ZERO, lit < 3)
+		if lit < 3:
+			_lamp(lg, models.mark(lg, "light"))
 		lit += 1
+
+
+# Modeldeki su yüzeyleri parlak suya döner; şadırvanda fıskiye, servi avlusunda fener ışığı yanar
+func _city_extras(m: Node3D) -> void:
+	for w in m.find_children("Water", "MeshInstance3D", true, false):
+		(w as MeshInstance3D).material_override = water_mat()
+	if m.find_child("spout", true, false) != null:
+		var p := CPUParticles3D.new()
+		var q := SphereMesh.new()
+		q.radius = 0.012
+		q.height = 0.024
+		q.material = water_mat()
+		p.mesh = q
+		p.amount = 40
+		p.lifetime = 0.7
+		p.direction = Vector3.UP
+		p.spread = 25
+		p.initial_velocity_min = 0.5
+		p.initial_velocity_max = 0.7
+		p.gravity = Vector3(0, -2.4, 0)
+		p.position = models.mark(m, "spout")
+		m.add_child(p)
+	if m.find_child("light", true, false) != null:
+		_lamp(m, models.mark(m, "light"))
+
+
+func water_mat() -> StandardMaterial3D:
+	if not models.mats.has("city_water"):
+		var water := StandardMaterial3D.new()
+		water.albedo_color = Color(0.25, 0.55, 0.78, 0.88)
+		water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		water.roughness = 0.05
+		water.metallic = 0.3
+		models.mats.city_water = water
+	return models.mats.city_water
+
+
+func _lamp(g: Node3D, pos: Vector3) -> void:
+	var l := OmniLight3D.new()
+	l.light_color = Color(1.0, 0.7, 0.4)
+	l.light_energy = 0.0
+	l.omni_range = 1.3
+	l.omni_attenuation = 1.4
+	l.position = pos
+	g.add_child(l)
+	torches.append({"light": l, "phase": rng.randf() * 10.0, "base": 0.9})
 
 
 # Odun-Demir Ocağı işçilerinin gittiği yerler: surların önünde solda kesim alanı, sağda demir madeni
@@ -535,133 +581,6 @@ func _build_work_sites() -> void:
 		var op := Vector3(rng.randf_range(-0.35, 0.35), 0.03, rng.randf_range(0.1, 0.38))
 		models.sphere(m, rng.randf_range(0.04, 0.065), op, ore if k % 3 else rust, false, 6)
 	models.add_prop(m, "wheelbarrow", Vector3(-0.28, 0, 0.25), 0.3, 2.2)
-
-
-func _fountain(g: Node3D) -> void:
-	var stone := models.mat(Models.STONE)
-	var marble := models.mat(Models.WHITEWASH, 0.4)
-	models.cyl(g, 0.34, 0.36, 0.05, Vector3(0, 0.025, 0), models.mat(Models.STONE_DARK), 8)
-	models.cyl(g, 0.27, 0.27, 0.12, Vector3(0, 0.08, 0), marble, 8)
-	var water := StandardMaterial3D.new()
-	water.albedo_color = Color(0.25, 0.55, 0.75, 0.85)
-	water.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	water.roughness = 0.05
-	water.metallic = 0.3
-	models.cyl(g, 0.24, 0.24, 0.02, Vector3(0, 0.14, 0), water, 8)
-	# sekiz sütunlu, kurşun kubbeli çatı
-	for i in 8:
-		var a := i * TAU / 8.0 + PI / 8.0
-		models.cyl(g, 0.018, 0.018, 0.42, Vector3(cos(a) * 0.3, 0.26, sin(a) * 0.3), stone, 6)
-	models.cyl(g, 0.38, 0.38, 0.04, Vector3(0, 0.49, 0), models.mat(Models.IZNIK, 0.4), 8)
-	models.cyl(g, 0.02, 0.4, 0.2, Vector3(0, 0.6, 0), models.mat(Models.LEAD, 0.5, 0.3), 8)
-	models.sphere(g, 0.03, Vector3(0, 0.72, 0), models.mat(Models.GOLD, 0.3, 0.8), false, 8)
-	models.cyl(g, 0.04, 0.05, 0.14, Vector3(0, 0.2, 0), marble, 8)
-	# fıskiye
-	var p := CPUParticles3D.new()
-	var q := SphereMesh.new()
-	q.radius = 0.012
-	q.height = 0.024
-	q.material = water
-	p.mesh = q
-	p.amount = 40
-	p.lifetime = 0.7
-	p.direction = Vector3.UP
-	p.spread = 25
-	p.initial_velocity_min = 0.5
-	p.initial_velocity_max = 0.7
-	p.gravity = Vector3(0, -2.4, 0)
-	p.position = Vector3(0, 0.27, 0)
-	g.add_child(p)
-
-
-func _stall(g: Node3D, pos: Vector3, i: int) -> void:
-	var col: Array = AWNINGS[i % AWNINGS.size()]
-	var wood := models.mat(Models.WOOD)
-	for c in [Vector3(-0.11, 0, -0.1), Vector3(0.11, 0, -0.1), Vector3(-0.11, 0, 0.1), Vector3(0.11, 0, 0.1)]:
-		models.cyl(g, 0.01, 0.01, 0.3, pos + c + Vector3(0, 0.15, 0), wood, 5)
-	models.box(g, Vector3(0.24, 0.07, 0.12), pos + Vector3(0, 0.1, 0.06), models.mat(Models.WOOD_DARK))
-	# çizgili tente
-	for k in 4:
-		var stripe := models.box(g, Vector3(0.065, 0.015, 0.3), pos + Vector3(-0.0975 + k * 0.065, 0.32, 0.01),
-			models.mat(Color(col[k % 2])))
-		stripe.rotation.x = 0.22
-	var goods := [Color("#d9a441"), Color("#b3202a"), Color("#6a8f3a"), Color("#e8dcc0")]
-	for k in 3:
-		models.sphere(g, 0.03, pos + Vector3(-0.07 + k * 0.07, 0.15, 0.08), models.mat(goods[(i + k) % goods.size()]), false, 8)
-	models.add_prop(g, ["sack", "barrel", "crate_B_small"][i % 3], pos + Vector3(0.0, 0, -0.17), 0.35)
-
-
-func _garden(g: Node3D, pool: bool) -> void:
-	var grass := models.box(g, Vector3(0.74, 0.03, 0.74), Vector3(0, 0.015, 0), models.mat(Color("#4f7d36")))
-	grass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# taş kenar
-	for s in [-1, 1]:
-		models.box(g, Vector3(0.78, 0.05, 0.03), Vector3(0, 0.025, s * 0.38), models.mat(Models.STONE))
-		models.box(g, Vector3(0.03, 0.05, 0.78), Vector3(s * 0.38, 0.025, 0), models.mat(Models.STONE))
-	if pool:
-		var water := StandardMaterial3D.new()
-		water.albedo_color = Color(0.22, 0.5, 0.7)
-		water.roughness = 0.05
-		water.metallic = 0.4
-		models.box(g, Vector3(0.44, 0.04, 0.3), Vector3(0, 0.03, 0), models.mat(Models.WHITEWASH, 0.4))
-		models.box(g, Vector3(0.38, 0.042, 0.24), Vector3(0, 0.032, 0), water)
-		for x in [-0.3, 0.3]:
-			_cypress(g, Vector3(x, 0, -0.25), 0.6)
-			_cypress(g, Vector3(x, 0, 0.25), 0.55)
-	else:
-		_cypress(g, Vector3(-0.24, 0, -0.24), 0.65)
-		_cypress(g, Vector3(0.24, 0, 0.24), 0.6)
-		var flowers := [Color("#d6455a"), Color("#f2c94c"), Color("#e8e0f0"), Color("#c25ab8")]
-		for k in 14:
-			var fp := Vector3(rng.randf_range(-0.3, 0.3), 0.045, rng.randf_range(-0.3, 0.3))
-			models.sphere(g, 0.022, fp, models.mat(flowers[k % flowers.size()]), false, 6)
-		# bank
-		models.box(g, Vector3(0.24, 0.03, 0.07), Vector3(0.05, 0.08, -0.05), models.mat(Models.WOOD))
-		for x in [-0.05, 0.15]:
-			models.box(g, Vector3(0.03, 0.06, 0.06), Vector3(x, 0.045, -0.05), models.mat(Models.WOOD_DARK))
-
-
-func _cypress(g: Node3D, pos: Vector3, h: float) -> void:
-	models.cyl(g, 0.015, 0.02, 0.08, pos + Vector3(0, 0.04, 0), models.mat(Models.WOOD_DARK), 5)
-	var c := models.sphere(g, 0.07, pos + Vector3(0, 0.08 + h * 0.45, 0), models.mat(Color("#2d5a2e")), false, 10)
-	c.scale = Vector3(1, h / 0.14 * 0.95, 1)
-
-
-func _lantern(g: Node3D, pos: Vector3, light: bool) -> void:
-	models.cyl(g, 0.012, 0.016, 0.42, pos + Vector3(0, 0.21, 0), models.mat(Models.IRON, 0.5, 0.5), 6)
-	models.cyl(g, 0.03, 0.025, 0.06, pos + Vector3(0, 0.45, 0), models.glow_mat(Color(1.0, 0.7, 0.35)), 6)
-	models.cyl(g, 0.0, 0.04, 0.04, pos + Vector3(0, 0.5, 0), models.mat(Models.IRON, 0.5, 0.5), 6)
-	if light:
-		var l := OmniLight3D.new()
-		l.light_color = Color(1.0, 0.7, 0.4)
-		l.light_energy = 0.0
-		l.omni_range = 1.3
-		l.omni_attenuation = 1.4
-		l.position = pos + Vector3(0, 0.46, 0)
-		g.add_child(l)
-		torches.append({"light": l, "phase": rng.randf() * 10.0, "base": 0.9})
-
-
-# Cumbalı Osmanlı evi: badanalı alt kat, ahşap çıkmalı üst kat, kiremit çatı
-func _house(g: Node3D, rot: float) -> void:
-	var h := Node3D.new()
-	h.rotation.y = rot
-	g.add_child(h)
-	var wall := models.mat(Models.WHITEWASH)
-	var timber := models.mat(Color("#8a5a34"))
-	models.box(h, Vector3(0.5, 0.22, 0.42), Vector3(0, 0.11, 0), wall)
-	models.box(h, Vector3(0.58, 0.2, 0.5), Vector3(0, 0.32, 0.03), models.mat(Color("#efe2c8")))
-	# ahşap kuşaklar ve pencereler
-	models.box(h, Vector3(0.6, 0.025, 0.52), Vector3(0, 0.225, 0.03), timber)
-	models.box(h, Vector3(0.6, 0.025, 0.52), Vector3(0, 0.42, 0.03), timber)
-	for x in [-0.17, 0.0, 0.17]:
-		models.box(h, Vector3(0.07, 0.09, 0.01), Vector3(x, 0.33, 0.285), models.mat(Color("#3a2a1e")))
-	models.box(h, Vector3(0.1, 0.15, 0.01), Vector3(0, 0.075, 0.215), timber)
-	# kırma çatı
-	var roof := models.cyl(h, 0.0, 0.46, 0.2, Vector3(0, 0.53, 0.03), models.mat(Color("#b4472e")), 4)
-	roof.rotation.y = PI / 4
-	roof.scale = Vector3(1.0, 1.0, 0.85)
-	models.box(h, Vector3(0.05, 0.12, 0.05), Vector3(0.16, 0.6, -0.08), models.mat(Models.STONE_DARK))
 
 
 # ---------------------------------------------------------------- ordugâh

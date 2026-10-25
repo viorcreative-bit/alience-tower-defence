@@ -36,7 +36,6 @@ var range_ring: MeshInstance3D
 var hover_tile: MeshInstance3D
 var dust_mat: StandardMaterial3D
 var spark_mat: StandardMaterial3D
-var sultan: Dictionary
 var town: Town
 var save := ConfigFile.new()
 var profiles: Profiles
@@ -78,7 +77,6 @@ func _ready() -> void:
 	spark_mat = world.fire_mat
 	_build_markers()
 	_sync_buildings()
-	_place_king("ottoman", 1)
 	profiles = Profiles.new()
 	net = Net.new()
 	add_child(net)
@@ -97,6 +95,7 @@ func _ready() -> void:
 	town = Town.new()
 	town.setup(models, game, world)
 	add_child(town)
+	_place_king("ottoman", 1)
 	get_viewport().size_changed.connect(_fit_camera)
 	await get_tree().process_frame
 	_fit_camera()
@@ -105,14 +104,9 @@ func _ready() -> void:
 
 # ---------------------------------------------------------------- menü ve hükümdar
 
-# Saray önünde duran hükümdar: seçilen devletin kralı, seviyesine göre süslü
+# Şehirde atıyla dolaşan hükümdar: seçilen devletin kralı, seviyesine göre süslü, elinde sancak (town.gd)
 func _place_king(country: String, level: int) -> void:
-	if sultan:
-		sultan.root.queue_free()
-	sultan = models.king(country, level)
-	sultan.root.position = world.to_world(4.5, 13.55)
-	sultan.anim.play("Idle")
-	add_child(sultan.root)
+	town.set_king(country, level)
 
 
 func _start_game(country: String, level: int, stage := "", duel := false, pvp := "") -> void:

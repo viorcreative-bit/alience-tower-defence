@@ -17,6 +17,7 @@ var rng := RandomNumberGenerator.new()
 var people: Array = []
 var dervishes: Array = []
 var workers: Array = []
+var king := {}
 # sokaklar binaların arasındaki çizgilerdir: x tam sayılar, y üç sıra
 var xs := [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
 var ys := []
@@ -49,6 +50,7 @@ func update(dt: float) -> void:
 		_step(p, dt)
 	_update_dervishes(dt)
 	_update_workers(dt)
+	_update_king(dt)
 
 
 func _add_person() -> void:
@@ -116,6 +118,49 @@ func _update_dervishes(dt: float) -> void:
 	for dv in dervishes:
 		dv.spin += dt * 5.0
 		dv.ch.root.rotation.y = dv.spin
+
+
+# ---------------------------------------------------------------- atlı hükümdar
+
+# Saray önünden çıkar, sokaklarda sekiz çizerek tur atar, yine saray önünde durup bekler.
+const KING_ROUTE := [Vector2(4.5, 13.55), Vector2(5.0, 13.1), Vector2(8.0, 13.1), Vector2(8.0, 15.0), Vector2(5.0, 15.0),
+	Vector2(5.0, 14.0), Vector2(4.0, 13.1), Vector2(1.0, 13.1), Vector2(1.0, 15.0), Vector2(4.0, 15.0), Vector2(4.0, 14.0)]
+
+
+func set_king(country: String, level: int) -> void:
+	if king:
+		king.root.queue_free()
+	king = models.king_rider(country, level)
+	add_child(king.root)
+	king.merge({"i": 0, "pos": KING_ROUTE[0], "wait": 3.0, "t": 0.0, "gait": 0.0})
+	king.root.position = world.to_world(king.pos.x, king.pos.y)
+
+
+func _update_king(dt: float) -> void:
+	if not king:
+		return
+	king.t += dt
+	var moving := false
+	if king.wait > 0.0:
+		king.wait -= dt
+		king.root.rotation.y = lerp_angle(king.root.rotation.y, 0.0, minf(1.0, dt * 3.0))
+	else:
+		var goal: Vector2 = KING_ROUTE[(king.i + 1) % KING_ROUTE.size()]
+		var d: Vector2 = goal - king.pos
+		if d.length() < 0.02:
+			king.i = (king.i + 1) % KING_ROUTE.size()
+			if king.i == 0:
+				king.wait = 6.0
+		else:
+			king.pos += d.normalized() * minf(d.length(), 0.32 * dt)
+			king.root.rotation.y = lerp_angle(king.root.rotation.y, atan2(d.x, d.y), minf(1.0, dt * 5.0))
+			moving = true
+	king.gait = move_toward(king.gait, 1.0 if moving else 0.0, dt * 3.0)
+	models.animate_horse(king.horse, king.t * 0.6, king.gait)
+	king.root.position = world.to_world(king.pos.x, king.pos.y, absf(sin(king.t * 5.4)) * 0.012 * king.gait)
+	# sancak direği elle gider ama hep dik durur; yürürken hafifçe sallanır
+	var yaw: float = king.root.rotation.y
+	king.pole.global_basis = Basis.from_euler(Vector3(sin(king.t * 2.7) * 0.04 * king.gait, yaw, 0))
 
 
 # ---------------------------------------------------------------- işçiler

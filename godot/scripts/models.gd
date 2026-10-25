@@ -586,6 +586,30 @@ func king(country: String, level: int) -> Dictionary:
 	return ch
 
 
+# Atlı hükümdar: beyaz at, devlet renginde örtü; sağ elinde sancak (oyuncunun sancak dokusu, Osmanlı'da
+# al sancak). Sancak direği "flag_holder" ile ele bağlıdır; Town her karede onu dik tutar.
+func king_rider(country: String, level: int) -> Dictionary:
+	var root := Node3D.new()
+	var cap: Color = OTTOMAN_RED if country == "ottoman" else Color(D.NATIONS[country].primary)
+	var hr := horse(Color("#f4f0e8"), cap, 0.42)
+	root.add_child(hr.root)
+	var ch := king(country, level)
+	mount(hr, ch, 0.5 * (1.0 + 0.03 * (level - 1)))
+	# sağ eldeki kılıç ya da asa sancağa yer açsın
+	var l4: Node3D = (ch.skeleton as Node).get_node_or_null("L4")
+	if l4:
+		l4.visible = false
+	var holder := attach(ch, "handslot_r")
+	var pole := Node3D.new()
+	holder.add_child(pole)
+	cyl(pole, 0.01, 0.012, 1.15, Vector3(0, 0.35, 0), mat(WOOD_DARK), 6)
+	sphere(pole, 0.025, Vector3(0, 0.94, 0), mat(GOLD, 0.3, 0.8), false, 8)
+	var f := flag(ottoman_flag(), 0.48, 0.32)
+	f.position = Vector3(0.01, 0.75, 0)
+	pole.add_child(f)
+	return {"root": root, "horse": hr, "char": ch, "pole": pole, "flag": f}
+
+
 # Surlardaki ve kulelerdeki sancaklar tek bir dokuyu paylaşır; oyuncu başka devlet seçince o dokunun resmi
 # değiştirilir, böylece bütün sancaklar yerinde güncellenir.
 func set_player_flag(country: String) -> void:
