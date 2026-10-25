@@ -8,6 +8,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import kit
+import bosses
 import buildings
 import chars
 import towers
@@ -41,6 +42,9 @@ def _char(name):
 for _n in chars.TYPES:
 	ASSETS["ch_" + _n] = (lambda n: lambda: _char(n))(_n)
 ASSETS["horse"] = chars.horse
+ASSETS["boss_trebuchet"] = bosses.trebuchet
+ASSETS["boss_elephant"] = bosses.elephant
+ASSETS["boss_tower"] = bosses.siege_ram
 
 
 def main(names):
