@@ -44,6 +44,9 @@ var tech_grid: HBoxContainer
 var tech_status: Label
 var tech_bar: ColorRect
 var tech_key := ""
+var boss_box: PanelContainer  # sahadaki patronun büyük can çubuğu
+var boss_name: Label
+var boss_fill: ColorRect
 var lbl_weather: Label
 var lbl_country: Label
 var lbl_stage: Label
@@ -639,6 +642,27 @@ func _build_view_button() -> void:
 	btn_menu.add_theme_color_override("font_color", C_GOLD)
 	btn_menu.pressed.connect(func(): action.emit("menu", ""))
 	root.add_child(btn_menu)
+	# patron can çubuğu: üst şeridin altında, ortada
+	boss_box = PanelContainer.new()
+	boss_box.add_theme_stylebox_override("panel", _frame("panel", 18, 14))
+	boss_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boss_box.visible = false
+	var bv := VBoxContainer.new()
+	bv.add_theme_constant_override("separation", 4)
+	boss_box.add_child(bv)
+	boss_name = _label("", 22, C_DANGER, font_title)
+	boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bv.add_child(boss_name)
+	var bbg := ColorRect.new()
+	bbg.color = Color(0.1, 0.05, 0.02, 0.9)
+	bbg.custom_minimum_size = Vector2(400, 16)
+	bv.add_child(bbg)
+	boss_fill = ColorRect.new()
+	boss_fill.color = C_DANGER
+	boss_fill.position = Vector2(2, 2)
+	boss_fill.size = Vector2(396, 12)
+	bbg.add_child(boss_fill)
+	root.add_child(boss_box)
 	# mevsim ve hava: haritanın sol üstünde
 	weather_chip = PanelContainer.new()
 	weather_chip.add_theme_stylebox_override("panel", _frame("panel", 18, 14))
@@ -927,6 +951,12 @@ func refresh(sound_on: bool, light_name: String) -> void:
 		train_bar.size = Vector2((b.size.x - 8) * p, 5)
 
 	weather_chip.position = Vector2(14, btn_view.position.y)
+	var boss = game.first_boss()
+	boss_box.visible = boss != null
+	if boss != null:
+		boss_name.text = "%s · %s" % [D.ENEMY_NAMES[boss.type], D.NATION_NAMES[boss.nation]]
+		boss_fill.size.x = 396.0 * clampf(boss.hp / boss.max_hp, 0.0, 1.0)
+		boss_box.position = Vector2((root.size.x - boss_box.size.x) / 2.0, btn_view.position.y + 70)
 	lbl_weather.text = "%s · %s" % [D.SEASONS[game.season].name, D.WEATHER[game.weather].name]
 	lbl_weather.add_theme_color_override("font_color", C_TEXT if game.weather == "clear" else Color("#9fd0f0"))
 	btn_hero.visible = game.hero_id != ""

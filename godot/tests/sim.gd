@@ -50,7 +50,44 @@ func _init() -> void:
 	_heroes()
 	_weather()
 	_tech()
+	_bosses()
 	quit()
+
+
+# Patronlar: dalgaya eklenir; mancınık kuleyi susturur, fil askeri ezer, dev kule asker çıkarır
+func _bosses() -> void:
+	var D := GameData
+	var g := Game.new()
+	g.wave = 3
+	g.start_wave()
+	assert(g.spawn_queue[-1].type == "trebuchet", "4. dalgada mancınık yok")
+	for kind in ["trebuchet", "elephant", "bossTower"]:
+		g = Game.new()
+		g.gold = 9999
+		g.wave = 5
+		g.phase = "wave"
+		g.select_tile(3, 0)
+		g.build_tower("archer")
+		g._spawn_enemy(kind, "habsburg")
+		var e: Dictionary = g.enemies[0]
+		e.dist = 1.5
+		g.units.append({"id": 999, "kind": "janissary", "def": D.TROOPS.janissary, "hp": 999.0, "max_hp": 999.0, "x": 1.5, "y": 2.0,
+			"tx": 1.5, "ty": 2.0, "post": 3.0, "ready": true, "engaged": 0, "cooldown": 0.0, "swing": 0.0, "angle": 0.0,
+			"moving": false, "dead": false, "flash": 0.0, "healing": false})
+		var n0 := g.enemies.size()
+		for i in 120:
+			g.step(0.03)
+			g.units[0].x = e.x
+			g.units[0].y = e.y
+		assert(g.first_boss() == e, "patron bulunamadı")
+		match kind:
+			"trebuchet":
+				assert(g.towers[0].get("stun", 0.0) > 0.0, "kule susmadı")
+			"elephant":
+				assert(g.units[0].hp < 999.0, "fil ezmedi")
+			"bossTower":
+				assert(g.enemies.size() > n0, "kuleden asker çıkmadı")
+		print("patron %s tamam" % kind)
 
 
 # Medrese: kademe sırası, tek araştırma, etkiler

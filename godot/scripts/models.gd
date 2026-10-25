@@ -442,7 +442,43 @@ func enemy(type: String, nation: String) -> Dictionary:
 		"siegeTower":
 			_build_siege_tower(root, p, nation)
 			info.rolls = true
+		"trebuchet", "elephant", "bossTower":
+			_build_boss(root, info, type, p, nation)
 	return info
+
+
+# Patron modelleri (Blender, boss_*.glb): "Primary" millet rengine boyanır. Mancınıkta "arm" atış kolu,
+# filde "leg0".."leg3" ve "trunk", dev kulede "bridge" iniş köprüsü ve "flag" sancak yeri vardır.
+func _build_boss(root: Node3D, info: Dictionary, type: String, p: Color, nation: String) -> void:
+	var name: String = {"trebuchet": "boss_trebuchet", "elephant": "boss_elephant", "bossTower": "boss_tower"}[type]
+	var m := ott_model(name)
+	m.scale = Vector3.ONE * {"trebuchet": 0.9, "elephant": 0.85, "bossTower": 0.8}[type]
+	root.add_child(m)
+	for prim in m.find_children("Primary*", "MeshInstance3D", true, false):
+		prim.material_override = _tinted(prim.mesh.surface_get_material(0), soft(p, 0.1))
+	var wheels := []
+	for i in 4:
+		var w := m.find_child("wheel%d" % i, true, false)
+		if w:
+			wheels.append(w)
+	if wheels.size():
+		root.set_meta("wheels", wheels)
+	match type:
+		"trebuchet":
+			info.arm = m.find_child("arm", true, false)
+		"elephant":
+			var legs := []
+			for i in 4:
+				legs.append(m.find_child("leg%d" % i, true, false))
+			info.horse = {"legs": legs, "phase": randf() * TAU}
+			info.trunk = m.find_child("trunk", true, false)
+		"bossTower":
+			info.bridge = m.find_child("bridge", true, false)
+			if info.bridge:
+				info.bridge.rotation.x = -1.45
+			var fl := m.find_child("flag", true, false)
+			if fl:
+				pole_flag(m, _local_pos(m, fl), 0.5, nation_flag(nation), 0.3)
 
 
 func _build_ram(root: Node3D, p: Color, sec: Color) -> void:

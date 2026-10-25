@@ -454,6 +454,8 @@ func _sync_towers(dt: float) -> void:
 			info.head.rotation.y = lerp_angle(info.head.rotation.y, yaw, minf(1.0, dt * 12.0))
 		if info.has("barrel"):
 			info.barrel.position.z = -0.08 * t.recoil
+		# taşla susturulan kule hafifçe yana yatar
+		info.root.rotation.z = lerpf(info.root.rotation.z, 0.12 if t.get("stun", 0.0) > 0.0 else 0.0, minf(1.0, dt * 8.0))
 		if t.recoil > 0.9 and rec.recoil <= 0.0 and info.has("muzzle"):
 			_muzzle(info)
 		rec.recoil = t.recoil
@@ -515,6 +517,14 @@ func _sync_enemies(dt: float) -> void:
 		if info.has("wheels") and moving:
 			for w in info.wheels:
 				w.rotation.x += dt * spd * 6.0
+		# patron canlandırmaları: mancınık kolu savrulur, fil hortumunu kaldırır, dev kule köprüsünü indirir
+		if info.has("arm") and info.arm:
+			info.arm.rotation.x = lerpf(-0.45, 1.6, sin(clampf(e.act, 0.0, 1.0) * PI))
+		if info.has("trunk") and info.trunk:
+			info.trunk.rotation.x = -0.9 * e.act + sin(t * 2.0) * 0.08
+		if info.has("bridge") and info.bridge:
+			var near: bool = e.dist > game.path_length - 1.6
+			info.bridge.rotation.x = lerpf(info.bridge.rotation.x, 0.0 if near else -1.45, minf(1.0, dt * 2.0))
 		# ziftli düşmanın altında kara leke
 		if e.slow > 0.0:
 			if rec.tar == null:
@@ -816,6 +826,8 @@ func _handle_events() -> void:
 				ui.show_banner(ev.text, Color(ev.color), ev.life)
 			"fall":
 				_cannonball(world.to_world(ev.x, ev.y), ev.time)
+			"boulder":
+				_boulder(world.to_world(ev.x0, ev.y0, 1.0), world.to_world(ev.x1, ev.y1, 0.5), ev.time)
 			"blast":
 				var bp := world.to_world(ev.x, ev.y, 0.2)
 				_burst(bp, Color(2.4, 1.5, 0.6, 1.0), 26, 2.6, 0.14, 0.35, 0.0, true)
@@ -880,6 +892,20 @@ func _cannonball(target: Vector3, time: float) -> void:
 	var tw := create_tween()
 	tw.tween_method(func(k: float):
 		n.position = from.lerp(target, k) + Vector3(0, sin(k * PI) * 1.2, 0), 0.0, 1.0, time)
+	tw.tween_callback(n.queue_free)
+
+
+# Mancınık taşı: yüksek bir yayla kuleye düşer
+func _boulder(from: Vector3, to: Vector3, time: float) -> void:
+	var n := Node3D.new()
+	var rock := models.sphere(n, 0.11, Vector3.ZERO, models.mat(Color("#7a6e62"), 0.9), false, 8)
+	rock.scale = Vector3(1.0, 0.85, 1.1)
+	add_child(n)
+	n.position = from
+	var tw := create_tween()
+	tw.tween_method(func(k: float):
+		n.position = from.lerp(to, k) + Vector3(0, sin(k * PI) * 2.2, 0)
+		n.rotation.x = k * 8.0, 0.0, 1.0, time)
 	tw.tween_callback(n.queue_free)
 
 
@@ -1034,6 +1060,13 @@ func _debug_hooks() -> void:
 	if _arg(args, "--weather=", "") != "":
 		game.weather = _arg(args, "--weather=", "")
 		game.season = _arg(args, "--season=", game.season)
+	# `--bosses` üç patronu yolun üzerine dizer
+	if "--bosses" in args:
+		var k := 0
+		for b in ["bossTower", "elephant", "trebuchet"]:
+			game._spawn_enemy(b, game.nation)
+			game.enemies[-1].dist = 4.0 + k * 5.0
+			k += 1
 	if "--tech" in args:
 		game.upgrade_building("medrese")
 		game.research = {"powder1": true, "arch1": true}

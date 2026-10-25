@@ -71,7 +71,20 @@ const ENEMIES := {
 	"ram": {"hp": 260, "speed": 0.6, "armor": 6, "reward": 20, "damage": 3, "radius": 0.32, "melee": 0, "siege": true},
 	"siegeTower": {"hp": 1100, "speed": 0.5, "armor": 3, "reward": 70, "damage": 6, "radius": 0.38, "melee": 0, "siege": true, "warning": true},
 	"commander": {"hp": 2400, "speed": 0.42, "armor": 6, "reward": 150, "damage": 10, "radius": 0.42, "melee": 30, "mount": true, "warning": true},
+	# Patronlar (boss): büyük can çubuğuyla gelir, askerler durduramaz.
+	# throw: her rate sn'de range içindeki en yakın kuleye taş atar, kule stun sn susar
+	"trebuchet": {"hp": 1800, "speed": 0.3, "armor": 5, "reward": 200, "damage": 8, "radius": 0.5, "melee": 0, "siege": true,
+		"warning": true, "boss": true, "throw": {"rate": 6.0, "range": 4.2, "stun": 4.0, "flight": 0.9}},
+	# trample: her rate sn'de range içindeki askerleri ezer
+	"elephant": {"hp": 2200, "speed": 0.45, "armor": 5, "reward": 220, "damage": 10, "radius": 0.5, "melee": 0, "siege": true,
+		"warning": true, "boss": true, "trample": {"rate": 1.0, "range": 0.65, "damage": 45}},
+	# spawn: her rate sn'de içinden count piyade çıkar
+	"bossTower": {"hp": 3200, "speed": 0.28, "armor": 6, "reward": 300, "damage": 12, "radius": 0.55, "melee": 0, "siege": true,
+		"warning": true, "boss": true, "spawn": {"rate": 6.0, "count": 2, "type": "infantry"}},
 }
+# Patron dalgaları: serbest savaşta dalga dizinine (0'dan) göre; kuşatmalarda STAGES[...].bosses
+const BOSS_WAVES := {3: ["trebuchet"], 7: ["elephant"], 11: ["bossTower"]}
+const BOSS_GAP := 3.0  # patron, dalganın son birliğinden bu kadar sonra çıkar
 const ENEMY_MELEE := {"rate": 1.0, "growth": 0.08}
 
 const NATIONS := {
@@ -114,30 +127,30 @@ const WAVES := [
 const STAGES := {
 	"istanbul": {"name": "İstanbul", "year": 1453, "map": [28.98, 41.01], "hp": 0.85, "honor": 150, "gold": 0, "season": "spring",
 		"path": [[1, -1], [1, 2], [6, 2], [6, 5], [2, 5], [2, 8], [7, 8], [7, 10], [4, 10], [4, 12]],
-		"picks": [0, 1, 2, 3, 4, 5],
+		"picks": [0, 1, 2, 3, 4, 5], "bosses": {5: ["trebuchet"]},
 		"nations": ["byzantium", "byzantium", "serbia", "venice", "byzantium", "venice"],
 		"text": "Kostantiniyye'yi Bizans'ın ve müttefiklerinin karşı saldırısından koru."},
 	"belgrad": {"name": "Belgrad", "year": 1521, "map": [20.46, 44.82], "hp": 0.95, "honor": 200, "gold": 20, "season": "summer",
 		"path": [[7, -1], [7, 3], [2, 3], [2, 7], [6, 7], [6, 10], [4, 10], [4, 12]],
-		"picks": [0, 1, 2, 3, 4, 5, 6, 7],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7], "bosses": {7: ["elephant"]},
 		"nations": ["serbia", "hungary", "hungary", "serbia", "hungary", "hungary", "habsburg", "hungary"],
 		"ground": {"grass_a": Color(0.56, 0.6, 0.22), "grass_b": Color(0.36, 0.42, 0.14)},
 		"text": "Tuna'nın kilidi Belgrad. Macar ordusu kaleyi geri almak için yürüyor; yol kısa, kuleleri erken kur."},
 	"rodos": {"name": "Rodos", "year": 1522, "map": [28.22, 36.43], "hp": 1.0, "honor": 250, "gold": 40, "season": "autumn",
 		"path": [[4, -1], [4, 2], [1, 2], [1, 5], [7, 5], [7, 8], [2, 8], [2, 10], [4, 10], [4, 12]],
-		"picks": [0, 1, 3, 2, 4, 5, 6, 7, 8],
+		"picks": [0, 1, 3, 2, 4, 5, 6, 7, 8], "bosses": {4: ["trebuchet"], 8: ["bossTower"]},
 		"nations": ["hospitaller", "hospitaller", "venice", "hospitaller", "spain", "hospitaller", "venice", "spain", "hospitaller"],
 		"ground": {"grass_a": Color(0.66, 0.64, 0.32), "grass_b": Color(0.47, 0.48, 0.2), "dirt": Color(0.9, 0.8, 0.58), "dirt_edge": Color(0.72, 0.6, 0.4)},
 		"text": "Ada kalesi Rodos. Şövalyeler ve denizden gelen Venedik, İspanya gemileri ağır zırhlı asker çıkarıyor."},
 	"mohac": {"name": "Mohaç", "year": 1526, "map": [18.68, 45.99], "hp": 1.0, "honor": 300, "gold": 60, "season": "summer",
 		"path": [[0, -1], [0, 1], [8, 1], [8, 4], [0, 4], [0, 7], [8, 7], [8, 9], [4, 9], [4, 12]],
-		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "bosses": {4: ["elephant"], 9: ["elephant", "trebuchet"]},
 		"nations": ["hungary", "hungary", "poland", "hungary", "habsburg", "hungary", "poland", "habsburg", "hungary", "hungary"],
 		"ground": {"grass_a": Color(0.5, 0.66, 0.22), "grass_b": Color(0.3, 0.48, 0.13)},
 		"text": "Mohaç ovası: uzun ve kıvrımlı yol, bol süvari. Kuleler için yer çok, düşman da çok."},
 	"viyana": {"name": "Viyana", "year": 1529, "map": [16.37, 48.21], "hp": 1.1, "honor": 400, "gold": 80, "season": "winter",
 		"path": [[2, -1], [2, 1], [6, 1], [6, 3], [1, 3], [1, 6], [7, 6], [7, 9], [3, 9], [3, 10], [4, 10], [4, 12]],
-		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], "bosses": {3: ["trebuchet"], 7: ["elephant"], 11: ["bossTower", "trebuchet"]},
 		"nations": ["habsburg", "habsburg", "spain", "habsburg", "holyLeague", "habsburg", "spain", "habsburg", "poland", "holyLeague", "habsburg", "holyLeague"],
 		"ground": {"grass_a": Color(0.42, 0.56, 0.2), "grass_b": Color(0.24, 0.38, 0.12)},
 		"text": "Seferin sonu: Habsburg başkenti önünde Kutsal İttifak'ın bütün ordusu. 12 dalga, en güçlü düşman."},
@@ -453,6 +466,7 @@ const TOWER_NAMES := {
 const ENEMY_NAMES := {
 	"infantry": "Piyade", "light": "Hafif Süvari", "knight": "Zırhlı Şövalye", "horseArcher": "Atlı Okçu",
 	"ram": "Koçbaşı", "siegeTower": "Kuşatma Kulesi", "commander": "Başkomutan",
+	"trebuchet": "Dev Mancınık", "elephant": "Savaş Fili", "bossTower": "Dev Kuşatma Kulesi",
 }
 const NATION_NAMES := {
 	"ottoman": "Osmanlı Devleti",
@@ -472,7 +486,9 @@ const BUILDING_NAMES := {
 	"medrese": ["Medrese", "İlim ve araştırma"],
 }
 const TROOP_NAMES := {"janissary": "Yeniçeri", "archer": "Okçu", "sipahi": "Sipahi", "sufi": "Sofi"}
-const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!"}
+const WARNINGS := {"siegeTower": "Kuşatma kulesi geliyor!", "commander": "Düşman başkomutanı sahada!",
+	"trebuchet": "Dev mancınık geliyor! Kulelere taş atar", "elephant": "Savaş fili geliyor! Askerleri ezer",
+	"bossTower": "Dev kuşatma kulesi geliyor! İçinden asker çıkar"}
 
 
 static func num(v: float, digits := 1) -> String:

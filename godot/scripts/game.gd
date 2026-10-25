@@ -46,6 +46,7 @@ var weather := "clear"
 # Medrese araştırmaları: biten araştırmalar ve sürmekte olan {id, time}
 var research := {}
 var researching := {}
+var boulders: Array = []  # mancınık taşları {tower, t}
 var buildings := {}
 var towers: Array = []
 var enemies: Array = []
@@ -97,12 +98,18 @@ func difficulty(n: int) -> float:
 	return D.difficulty(n) * stage.get("hp", 1.0)
 
 
+func wave_bosses(i: int) -> Array:
+	return stage.bosses.get(i, []) if stage_id != "" else D.BOSS_WAVES.get(i, [])
+
+
 func describe_wave(i: int) -> String:
 	if i >= total_waves:
 		return ""
 	var items := []
 	for g in wave_groups(i):
 		items.append("%d %s" % [D.group_count(g[1], i + 1), D.ENEMY_NAMES[g[0]]])
+	for b in wave_bosses(i):
+		items.append("PATRON: " + D.ENEMY_NAMES[b])
 	var k := difficulty(i + 1)
 	var hard := " Düşman canı ×%s." % D.num(k) if absf(k - 1.0) > 0.01 else ""
 	return "Sıradaki sefer: %s — %s.%s" % [D.NATION_NAMES[wave_nation(i)], D.join_list(items), hard]
@@ -137,6 +144,7 @@ func reset() -> void:
 	_roll_weather(0)
 	research = {}
 	researching = {}
+	boulders = []
 	selected = null
 	time = 0.0
 	market_timer = 0.0
@@ -682,6 +690,11 @@ func start_wave() -> void:
 	for g in wave_groups(wave - 1):
 		for i in D.group_count(g[1], wave):
 			spawn_queue.append({"type": g[0], "gap": g[2], "nation": nation})
+	var bosses := wave_bosses(wave - 1)
+	if bosses.size():
+		spawn_queue[-1].gap = D.BOSS_GAP
+		for b in bosses:
+			spawn_queue.append({"type": b, "gap": D.BOSS_GAP, "nation": nation})
 	spawn_timer = D.RULES.first_spawn_delay + 1.2
 	banner("%s seferde!" % D.NATION_NAMES[nation], "#f3e6c8", 2.4)
 	sound("waveStart")
@@ -690,12 +703,14 @@ func start_wave() -> void:
 
 func _spawn_enemy(type: String, nat: String) -> void:
 	var def: Dictionary = D.ENEMIES[type]
-	var hp := roundi(def.hp * difficulty(wave))
+	# patronların canı dalgayla daha yavaş artar (zaten büyük)
+	var hp := roundi(def.hp * (pow(difficulty(wave), 0.75) if def.get("boss", false) else difficulty(wave)))
 	var spd: float = def.speed * (1.0 + D.RULES.speed_growth * max(0, wave - 1))
 	var p := point_at(0.0)
 	enemies.append({"id": _id(), "def": def, "type": type, "nation": nat, "hp": float(hp), "max_hp": float(hp),
 		"speed": spd, "armor": def.armor, "radius": def.radius, "dist": 0.0, "x": p.x, "y": p.y, "angle": p.z,
-		"slow": 0.0, "slow_time": 0.0, "flash": 0.0, "dead": false, "blocker": null, "attack_cd": 0.3, "swing": 0.0})
+		"slow": 0.0, "slow_time": 0.0, "flash": 0.0, "dead": false, "blocker": null, "attack_cd": 0.3, "swing": 0.0,
+		"boss_cd": 2.0, "act": 0.0})
 	if def.get("warning", false):
 		banner(D.WARNINGS[type], "#ff5b4d")
 		sound("horn")
@@ -887,9 +902,83 @@ func _hit(p: Dictionary) -> void:
 		particles(p.x, p.y, "#d9c79c", 3, 1.2, 0.035, 0.2)
 
 
+# Patronların özel işleri: mancınık kuleye taş atar, fil askerleri ezer, dev kule içinden asker çıkarır
+func _update_bosses(dt: float) -> void:
+	var born := []
+	for e in enemies:
+		if e.dead or not e.def.get("boss", false):
+			continue
+		if e.act > 0.0:
+			e.act = maxf(0.0, e.act - dt)
+		e.boss_cd -= dt
+		if e.boss_cd > 0.0:
+			continue
+		if e.def.has("throw"):
+			var th: Dictionary = e.def.throw
+			var best = null
+			var bd: float = th.range
+			for t in towers:
+				var d := Vector2(t.x - e.x, t.y - e.y).length()
+				if d <= bd:
+					bd = d
+					best = t
+			e.boss_cd = th.rate if best != null else 0.5
+			if best != null:
+				e.act = 1.0
+				boulders.append({"tower": best, "t": th.flight, "stun": th.stun})
+				events.append({"kind": "boulder", "x0": e.x, "y0": e.y, "x1": best.x, "y1": best.y, "time": th.flight})
+				sound("cannon")
+		elif e.def.has("trample"):
+			var tr: Dictionary = e.def.trample
+			e.boss_cd = tr.rate
+			for u in units:
+				if not u.dead and Vector2(u.x - e.x, u.y - e.y).length() <= tr.range + e.radius:
+					u.hp -= tr.damage
+					u.flash = 0.12
+					e.act = 1.0
+					particles(u.x, u.y, "#a0703c", 6, 1.5, 0.05, 0.4)
+					if u.hp <= 0.0:
+						_kill_unit(u)
+			if e.act > 0.0:
+				sound("wallHit")
+		elif e.def.has("spawn"):
+			var sp: Dictionary = e.def.spawn
+			e.boss_cd = sp.rate
+			e.act = 1.0
+			for i in sp.count:
+				born.append({"type": sp.type, "nation": e.nation, "dist": maxf(0.0, e.dist - 0.25 - i * 0.3)})
+	for b in born:
+		_spawn_enemy(b.type, b.nation)
+		var n: Dictionary = enemies[-1]
+		n.dist = b.dist
+		var p := point_at(n.dist)
+		n.x = p.x
+		n.y = p.y
+	for b in boulders:
+		b.t -= dt
+		if b.t <= 0.0:
+			var t: Dictionary = b.tower
+			t.stun = b.stun
+			particles(t.x, t.y, "#8a7a68", 14, 2.0, 0.07, 0.5)
+			text(t.x, t.y - 0.4, "Kule sustu!", "#ff5b4d")
+			events.append({"kind": "shake", "time": 0.1})
+			sound("crash")
+	boulders = boulders.filter(func(b): return b.t > 0.0)
+
+
+func first_boss():
+	for e in enemies:
+		if not e.dead and e.def.get("boss", false):
+			return e
+	return null
+
+
 func _update_towers(dt: float) -> void:
 	for t in towers:
 		var s := tower_stats(t)
+		if t.get("stun", 0.0) > 0.0:
+			t.stun -= dt
+			continue
 		t.cooldown -= dt
 		var target = _find_target(t, s.range)
 		if target != null:
@@ -1236,6 +1325,7 @@ func step(dt: float) -> bool:
 	_update_hero(dt)
 	_update_army(dt)
 	_update_movement(dt)
+	_update_bosses(dt)
 	_update_towers(dt)
 	_update_projectiles(dt)
 	enemies = enemies.filter(func(e): return not e.dead)
