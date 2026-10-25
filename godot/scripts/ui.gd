@@ -38,6 +38,8 @@ var btn_primary: Button
 var btn_view: Button
 var btn_menu: Button
 var btn_hero: Button
+var weather_chip: PanelContainer
+var lbl_weather: Label
 var lbl_country: Label
 var lbl_stage: Label
 var top_flag: TextureRect
@@ -394,6 +396,10 @@ func _render_idle() -> void:
 		var n := _label(game.describe_wave(game.wave), 23, C_TEXT, font_bold)
 		n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		context.add_child(n)
+	if game.weather != "clear":
+		var w := _label("Hava: %s, %s." % [D.WEATHER[game.weather].name, D.weather_text(game.weather)], 21, Color("#9fd0f0"), font_bold)
+		w.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		context.add_child(w)
 
 
 func _render_build() -> void:
@@ -617,6 +623,15 @@ func _build_view_button() -> void:
 	btn_menu.add_theme_color_override("font_color", C_GOLD)
 	btn_menu.pressed.connect(func(): action.emit("menu", ""))
 	root.add_child(btn_menu)
+	# mevsim ve hava: haritanın sol üstünde
+	weather_chip = PanelContainer.new()
+	weather_chip.add_theme_stylebox_override("panel", _frame("panel", 18, 14))
+	weather_chip.custom_minimum_size = Vector2(0, 58)
+	weather_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lbl_weather = _label("", 20, C_TEXT, font_bold)
+	lbl_weather.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	weather_chip.add_child(lbl_weather)
+	root.add_child(weather_chip)
 	# kahramanın yeteneği: haritanın sol altında, alt panelin hemen üstünde
 	btn_hero = Button.new()
 	btn_hero.custom_minimum_size = Vector2(230, 74)
@@ -754,6 +769,9 @@ func refresh(sound_on: bool, light_name: String) -> void:
 		train_bar.position = Vector2(4, b.size.y - 8)
 		train_bar.size = Vector2((b.size.x - 8) * p, 5)
 
+	weather_chip.position = Vector2(14, btn_view.position.y)
+	lbl_weather.text = "%s · %s" % [D.SEASONS[game.season].name, D.WEATHER[game.weather].name]
+	lbl_weather.add_theme_color_override("font_color", C_TEXT if game.weather == "clear" else Color("#9fd0f0"))
 	btn_hero.visible = game.hero_id != ""
 	if btn_hero.visible:
 		btn_hero.position = Vector2(14, panel_top() - btn_hero.size.y - 12)

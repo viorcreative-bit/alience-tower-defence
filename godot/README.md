@@ -9,6 +9,7 @@ Tarayıcı sürümünün (Vite + Three.js) Godot 4'e taşınmış hâli. Temel k
 - **Hükümdar geliştirme:** her hükümdar 1'den 5'e kadar yükselir. Bedeli şereftir; şeref her püskürtülen dalgada (dalga × 10) ve zaferde (+250) kazanılır. Her seviye devletin üstünlüğünü artırır ve kral modelinde yeni bir süs (mücevher, pelerin, kılıç/asa, altın süsler) açar. Sayılar `data.gd` içinde `COUNTRIES` ve `KING`.
 - **Sefer haritası:** "Sefere Çık" parşömen haritayı açar. Beş kuşatma sırayla açılır: İstanbul 1453 (6 dalga), Belgrad 1521 (8), Rodos 1522 (9), Mohaç 1526 (10), Viyana 1529 (12). Her kalenin kendi yolu, düşman devletleri, can çarpanı ve zemin rengi vardır. Zaferde surda kalan sağlamlığa göre 1–3 yıldız, ilk zaferde kuşatmanın şerefi verilir. "Serbest Savaş" klasik yol ve 12 dalgadır. Sayılar `data.gd` içinde `STAGES`.
 - **Kahraman komutanlar:** haritada savaştan önce biri seçilir. Surların önünde en ön sırada savaşır, düşerse 20 sn sonra kapıdan döner. Yeteneği sol alttaki düğmeyle dalga sırasında kullanılır: Barbaros Hayreddin "Top Yağmuru" (en öndeki düşmanlara 8 gülle), Mimar Sinan "Sur Onarımı" (sur +5, 12 sn surlar hasar almaz), Evliya Çelebi "Moral" (12 sn kuleler ve askerler %40 sert vurur, askerler iyileşir). Sayılar `HEROES` ve `HERO`.
+- **Hava ve mevsimler:** her dalganın havası mevsime göre seçilir ve bir önceki dalga bitince görünür (sol üstte ve alt panelde). Yağmur menzili %10 kısar, tüfek ve topları yavaşlatır (ıslak barut), düşmanı ve askerleri yavaşlatır; kar düşmanı %22 yavaşlatır, kuleler yavaş atar; sis menzili %25 kısar. Kuşatmaların mevsimi sabittir (Viyana kış), serbest savaşta mevsim her 3 dalgada değişir. Zemin ve çim mevsime göre boyanır, kışın kar örter. Sayılar `WEATHER` ve `SEASONS`.
 - **Kuleler (4):** Okçu Kulesi, Zift Kazanı (yavaşlatır), Balyemez Topu (alan hasarı, Bilimhane gerekir), Tüfekçi Tabyası (Kışla gerekir). Her biri 3 seviyeye yükseltilir, satılınca harcamanın bir kısmı geri gelir.
 - **Düşmanlar (7):** piyade, şövalye, hafif süvari, atlı okçu, komutan, koçbaşı, kuşatma kulesi. 12 dalga, her dalga başka bir milletin sancağıyla gelir; her dalgada düşmanın canı, sayısı ve hızı artar. Dalga aralarında ani baskınlar olur.
 - **Şehir:** surların içinde Saray ve 10 bina (Mektep, Kışla, Okçu Ocağı, Darüşşifa, Sipahi Ocağı, Bilimhane, Meşihat, Kadı Mahkemesi, Cami, Yemekhane, Odun-Demir Ocağı, Çarşı). Her binanın 3 seviyesi ve kendi etkisi vardır; binalar 2. seviyeye serbestçe çıkar, 3. seviye için Saray'ın yükseltilmesi gerekir.
@@ -29,7 +30,7 @@ Web çıktısı: `GODOT=/yol/godot tools/export_web.sh` → `build/web/`. Motor 
 
 Oyun mantığı testi: `godot --headless --script tests/sim.gd` (12 dalgayı kendi kendine oynar, hata olursa söyler).
 
-Kuşatma ve kahraman: `-- --stage=rodos --hero=sinan`; haritayı görmek için `-- --user=Ad --stars=2 --map`; yeteneği denemek için `-- --demo --wave=5 --use-hero --hero-at=5`.
+Kuşatma ve kahraman: `-- --stage=rodos --hero=sinan`; haritayı görmek için `-- --user=Ad --stars=2 --map`; yeteneği denemek için `-- --demo --wave=5 --use-hero --hero-at=5`; hava için `--weather=rain --season=autumn`.
 
 Menüyü atlamak için `-- --country=venice --king=3`; menüyü denemek için `-- --user=Ad --honor=500 --kings=2 --pick=mamluk` ya da `-- --login`.
 

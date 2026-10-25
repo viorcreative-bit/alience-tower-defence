@@ -40,6 +40,9 @@ var hero_cd := 0.0
 var fortify := 0.0  # Sur Onarımı: surlar hasar almaz
 var morale := 0.0  # Moral: hasar artar, askerler iyileşir
 var strikes: Array = []  # Top Yağmuru: düşmekte olan gülleler {x, y, t}
+# mevsim ve hava: sıradaki dalganın havası dalga bitince seçilir, oyuncu önceden görür
+var season := "spring"
+var weather := "clear"
 var buildings := {}
 var towers: Array = []
 var enemies: Array = []
@@ -128,6 +131,7 @@ func reset() -> void:
 	fortify = 0.0
 	morale = 0.0
 	strikes = []
+	_roll_weather(0)
 	selected = null
 	time = 0.0
 	market_timer = 0.0
@@ -366,7 +370,40 @@ func tower_stats(t: Dictionary) -> Dictionary:
 	var s := D.tower_stats(t.type, t.level, tower_bonus(t.type))
 	s.rate /= 1.0 + king_bonus("rate")
 	s.damage = roundi(s.damage * morale_mult())
+	var w := wx()
+	s.range *= 1.0 - w.range
+	s.rate *= 1.0 + w.rate + (w.musket if t.type == "musket" or t.type == "cannon" else 0.0)
 	return s
+
+
+# ---------------------------------------------------------------- hava
+
+func season_of(i: int) -> String:
+	if stage_id != "":
+		return stage.get("season", "summer")
+	return D.SEASON_ORDER[(i / D.SEASON_WAVES) % D.SEASON_ORDER.size()]
+
+
+# i. dalganın (0'dan) mevsimini ve havasını seçer; ilk dalga hep açık havada başlar
+func _roll_weather(i: int) -> void:
+	season = season_of(i)
+	if i == 0:
+		weather = "snow" if season == "winter" else "clear"
+		return
+	var w: Dictionary = D.SEASONS[season].weather
+	var total := 0
+	for k in w:
+		total += w[k]
+	var r := randi() % total
+	for k in w:
+		r -= w[k]
+		if r < 0:
+			weather = k
+			return
+
+
+func wx() -> Dictionary:
+	return D.WEATHER[weather]
 
 
 func morale_mult() -> float:
@@ -630,6 +667,7 @@ func _check_wave_end() -> bool:
 	phase = "build"
 	nation = wave_nation(wave)
 	charge.active = 0.0
+	_roll_weather(wave)
 	_reset_raid_timer()
 	banner("%d. sefer püskürtüldü  +%d" % [wave, bonus + income.tax + income.endowment + income.palace_tax], "#f2c94c")
 	sound("victory")
@@ -681,7 +719,7 @@ func _update_movement(dt: float) -> void:
 			if e.slow_time <= 0.0:
 				e.slow = 0.0
 		if e.blocker == null:
-			var nxt: float = e.dist + e.speed * (1.0 - e.slow) * dt
+			var nxt: float = e.dist + e.speed * (1.0 - e.slow) * (1.0 - wx().slow) * dt
 			var b = _find_blocker(e, nxt)
 			if b != null:
 				e.blocker = b
@@ -929,7 +967,7 @@ func _walk(u: Dictionary, dt: float) -> void:
 	var dx: float = tx - u.x
 	var dy: float = ty - u.y
 	var d := sqrt(dx * dx + dy * dy)
-	var step: float = u.def.speed * dt
+	var step: float = u.def.speed * (1.0 - wx().troop_slow) * dt
 	if d <= step:
 		u.x = tx
 		u.y = ty

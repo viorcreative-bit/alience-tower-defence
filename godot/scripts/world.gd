@@ -20,6 +20,13 @@ var fire_mat: StandardMaterial3D
 var rng := RandomNumberGenerator.new()
 var blocked := {}
 var path_key := ""  # kurulduğu yol (main, kuşatma değişince yeniden kurar)
+var ground_mat: ShaderMaterial
+var grass_mat: ShaderMaterial
+var weather_key := ""  # gösterilen mevsim|hava
+var weather_dim := 1.0  # yağmurda ve siste güneş kısılır
+var fog_near := false
+var rain: CPUParticles3D
+var snowfall: CPUParticles3D
 
 const LIGHTS := [
 	{"sun_rot": Vector3(-58, -150, 0), "sun_col": Color(1.0, 0.95, 0.86), "sun_e": 2.4,
@@ -54,6 +61,7 @@ func setup(m: Models, g: Game) -> void:
 	_build_work_sites()
 	_build_camp()
 	_build_decor()
+	_build_weather()
 	apply_light(true)
 
 
@@ -125,7 +133,7 @@ func apply_light(instant := false) -> void:
 	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(sun, "rotation_degrees", p.sun_rot, dur)
 	tw.tween_property(sun, "light_color", p.sun_col, dur)
-	tw.tween_property(sun, "light_energy", p.sun_e, dur)
+	tw.tween_property(sun, "light_energy", p.sun_e * weather_dim, dur)
 	tw.tween_property(sky_mat, "sky_top_color", p.top, dur)
 	tw.tween_property(sky_mat, "sky_horizon_color", p.hor, dur)
 	tw.tween_property(sky_mat, "ground_horizon_color", p.hor, dur)
@@ -134,7 +142,87 @@ func apply_light(instant := false) -> void:
 	tw.tween_property(env, "ambient_light_color", p.amb_col, dur)
 	tw.tween_property(env, "fog_light_color", p.fog, dur)
 	tw.tween_property(env, "tonemap_exposure", p.exp, dur)
+	tw.tween_property(env, "fog_depth_begin", 20.0 if fog_near else 34.0, dur)
+	tw.tween_property(env, "fog_depth_end", 58.0 if fog_near else 80.0, dur)
 	tw.tween_method(func(v): torch_level = v, torch_level, p.torch, dur)
+
+
+# ---------------------------------------------------------------- hava ve mevsim
+
+func _build_weather() -> void:
+	# tween başlangıç değeri okuyabilsin diye gölgelendirici değerleri baştan yazılır
+	for m in [ground_mat, grass_mat]:
+		m.set_shader_parameter("snow", 0.0)
+	ground_mat.set_shader_parameter("season_tint", Vector3.ONE)
+	grass_mat.set_shader_parameter("tint", Vector3.ONE)
+	rain = CPUParticles3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(0.025, 0.45)
+	var rm := StandardMaterial3D.new()
+	rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	rm.albedo_color = Color(0.82, 0.88, 1.0, 0.7)
+	rm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	q.material = rm
+	rain.mesh = q
+	rain.amount = 900
+	rain.lifetime = 0.7
+	rain.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	rain.emission_box_extents = Vector3(7.0, 0.1, 10.5)
+	rain.direction = Vector3(0.1, -1, 0)
+	rain.spread = 3
+	rain.gravity = Vector3(0, -6, 0)
+	rain.initial_velocity_min = 9.0
+	rain.initial_velocity_max = 11.0
+	rain.position = Vector3(0, 7.5, 0)
+	rain.emitting = false
+	rain.visibility_aabb = AABB(Vector3(-9, -9, -12), Vector3(18, 10, 24))
+	add_child(rain)
+	snowfall = CPUParticles3D.new()
+	var sq := QuadMesh.new()
+	sq.size = Vector2(0.1, 0.1)
+	var smat := StandardMaterial3D.new()
+	smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	smat.albedo_texture = soft_dot()
+	smat.albedo_color = Color(1, 1, 1, 0.9)
+	smat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	sq.material = smat
+	snowfall.mesh = sq
+	snowfall.amount = 700
+	snowfall.lifetime = 5.0
+	snowfall.preprocess = 5.0
+	snowfall.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	snowfall.emission_box_extents = Vector3(7.0, 0.1, 10.5)
+	snowfall.direction = Vector3(0, -1, 0)
+	snowfall.spread = 25
+	snowfall.gravity = Vector3(0.25, -0.35, 0)
+	snowfall.initial_velocity_min = 0.8
+	snowfall.initial_velocity_max = 1.3
+	snowfall.scale_amount_min = 0.5
+	snowfall.scale_amount_max = 1.4
+	snowfall.position = Vector3(0, 6.0, 0)
+	snowfall.emitting = false
+	snowfall.visibility_aabb = AABB(Vector3(-9, -9, -12), Vector3(18, 10, 24))
+	add_child(snowfall)
+
+
+# Mevsim zemini ve çimi boyar, havaya göre yağmur, kar ve sis açar
+func set_weather(season: String, weather: String, instant := false) -> void:
+	weather_key = season + "|" + weather
+	var s: Dictionary = D.SEASONS[season]
+	var dur := 0.01 if instant else 2.0
+	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(ground_mat, "shader_parameter/season_tint", Vector3(s.tint.r, s.tint.g, s.tint.b), dur)
+	tw.tween_property(ground_mat, "shader_parameter/snow", s.snow if weather == "snow" or season == "winter" else 0.0, dur)
+	tw.tween_property(grass_mat, "shader_parameter/tint", Vector3(s.tint.r, s.tint.g, s.tint.b), dur)
+	tw.tween_property(grass_mat, "shader_parameter/snow", s.snow if weather == "snow" or season == "winter" else 0.0, dur)
+	grass_mat.set_shader_parameter("wind", 2.2 if weather == "rain" else 1.0)
+	rain.emitting = weather == "rain"
+	snowfall.emitting = weather == "snow"
+	weather_dim = {"rain": 0.55, "fog": 0.7, "snow": 0.8}.get(weather, 1.0)
+	fog_near = weather == "fog"
+	apply_light(instant)
 
 
 func fire(parent: Node3D, pos: Vector3, size := 1.0, light := true) -> CPUParticles3D:
@@ -203,6 +291,7 @@ func _build_ground() -> void:
 	mat.set_shader_parameter("pts", pts)
 	mat.set_shader_parameter("count", pts.size())
 	mat.set_shader_parameter("wall_z", to_world(0, game.wall_row + 0.5).z)
+	ground_mat = mat
 	var ground: Dictionary = game.stage.get("ground", {})
 	for k in ground:
 		mat.set_shader_parameter(k, ground[k])
@@ -283,6 +372,7 @@ func _build_grass() -> void:
 	mi.multimesh = mm
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/grass.gdshader")
+	grass_mat = sm
 	mi.material_override = sm
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)

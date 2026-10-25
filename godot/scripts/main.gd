@@ -397,6 +397,8 @@ func _process(delta: float) -> void:
 	_sync_buildings()
 	town.update(delta)
 	_update_markers()
+	if world.weather_key != game.season + "|" + game.weather:
+		world.set_weather(game.season, game.weather, world.weather_key == "")
 	audio.set_music("wave" if game.phase == "wave" else ("build" if game.phase == "build" else "off"))
 	ui.refresh(audio.enabled, world.light_name())
 	if shake > 0.0 and not (cam_tween and cam_tween.is_running()):
@@ -1024,6 +1026,9 @@ func _debug_hooks() -> void:
 		if _arg(args, "--wave=", "") != "":
 			game.wave = int(_arg(args, "--wave=", "0"))
 			game.start_wave()
+	if _arg(args, "--weather=", "") != "":
+		game.weather = _arg(args, "--weather=", "")
+		game.season = _arg(args, "--season=", game.season)
 	if "--use-hero" in args:
 		get_tree().create_timer(float(_arg(args, "--hero-at=", "3"))).timeout.connect(game.use_hero)
 	var sel := _arg(args, "--select=", "")

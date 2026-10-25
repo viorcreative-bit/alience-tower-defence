@@ -112,30 +112,30 @@ const WAVES := [
 # nations: o dalgayı gönderen devlet, hp: düşman canı çarpanı, honor: ilk zaferde verilen şeref.
 # map: haritadaki yeri (boylam, enlem). ground: zemin renkleri (yoksa varsayılan çim).
 const STAGES := {
-	"istanbul": {"name": "İstanbul", "year": 1453, "map": [28.98, 41.01], "hp": 0.85, "honor": 150, "gold": 0,
+	"istanbul": {"name": "İstanbul", "year": 1453, "map": [28.98, 41.01], "hp": 0.85, "honor": 150, "gold": 0, "season": "spring",
 		"path": [[1, -1], [1, 2], [6, 2], [6, 5], [2, 5], [2, 8], [7, 8], [7, 10], [4, 10], [4, 12]],
 		"picks": [0, 1, 2, 3, 4, 5],
 		"nations": ["byzantium", "byzantium", "serbia", "venice", "byzantium", "venice"],
 		"text": "Kostantiniyye'yi Bizans'ın ve müttefiklerinin karşı saldırısından koru."},
-	"belgrad": {"name": "Belgrad", "year": 1521, "map": [20.46, 44.82], "hp": 0.95, "honor": 200, "gold": 20,
+	"belgrad": {"name": "Belgrad", "year": 1521, "map": [20.46, 44.82], "hp": 0.95, "honor": 200, "gold": 20, "season": "summer",
 		"path": [[7, -1], [7, 3], [2, 3], [2, 7], [6, 7], [6, 10], [4, 10], [4, 12]],
 		"picks": [0, 1, 2, 3, 4, 5, 6, 7],
 		"nations": ["serbia", "hungary", "hungary", "serbia", "hungary", "hungary", "habsburg", "hungary"],
 		"ground": {"grass_a": Color(0.56, 0.6, 0.22), "grass_b": Color(0.36, 0.42, 0.14)},
 		"text": "Tuna'nın kilidi Belgrad. Macar ordusu kaleyi geri almak için yürüyor; yol kısa, kuleleri erken kur."},
-	"rodos": {"name": "Rodos", "year": 1522, "map": [28.22, 36.43], "hp": 1.0, "honor": 250, "gold": 40,
+	"rodos": {"name": "Rodos", "year": 1522, "map": [28.22, 36.43], "hp": 1.0, "honor": 250, "gold": 40, "season": "autumn",
 		"path": [[4, -1], [4, 2], [1, 2], [1, 5], [7, 5], [7, 8], [2, 8], [2, 10], [4, 10], [4, 12]],
 		"picks": [0, 1, 3, 2, 4, 5, 6, 7, 8],
 		"nations": ["hospitaller", "hospitaller", "venice", "hospitaller", "spain", "hospitaller", "venice", "spain", "hospitaller"],
 		"ground": {"grass_a": Color(0.66, 0.64, 0.32), "grass_b": Color(0.47, 0.48, 0.2), "dirt": Color(0.9, 0.8, 0.58), "dirt_edge": Color(0.72, 0.6, 0.4)},
 		"text": "Ada kalesi Rodos. Şövalyeler ve denizden gelen Venedik, İspanya gemileri ağır zırhlı asker çıkarıyor."},
-	"mohac": {"name": "Mohaç", "year": 1526, "map": [18.68, 45.99], "hp": 1.0, "honor": 300, "gold": 60,
+	"mohac": {"name": "Mohaç", "year": 1526, "map": [18.68, 45.99], "hp": 1.0, "honor": 300, "gold": 60, "season": "summer",
 		"path": [[0, -1], [0, 1], [8, 1], [8, 4], [0, 4], [0, 7], [8, 7], [8, 9], [4, 9], [4, 12]],
 		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
 		"nations": ["hungary", "hungary", "poland", "hungary", "habsburg", "hungary", "poland", "habsburg", "hungary", "hungary"],
 		"ground": {"grass_a": Color(0.5, 0.66, 0.22), "grass_b": Color(0.3, 0.48, 0.13)},
 		"text": "Mohaç ovası: uzun ve kıvrımlı yol, bol süvari. Kuleler için yer çok, düşman da çok."},
-	"viyana": {"name": "Viyana", "year": 1529, "map": [16.37, 48.21], "hp": 1.1, "honor": 400, "gold": 80,
+	"viyana": {"name": "Viyana", "year": 1529, "map": [16.37, 48.21], "hp": 1.1, "honor": 400, "gold": 80, "season": "winter",
 		"path": [[2, -1], [2, 1], [6, 1], [6, 3], [1, 3], [1, 6], [7, 6], [7, 9], [3, 9], [3, 10], [4, 10], [4, 12]],
 		"picks": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
 		"nations": ["habsburg", "habsburg", "spain", "habsburg", "holyLeague", "habsburg", "spain", "habsburg", "poland", "holyLeague", "habsburg", "holyLeague"],
@@ -143,6 +143,41 @@ const STAGES := {
 		"text": "Seferin sonu: Habsburg başkenti önünde Kutsal İttifak'ın bütün ordusu. 12 dalga, en güçlü düşman."},
 }
 const STAGE_ORDER := ["istanbul", "belgrad", "rodos", "mohac", "viyana"]
+# Hava: her dalga başında mevsime göre seçilir ve dalga boyunca sürer (baskınlar da o havada gelir).
+# range: kule menzili kaybı, rate: kule atış süresi uzar, musket: tüfeklerin atış süresi ayrıca uzar (ıslak barut),
+# slow: düşman yavaşlar, troop_slow: askerler yavaş yürür.
+const WEATHER := {
+	"clear": {"name": "Açık", "range": 0.0, "rate": 0.0, "musket": 0.0, "slow": 0.0, "troop_slow": 0.0},
+	"rain": {"name": "Yağmur", "range": 0.1, "rate": 0.0, "musket": 0.3, "slow": 0.12, "troop_slow": 0.1},
+	"snow": {"name": "Kar", "range": 0.05, "rate": 0.12, "musket": 0.1, "slow": 0.22, "troop_slow": 0.2},
+	"fog": {"name": "Sis", "range": 0.25, "rate": 0.0, "musket": 0.0, "slow": 0.0, "troop_slow": 0.0},
+}
+# Mevsim: havaların olasılıkları ve zeminin rengi. Kuşatmanın mevsimi STAGES'te; serbest savaşta her
+# season_waves dalgada bir sonraki mevsime geçilir.
+const SEASONS := {
+	"spring": {"name": "İlkbahar", "weather": {"clear": 5, "rain": 4, "fog": 2}, "tint": Color(1.0, 1.04, 0.95), "snow": 0.0},
+	"summer": {"name": "Yaz", "weather": {"clear": 8, "rain": 2, "fog": 1}, "tint": Color(1.06, 1.0, 0.86), "snow": 0.0},
+	"autumn": {"name": "Sonbahar", "weather": {"clear": 4, "rain": 4, "fog": 3}, "tint": Color(1.14, 0.93, 0.72), "snow": 0.0},
+	"winter": {"name": "Kış", "weather": {"clear": 3, "snow": 6, "fog": 2}, "tint": Color(0.9, 0.95, 1.0), "snow": 0.75},
+}
+const SEASON_ORDER := ["spring", "summer", "autumn", "winter"]
+const SEASON_WAVES := 3
+
+
+static func weather_text(w: String) -> String:
+	var d: Dictionary = WEATHER[w]
+	var parts := []
+	if d.range > 0.0:
+		parts.append("menzil -" + pct(d.range))
+	if d.rate > 0.0:
+		parts.append("kuleler yavaş atar")
+	if d.musket > 0.0:
+		parts.append("ıslak barut")
+	if d.slow > 0.0:
+		parts.append("düşman hızı -" + pct(d.slow))
+	return ", ".join(parts) if parts.size() else "etkisi yok"
+
+
 # Kuşatmada kalan sur oranına göre yıldız: en az 1, sur %50 ve üstü 2, %80 ve üstü 3
 const STAGE_STARS := [0.5, 0.8]
 

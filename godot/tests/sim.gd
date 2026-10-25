@@ -48,7 +48,32 @@ func _init() -> void:
 	_countries()
 	_stages()
 	_heroes()
+	_weather()
 	quit()
+
+
+# Hava: yağmur menzili kısar ve tüfeği yavaşlatır, kar düşmanı yavaşlatır; mevsimler dalgayla döner
+func _weather() -> void:
+	var D := GameData
+	var g := Game.new()
+	assert(g.season == "spring" and g.weather == "clear")
+	assert(g.season_of(3) == "summer" and g.season_of(9) == "winter" and g.season_of(12) == "spring")
+	var t := {"type": "musket", "level": 1}
+	var clear := g.tower_stats(t)
+	g.weather = "rain"
+	var wet := g.tower_stats(t)
+	assert(wet.range < clear.range and wet.rate > clear.rate, "yağmur etkisi")
+	g.weather = "fog"
+	assert(g.tower_stats(t).range < wet.range, "sis etkisi")
+	var seen := {}
+	for i in 200:
+		g._roll_weather(10)
+		seen[g.weather] = true
+	assert(seen.has("snow") and not seen.has("rain"), "kış havaları: %s" % str(seen))
+	g.set_stage("viyana")
+	g.reset()
+	assert(g.season == "winter" and g.weather == "snow")
+	print("hava tamam")
 
 
 # Kahramanlar: kapıdan çıkar, yeteneği dalgada çalışır, düşünce yeniden gelir
