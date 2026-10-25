@@ -47,6 +47,10 @@ var weather := "clear"
 var research := {}
 var researching := {}
 var boulders: Array = []  # mancınık taşları {tower, t}
+# görev ve başarım sayımı (main hesaba aktarıp boşaltır); streak hasarsız üst üste dalga
+var stats := {}
+var streak := 0
+var wave_wall := 0
 var buildings := {}
 var towers: Array = []
 var enemies: Array = []
@@ -145,6 +149,8 @@ func reset() -> void:
 	research = {}
 	researching = {}
 	boulders = []
+	stats = {}
+	streak = 0
 	selected = null
 	time = 0.0
 	market_timer = 0.0
@@ -328,6 +334,7 @@ func build_tower(type: String) -> void:
 	gold -= cost
 	towers.append({"id": _id(), "type": type, "c": selected.c, "r": selected.r, "x": selected.c + 0.5, "y": selected.r + 0.5,
 		"level": 1, "spent": cost, "cooldown": 0.0, "angle": -PI / 2, "recoil": 0.0})
+	stat("towers")
 	sound("build")
 
 
@@ -454,6 +461,7 @@ func use_hero() -> void:
 		return
 	var h: Dictionary = hero_unit()
 	hero_cd = hero_def().cooldown
+	stat("hero")
 	banner("%s!" % hero_def().ability, hero_def().ring, 2.0)
 	text(h.x, h.y - 0.5, hero_def().name, hero_def().ring)
 	match hero_id:
@@ -627,6 +635,7 @@ func _update_research(dt: float) -> void:
 	var id: String = researching.id
 	researching = {}
 	research[id] = true
+	stat("research")
 	if id == "arch1":
 		max_wall += D.TECH_FX.wall
 		wall += D.TECH_FX.wall
@@ -685,6 +694,7 @@ func start_wave() -> void:
 	wave += 1
 	phase = "wave"
 	raid = false
+	wave_wall = wall
 	nation = wave_nation(wave - 1)
 	spawn_queue = []
 	for g in wave_groups(wave - 1):
@@ -733,10 +743,14 @@ func _check_wave_end() -> bool:
 		raid = false
 		phase = "build"
 		gold += D.RAID.bonus
+		stat("raids")
 		nation = wave_nation(wave)
 		_reset_raid_timer()
 		banner("Baskın püskürtüldü  +%d" % D.RAID.bonus, "#f2c94c")
 		return false
+	stat("waves")
+	streak = streak + 1 if wall >= wave_wall else 0
+	stats.streak = maxi(stats.get("streak", 0), streak)
 	if wave >= total_waves:
 		phase = "won"
 		sound("chant", {"voices": 16, "loud": 1})
@@ -857,6 +871,9 @@ func damage_enemy(e: Dictionary, amount: float, pierce: bool) -> void:
 	if e.hp <= 0.0:
 		e.dead = true
 		gold += reward(e)
+		stat("kills")
+		if e.def.get("boss", false):
+			stat("boss_kills")
 		var color: String = "#a0703c" if e.def.get("siege", false) else D.NATIONS[e.nation].primary
 		var big: bool = e.def.get("warning", false)
 		particles(e.x, e.y, color, 36 if big else 10, 2.2, e.radius * 0.28, 0.6)
@@ -1309,6 +1326,10 @@ func _find_blocker(e: Dictionary, next_dist: float):
 
 
 # ---------------------------------------------------------------- ana adım
+
+func stat(key: String, n := 1) -> void:
+	stats[key] = stats.get(key, 0) + n
+
 
 func _id() -> int:
 	next_id += 1

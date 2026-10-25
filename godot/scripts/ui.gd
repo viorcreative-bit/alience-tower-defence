@@ -44,6 +44,7 @@ var tech_grid: HBoxContainer
 var tech_status: Label
 var tech_bar: ColorRect
 var tech_key := ""
+var toasts: VBoxContainer  # görev ve başarım duyuruları
 var boss_box: PanelContainer  # sahadaki patronun büyük can çubuğu
 var boss_name: Label
 var boss_fill: ColorRect
@@ -99,6 +100,13 @@ func _ready() -> void:
 	_build_panel()
 	_build_view_button()
 	_build_banner()
+	toasts = VBoxContainer.new()
+	toasts.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	toasts.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	toasts.position.y = 250
+	toasts.add_theme_constant_override("separation", 6)
+	toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(toasts)
 	_build_tech()
 	_build_overlay()
 
@@ -852,6 +860,22 @@ func _build_banner() -> void:
 	banner.modulate.a = 0.0
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(banner)
+
+
+func toast(text: String) -> void:
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", _frame("card_hot", 12, 14))
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var l := _label(text, 22, C_COIN, font_bold)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	p.add_child(l)
+	toasts.add_child(p)
+	var tw := p.create_tween()
+	p.modulate.a = 0.0
+	tw.tween_property(p, "modulate:a", 1.0, 0.25)
+	tw.tween_interval(3.5 + toasts.get_child_count() * 0.6)
+	tw.tween_property(p, "modulate:a", 0.0, 0.6)
+	tw.tween_callback(p.queue_free)
 
 
 func show_banner(text: String, color: Color, life := 2.2) -> void:

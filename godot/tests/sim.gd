@@ -51,7 +51,42 @@ func _init() -> void:
 	_weather()
 	_tech()
 	_bosses()
+	_progress()
 	quit()
+
+
+# Görevler ve başarımlar: sayım hesaba eklenir, eşik geçilince şeref bir kez verilir
+func _progress() -> void:
+	var D := GameData
+	var p := Profiles.new()
+	p.cfg = ConfigFile.new()
+	p.login("Deneme")
+	var msgs := p.record({"kills": 120, "towers": 3})
+	assert(p.has_ach("novice"), "Acemi Komutan")
+	assert(p.honor() == D.ACHIEVEMENTS.novice.honor + _quest_honor(p), "şeref: %d" % p.honor())
+	assert(p.record({"kills": 1}).is_empty() or not p.has_ach("veteran"))
+	var day := p.daily()
+	assert(day.ids.size() == D.QUESTS_PER_DAY)
+	p.win_stage("istanbul", 3)
+	p.record({"wins": 1})
+	assert(p.has_ach("conqueror") and p.has_ach("perfect"), "kuşatma başarımları")
+	var g := Game.new()
+	g.wave = 0
+	g.start_wave()
+	g.spawn_queue = []
+	g.enemies = []
+	g.step(0.03)
+	assert(g.stats.waves == 1 and g.stats.streak == 1, "dalga sayımı")
+	assert(p.leaderboard()[0].name == "Deneme")
+	print("görevler tamam ", msgs)
+
+
+func _quest_honor(p: Profiles) -> int:
+	var n := 0
+	var day := p.daily()
+	for q in day.done:
+		n += GameData.QUESTS[q].honor
+	return n
 
 
 # Patronlar: dalgaya eklenir; mancınık kuleyi susturur, fil askeri ezer, dev kule asker çıkarır

@@ -207,6 +207,9 @@ func _show_countries() -> void:
 		grid.add_child(_country_card(c))
 
 	page.add_child(_king_panel())
+	var day := profiles.daily()
+	var pb := _button(page, "Görevler, Başarımlar ve Sıralama  ·  bugün %d/%d görev" % [day.done.size(), day.ids.size()], _show_progress, false, 62)
+	pb.add_theme_color_override("font_color", C_COIN)
 	var go := _button(page, "Sefere Çık", func():
 		profiles.set_v("country", selected)
 		_show_campaign(), true, 84)
@@ -512,3 +515,142 @@ func _hero_row() -> Control:
 func _go(id: String) -> void:
 	visible = false
 	start.emit(selected, profiles.king_level(selected), id)
+
+
+# ---------------------------------------------------------------- görevler, başarımlar, sıralama
+
+func _show_progress() -> void:
+	_clear()
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 10)
+	page.add_child(top)
+	var back := Button.new()
+	back.text = "Geri"
+	back.custom_minimum_size = Vector2(110, 58)
+	back.pressed.connect(_show_countries)
+	top.add_child(back)
+	var h := ui._label("ŞEREF DEFTERİ", 32, C_GOLD, ui.font_title)
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	top.add_child(h)
+	var hv := ui._label("%d şeref" % profiles.honor(), 24, C_COIN, ui.font_bold)
+	hv.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top.add_child(hv)
+	var sc := ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	page.add_child(sc)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 14)
+	sc.add_child(col)
+
+	# günlük görevler
+	var day := profiles.daily()
+	var qv := _section(col, "GÜNLÜK GÖREVLER", "Her gün üç yeni görev. Tamamlayınca şeref kendiliğinden gelir.")
+	for q in day.ids:
+		var qd: Dictionary = D.QUESTS[q]
+		var done: bool = day.done.has(q)
+		_progress_row(qv, qd.text, mini(day.progress.get(qd.stat, 0), qd.goal), qd.goal, "+%d şeref" % qd.honor, done)
+
+	# başarımlar
+	var av := _section(col, "BAŞARIMLAR", "%d/%d rozet" % [profiles.get_v("ach", {}).size(), D.ACHIEVEMENT_ORDER.size()])
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	av.add_child(grid)
+	for a in D.ACHIEVEMENT_ORDER:
+		grid.add_child(_badge(a))
+
+	# sıralama
+	var lv := _section(col, "SIRALAMA", "Bu cihazdaki komutanlar, kazanılan toplam şerefe göre.")
+	var rows := profiles.leaderboard()
+	for i in rows.size():
+		var r: Dictionary = rows[i]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var me: bool = r.name == profiles.current
+		var c := C_GOLD if me else C_TEXT
+		var rk := ui._label("%d." % (i + 1), 24, C_COIN if i == 0 else C_DIM, ui.font_bold)
+		rk.custom_minimum_size = Vector2(44, 0)
+		row.add_child(rk)
+		var nm := ui._label(r.name, 24, c, ui.font_bold)
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nm.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		row.add_child(nm)
+		row.add_child(ui._label("%d şeref · %d yıldız · %d rozet · en iyi %d. dalga" % [r.honor, r.stars, r.ach, r.best], 19, C_DIM))
+		lv.add_child(row)
+
+
+func _section(parent: Control, title: String, sub: String) -> VBoxContainer:
+	var p := PanelContainer.new()
+	var sb := ui._frame("panel", 18, 20)
+	sb.content_margin_top = 16
+	sb.content_margin_bottom = 16
+	p.add_theme_stylebox_override("panel", sb)
+	parent.add_child(p)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	p.add_child(v)
+	v.add_child(ui._label(title, 26, C_GOLD, ui.font_title))
+	var s := ui._label(sub, 18, C_DIM)
+	s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(s)
+	return v
+
+
+func _progress_row(parent: Control, text: String, now: int, goal: int, prize: String, done: bool) -> void:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	parent.add_child(v)
+	var h := HBoxContainer.new()
+	var t := ui._label(text, 21, C_TEXT if not done else Color("#a8d872"), ui.font_bold)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(t)
+	h.add_child(ui._label("Tamam" if done else "%d/%d · %s" % [now, goal, prize], 19, Color("#a8d872") if done else C_COIN, ui.font_bold))
+	v.add_child(h)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.45)
+	bg.custom_minimum_size = Vector2(0, 8)
+	v.add_child(bg)
+	var fill := ColorRect.new()
+	fill.color = Color("#a8d872") if done else C_COIN
+	fill.anchor_bottom = 1.0
+	fill.anchor_right = clampf(float(now) / maxf(1.0, goal), 0.0, 1.0)
+	bg.add_child(fill)
+
+
+func _badge(id: String) -> Control:
+	var a: Dictionary = D.ACHIEVEMENTS[id]
+	var got := profiles.has_ach(id)
+	var p := PanelContainer.new()
+	p.add_theme_stylebox_override("panel", ui._frame("card_hot" if got else "card", 12, 10))
+	p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p.custom_minimum_size = Vector2(0, 112)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	p.add_child(v)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 8)
+	var gem := Panel.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = C_COIN if got else Color(0, 0, 0, 0.35)
+	sb.border_color = C_COIN
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(10)
+	gem.add_theme_stylebox_override("panel", sb)
+	gem.custom_minimum_size = Vector2(20, 20)
+	gem.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	h.add_child(gem)
+	var n := ui._label(a.name, 21, C_GOLD if got else C_TEXT, ui.font_bold)
+	n.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(n)
+	v.add_child(h)
+	var t := ui._label(a.text, 17, C_DIM)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(t)
+	var pr := profiles.ach_progress(id)
+	v.add_child(ui._label("Kazanıldı · +%d şeref" % a.honor if got else "%d/%d · +%d şeref" % [pr[0], pr[1], a.honor], 17, Color("#a8d872") if got else C_COIN, ui.font_bold))
+	return p

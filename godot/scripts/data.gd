@@ -561,3 +561,43 @@ static func wave_nation(i: int, country: String) -> String:
 	var n: String = WAVES[i].nation
 	return "ottoman" if n == country else n
 
+
+# ---------------------------------------------------------------- görevler ve başarımlar
+
+# Savaşta sayılan şeyler (Game.stats, hesaba eklenir): kills düşman, boss_kills patron, towers kule kurma,
+# waves püskürtülen dalga, hero kahraman yeteneği, research araştırma, raids baskın, wins kuşatma zaferi,
+# free_wins serbest savaş zaferi, streak bir savaşta hasarsız üst üste dalga (en iyisi tutulur)
+const STAT_NAMES := {"kills": "düşman", "boss_kills": "patron", "towers": "kule", "waves": "dalga", "hero": "kahraman yeteneği",
+	"research": "araştırma", "raids": "baskın", "wins": "kuşatma zaferi"}
+
+# Başarımlar: bir kez kazanılır. need: {istatistik: en az}; stars: kazanılmış yıldız toplamı; all_stages: bütün kuşatmalar
+const ACHIEVEMENTS := {
+	"novice": {"name": "Acemi Komutan", "text": "100 düşman yen", "need": {"kills": 100}, "honor": 40},
+	"veteran": {"name": "Kılıç Ustası", "text": "1000 düşman yen", "need": {"kills": 1000}, "honor": 150},
+	"boss1": {"name": "Patron Avcısı", "text": "Bir patron yen", "need": {"boss_kills": 1}, "honor": 60},
+	"boss10": {"name": "Dev Avcısı", "text": "10 patron yen", "need": {"boss_kills": 10}, "honor": 200},
+	"builder": {"name": "Mimarbaşı", "text": "50 kule kur", "need": {"towers": 50}, "honor": 80},
+	"scholar": {"name": "Âlim", "text": "9 araştırma tamamla", "need": {"research": 9}, "honor": 100},
+	"hero": {"name": "Komutanın Gücü", "text": "Kahraman yeteneğini 25 kez kullan", "need": {"hero": 25}, "honor": 80},
+	"wall": {"name": "Demir Sur", "text": "Bir savaşta 5 dalga üst üste sura hasar aldırma", "need": {"streak": 5}, "honor": 100},
+	"conqueror": {"name": "Fatih", "text": "İstanbul kuşatmasını kazan", "stage": "istanbul", "honor": 50},
+	"perfect": {"name": "Kusursuz Savunma", "text": "Bir kuşatmayı 3 yıldızla kazan", "three": true, "honor": 80},
+	"campaign": {"name": "Sefer-i Hümayun", "text": "Bütün kuşatmaları kazan", "all_stages": true, "honor": 300},
+	"free": {"name": "Serbest Muzaffer", "text": "Serbest savaşın 12 dalgasını püskürt", "need": {"free_wins": 1}, "honor": 150},
+}
+const ACHIEVEMENT_ORDER := ["novice", "boss1", "builder", "conqueror", "perfect", "hero", "wall", "scholar", "veteran", "boss10", "free", "campaign"]
+
+# Günlük görevler: her gün tarihe göre 3 tanesi seçilir, gün içindeki sayımla tamamlanır
+const QUESTS := {
+	"kills150": {"stat": "kills", "goal": 150, "honor": 60, "text": "150 düşman yen"},
+	"kills400": {"stat": "kills", "goal": 400, "honor": 120, "text": "400 düşman yen"},
+	"waves10": {"stat": "waves", "goal": 10, "honor": 70, "text": "10 dalga püskürt"},
+	"towers8": {"stat": "towers", "goal": 8, "honor": 50, "text": "8 kule kur"},
+	"hero3": {"stat": "hero", "goal": 3, "honor": 50, "text": "Kahraman yeteneğini 3 kez kullan"},
+	"boss1": {"stat": "boss_kills", "goal": 1, "honor": 80, "text": "Bir patron yen"},
+	"win1": {"stat": "wins", "goal": 1, "honor": 100, "text": "Bir kuşatma kazan"},
+	"research2": {"stat": "research", "goal": 2, "honor": 50, "text": "2 araştırma tamamla"},
+	"raids2": {"stat": "raids", "goal": 2, "honor": 50, "text": "2 ani baskını püskürt"},
+}
+const QUEST_ORDER := ["kills150", "kills400", "waves10", "towers8", "hero3", "boss1", "win1", "research2", "raids2"]
+const QUESTS_PER_DAY := 3

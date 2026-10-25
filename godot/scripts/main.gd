@@ -132,7 +132,17 @@ func _rebuild_world() -> void:
 	spark_mat = world.fire_mat
 
 
+# Savaşın sayımını hesaba aktarır; tamamlanan görev ve başarımlar ekranın üstünde duyurulur
+func _flush_stats() -> void:
+	if game.stats.is_empty():
+		return
+	for msg in profiles.record(game.stats):
+		ui.toast(msg)
+	game.stats = {}
+
+
 func _open_menu(map := false) -> void:
+	_flush_stats()
 	in_menu = true
 	ui.visible = false
 	ui.overlay.visible = false
@@ -154,14 +164,17 @@ func _award_honor() -> void:
 		if game.stage_id != "":
 			var stars := D.stage_stars(game.wall, game.max_wall)
 			var first := profiles.win_stage(game.stage_id, stars)
+			game.stat("wins")
 			stage_note = "%d/3 yıldız" % stars + (" · ilk zafer +%d şeref" % first if first > 0 else "")
 			var i := D.STAGE_ORDER.find(game.stage_id)
 			if first > 0 and i + 1 < D.STAGE_ORDER.size():
 				stage_note += "\nSıradaki kuşatma açıldı: %s" % D.STAGES[D.STAGE_ORDER[i + 1]].name
 		else:
 			n += D.KING.honor_win
+			game.stat("free_wins")
 	if n > 0:
 		profiles.add_honor(n)
+	_flush_stats()
 	if n > 0 or stage_note != "":
 		ui.honor_note = (stage_note + "\n" if stage_note != "" else "") + "Toplam şeref: %d (hükümdarını menüden geliştir)" % profiles.honor()
 		game.text(4.5, 12.6, "+%d şeref" % n, "#e0b24a")
@@ -371,6 +384,7 @@ func _on_action(name: String, arg: String) -> void:
 
 
 func _restart() -> void:
+	_flush_stats()
 	for dict in [tower_nodes, enemy_nodes, unit_nodes, proj_nodes]:
 		for id in dict:
 			dict[id].info.root.queue_free()
@@ -1020,7 +1034,14 @@ func _debug_hooks() -> void:
 			for id in D.STAGE_ORDER.slice(0, int(_arg(args, "--stars=", "0"))):
 				st[id] = 1 + st.size() % 3
 			profiles.set_v("stages", st)
-		if "--map" in args:
+		if "--fake-stats" in args:
+			profiles.record({"kills": 260, "towers": 14, "boss_kills": 1, "waves": 7, "hero": 2})
+			for n in ["Hasan", "Ayşe", "Kemal"]:
+				profiles.cfg.set_value("hesap:" + n, "honor_total", n.length() * 137)
+				profiles.cfg.set_value("hesap:" + n, "best_wave", n.length() * 2)
+		if "--progress" in args:
+			menu._show_progress()
+		elif "--map" in args:
 			menu._show_campaign()
 		else:
 			menu._show_countries()
