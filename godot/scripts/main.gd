@@ -72,6 +72,7 @@ func _ready() -> void:
 	ui.best_wave = save.get_value("game", "best_wave", 0)
 	add_child(ui)
 	ui.action.connect(_on_action)
+	ui.set_folded(save.get_value("settings", "folded", false))
 	dust_mat = world.fire_mat.duplicate()
 	dust_mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	spark_mat = world.fire_mat
@@ -309,6 +310,19 @@ func _fit_camera() -> void:
 	_update_tilt()
 
 
+# Panel açılıp kapanınca kamera yeni oyun alanına yumuşakça yeniden sığdırılır
+func _refit() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var keep := camera.transform
+	_fit_camera()
+	camera.transform = keep
+	if cam_tween:
+		cam_tween.kill()
+	cam_tween = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	cam_tween.tween_property(camera, "transform", cam_base, 0.45)
+
+
 func set_city_view(on: bool) -> void:
 	if on == city_view:
 		return
@@ -341,7 +355,7 @@ func _build_tilt() -> void:
 func _update_tilt() -> void:
 	var hgt := get_viewport().get_visible_rect().size.y
 	var y0 := ui.top_bottom() / hgt
-	var y1 := ui.panel_top() / hgt
+	var y1 := ui.play_bottom() / hgt
 	var band := y1 - y0
 	if city_view:
 		tilt.set_shader_parameter("focus_top", y0 + band * 0.3)
@@ -363,7 +377,7 @@ func _fit(corners: Array[Vector3], pitch_deg: float, target: Vector3) -> Transfo
 	var dir := Vector3(0, sin(pitch), cos(pitch))
 	var vs := get_viewport().get_visible_rect().size
 	var y0 := ui.top_bottom() + 6.0
-	var y1 := ui.panel_top() - 6.0
+	var y1 := ui.play_bottom() - 6.0
 	if y1 - y0 < 100.0:
 		y0 = 0.0
 		y1 = vs.y
@@ -460,6 +474,11 @@ func _on_action(name: String, arg: String) -> void:
 			set_city_view(false)
 		"view":
 			set_city_view(not city_view)
+		"fold":
+			ui.set_folded(not ui.folded)
+			save.set_value("settings", "folded", ui.folded)
+			save.save(SAVE_PATH)
+			_refit()
 		"pick_building":
 			var s: Array = D.BUILDINGS[arg].slot
 			game.select_tile(s[0], s[1])
@@ -1177,6 +1196,10 @@ func _debug_hooks() -> void:
 	var args := OS.get_cmdline_user_args()
 	# `--country=venice --king=3` ya da `--demo`/`--city` menüyü atlayıp doğrudan oyunu açar
 	debug_hero = _arg(args, "--hero=", "")
+	# `--fold` alt paneli kapalı açar
+	if "--fold" in args:
+		ui.set_folded(true)
+		_refit()
 	var cn := _arg(args, "--country=", "")
 	# `--siege-demo` saldıranın ekranını açar; savunan aynı süreçte koşan ikinci bir oyundur
 	# `--siege-defend`: savunanın ekranı; saldıran aynı süreçte koşan ve birlik yollayan bir görüntüdür

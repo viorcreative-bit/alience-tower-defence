@@ -67,6 +67,9 @@ var overlay_text: Label
 var bars: Control
 var panel: PanelContainer
 var top: PanelContainer
+var ctrl_row: HBoxContainer
+var btn_fold: Button
+var folded := false
 
 var last_key := ""
 var last_controls := ""
@@ -104,6 +107,7 @@ func _ready() -> void:
 
 	_build_top()
 	_build_panel()
+	_build_fold()
 	_build_view_button()
 	_build_banner()
 	toasts = VBoxContainer.new()
@@ -321,6 +325,7 @@ func _build_panel() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	vb.add_child(row)
+	ctrl_row = row
 	btn_sound = _ctrl(row, "Ses", 96, func(): action.emit("sound", ""))
 	btn_sound.icon = load("res://assets/ui/speaker.png")
 	btn_speed = _ctrl(row, "1×", 64, func(): action.emit("speed", ""))
@@ -335,6 +340,42 @@ func _build_panel() -> void:
 	btn_primary.add_theme_stylebox_override("pressed", _frame("red_hot"))
 	btn_primary.add_theme_font_size_override("font_size", 25)
 	btn_charge.add_theme_color_override("font_color", C_GOLD)
+
+
+# Panelin sağ üst köşesindeki kulp: kartları gizleyip oyun alanını büyütür
+func _build_fold() -> void:
+	btn_fold = Button.new()
+	btn_fold.custom_minimum_size = Vector2(84, 44)
+	btn_fold.focus_mode = Control.FOCUS_NONE
+	var sb := _frame("panel", 14, 4)
+	btn_fold.add_theme_stylebox_override("normal", sb)
+	btn_fold.add_theme_stylebox_override("hover", sb)
+	btn_fold.add_theme_stylebox_override("pressed", sb)
+	btn_fold.pressed.connect(func(): action.emit("fold", ""))
+	root.add_child(btn_fold)
+	var arrow := Control.new()
+	arrow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrow.draw.connect(func():
+		var c := arrow.size / 2.0
+		var d := -1.0 if folded else 1.0
+		var pts := PackedVector2Array([c + Vector2(-14, -6 * d), c + Vector2(0, 7 * d), c + Vector2(14, -6 * d)])
+		arrow.draw_polyline(pts, C_GOLD, 4.0, true))
+	btn_fold.add_child(arrow)
+	btn_fold.set_meta("arrow", arrow)
+
+
+func set_folded(on: bool) -> void:
+	folded = on
+	last_key = ""
+	(btn_fold.get_meta("arrow") as Control).queue_redraw()
+
+
+# Kamera bu çizginin üstüne sığdırılır: panel kapalıyken yalnız düğme sırası sayılır
+func play_bottom() -> float:
+	if folded:
+		return root.size.y - ctrl_row.size.y - 28.0
+	return panel_top()
 
 
 func _passthrough(n: Node) -> void:
@@ -1050,6 +1091,11 @@ func refresh(sound_label: String, light_name: String) -> void:
 		tower.level if tower else 0, str(game.buildings.values()), tkey, game.researching.get("id", ""), game.research.size(),
 		game.atk_gold() if game.pvp == "attack" else 0, str(game.pvp_state.get("up", {})), game.atk_ready() if game.pvp == "attack" else false,
 		ceili(D.PVP.prep - game.pvp_state.get("def_time", 0.0)) if game.pvp == "attack" and not game.atk_ready() else 0])
+	# kapalıyken bir kare ya da kule seçilirse kartlar geçici olarak açılır
+	var peek := folded and mode in ["build", "tower", "building"]
+	if context.visible != (not folded or peek):
+		context.visible = not context.visible
+		panel.offset_top = panel.offset_bottom
 	if key != last_key:
 		last_key = key
 		_clear_context()
@@ -1071,6 +1117,8 @@ func refresh(sound_label: String, light_name: String) -> void:
 		var p: float = tr.time / D.TROOPS[kind].train if tr.queue else 0.0
 		train_bar.position = Vector2(4, b.size.y - 8)
 		train_bar.size = Vector2((b.size.x - 8) * p, 5)
+
+	btn_fold.position = Vector2(root.size.x - btn_fold.size.x - 14, panel_top() - btn_fold.size.y + 4)
 
 	weather_chip.position = Vector2(14, btn_view.position.y)
 	var boss = game.first_boss()
